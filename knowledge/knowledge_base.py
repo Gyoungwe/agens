@@ -16,6 +16,7 @@ import random
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from datetime import datetime
+import pyarrow as pa
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,6 @@ class KnowledgeBase:
     def _init_lance(self):
         try:
             import lancedb
-            import pyarrow as pa
 
             db = lancedb.connect(self._db_path)
             schema = pa.schema(
@@ -82,7 +82,23 @@ class KnowledgeBase:
                     exist_ok=True,
                 )
             except Exception:
-                self._lance_table = db.open_table(self.TABLE_NAME)
+                try:
+                    existing = db.open_table(self.TABLE_NAME)
+                    existing_schema = existing.schema()
+                    if "scope" not in str(existing_schema):
+                        logger.warning("知识库表 schema 不兼容，删除旧表并重建...")
+                        db.drop_table(self.TABLE_NAME)
+                        self._lance_table = db.create_table(
+                            self.TABLE_NAME,
+                            schema=schema,
+                        )
+                    else:
+                        self._lance_table = existing
+                except Exception:
+                    self._lance_table = db.create_table(
+                        self.TABLE_NAME,
+                        schema=schema,
+                    )
 
             logger.info(f"✅ LanceDB knowledge base ready at {self._db_path}")
             self._ready = True
