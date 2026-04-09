@@ -44,3 +44,10 @@ profiles:
     model:    deepseek-chat
     base_url: https://api.deepseek.com/v1
     api_key:  ${DEEPSEEK_API_KEY}
+
+  - id:       volcengine
+    type:     openai
+    name:     火山引擎方舟 (Doubao)
+    model:    ${VOLCENGINE_PLAN_ID:093c16f4-86d5-4cbb-833a-37bfb1d448bf}:doubao-pro-32k
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key:  ${VOLCENGINE_API_KEY}

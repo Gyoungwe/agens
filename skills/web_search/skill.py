@@ -12,11 +12,11 @@ class Skill(BaseSkill):
     实际项目中接入 Tavily / SerpAPI / Bing Search API。
     """
 
-    skill_id    = "web_search"
-    name        = "网页搜索"
+    skill_id = "web_search"
+    name = "网页搜索"
     description = "使用搜索引擎搜索互联网信息"
-    version     = "1.0.0"
-    tags        = ["search", "internet", "research"]
+    version = "0.02"
+    tags = ["search", "internet", "research"]
 
     async def run(self, input_data: SkillInput) -> Any:
         query = input_data.instruction
@@ -41,5 +41,5 @@ class Skill(BaseSkill):
                     "url": "https://example.com/2",
                     "snippet": f"{query} 在近期有以下进展...",
                 },
-            ]
+            ],
         }

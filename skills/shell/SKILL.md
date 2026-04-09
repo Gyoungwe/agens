@@ -2,7 +2,7 @@
 skill_id:    shell
 name:        Shell 命令执行
 description: 在本地执行 Shell 命令（带安全限制）
-version:     1.0.0
+version:     0.02
 author:      system
 tags:        [system, shell, executor]
 agents:      [executor_agent]

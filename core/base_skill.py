@@ -77,7 +77,7 @@ class BaseSkill(ABC):
     skill_id: web_search
     name: 网页搜索
     description: 使用搜索引擎搜索互联网信息
-    version: 1.0.0
+    version: 0.02
     tools: [bash, read]
     permissions:
       network: true
@@ -105,7 +105,7 @@ class BaseSkill(ABC):
     skill_id: str = ""
     name: str = ""
     description: str = ""
-    version: str = "1.0.0"
+    version: str = "0.02"
     author: str = ""
     tags: List[str] = []
 

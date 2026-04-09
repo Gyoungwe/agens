@@ -10,6 +10,7 @@ logs/
 build/
 dist/
 *.spec
+dist-electron/
 
 # 代码汇总文件（本地用）
 all_code.txt

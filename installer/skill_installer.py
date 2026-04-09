@@ -56,7 +56,7 @@ class SkillInstaller:
                 "skill_id": "pdf_reader",
                 "name": "PDF 阅读器",
                 "description": "解析 PDF 文件，提取文字和结构",
-                "version": "1.0.0",
+                "version": "0.02",
                 "author": "community",
                 "tags": ["pdf", "document", "research"],
                 "downloads": 560,
@@ -118,7 +118,7 @@ class SkillInstaller:
 skill_id:    {skill_id}
 name:        {skill_id}
 description: （请填写技能描述）
-version:     1.0.0
+version:     0.02
 author:      local
 tags:        []
 agents:      {agents_str}
@@ -145,7 +145,7 @@ class Skill(BaseSkill):
     skill_id    = "{skill_id}"
     name        = "{skill_id}"
     description = "（请填写描述）"
-    version     = "1.0.0"
+    version     = "0.02"
     tags        = []
 
     async def run(self, input_data: SkillInput) -> Any:

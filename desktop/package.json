@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-system",
-  "version": "1.0.0",
+  "version": "0.02",
   "description": "Multi-Agent 智能协作系统",
   "main": "main.js",
   "scripts": {

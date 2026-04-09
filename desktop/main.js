@@ -96,7 +96,7 @@ function createWindow() {
               type: 'info',
               title: '关于 Multi-Agent 系统',
               message: 'Multi-Agent 智能协作系统',
-              detail: '版本: 1.0.0\n\n一个基于 LLM 的多智能体协作系统。',
+              detail: '版本: 0.02\n\n一个基于 LLM 的多智能体协作系统。',
             });
           },
         },

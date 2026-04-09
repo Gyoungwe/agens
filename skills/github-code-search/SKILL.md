@@ -1,7 +1,7 @@
 ---
 name: github-code-search
 description: Search code across GitHub repositories using advanced search queries
-version: 1.0.0
+version: 0.02
 author: OpenCode
 ---
 

@@ -2,7 +2,7 @@
 skill_id:    web_search
 name:        网页搜索
 description: 使用搜索引擎搜索互联网信息
-version:     1.0.0
+version:     0.02
 author:      system
 tags:        [search, internet, research]
 agents:      [research_agent]

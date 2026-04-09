@@ -4,7 +4,7 @@ agents:
 
   - id:          research_agent
     name:        研究员 Rex
-    version:     1.0.0
+    version:     0.02
     description: 专注于信息搜集、数据分析和知识整理的专职研究员
     skills:
       - web_search
@@ -36,7 +36,7 @@ agents:
 
   - id:          executor_agent
     name:        执行器 Ace
-    version:     1.0.0
+    version:     0.02
     description: 负责执行具体操作（代码运行、API 调用等）
     skills:
       - shell
@@ -62,7 +62,7 @@ agents:
 
   - id:          writer_agent
     name:        写手 Luna
-    version:     1.0.0
+    version:     0.02
     description: 负责内容撰写、格式化、总结的专业写手
     skills:
       - summarize

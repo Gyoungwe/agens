@@ -9,12 +9,11 @@ BLOCKED = {"rm", "sudo", "chmod", "dd", "mkfs", ":(){ :|:& };:"}
 
 
 class Skill(BaseSkill):
-
-    skill_id    = "shell"
-    name        = "Shell 命令执行"
+    skill_id = "shell"
+    name = "Shell 命令执行"
     description = "在本地执行 Shell 命令（带安全限制）"
-    version     = "1.0.0"
-    tags        = ["system", "shell", "executor"]
+    version = "0.02"
+    tags = ["system", "shell", "executor"]
 
     async def run(self, input_data: SkillInput) -> Any:
         command = input_data.instruction.strip()
@@ -33,8 +32,8 @@ class Skill(BaseSkill):
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
 
         return {
-            "command":   command,
+            "command": command,
             "exit_code": proc.returncode,
-            "stdout":    stdout.decode("utf-8", errors="replace"),
-            "stderr":    stderr.decode("utf-8", errors="replace"),
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace"),
         }

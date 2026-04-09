@@ -10,7 +10,7 @@
 skill_id: web_search
 name: 网页搜索
 description: 使用搜索引擎搜索互联网信息
-version: 1.0.0
+version: 0.02
 author: system
 tags: [search, internet, research]
 
@@ -88,7 +88,7 @@ class SkillMetadata:
         self.skill_id = data.get("skill_id", "")
         self.name = data.get("name", self.skill_id)
         self.description = data.get("description", "")
-        self.version = data.get("version", "1.0.0")
+        self.version = data.get("version", "0.02")
         self.author = data.get("author", "")
         self.tags = data.get("tags", [])
 
@@ -248,7 +248,7 @@ class SkillRegistry:
                     skill_id,
                     meta.get("name", skill_id),
                     meta.get("description", ""),
-                    meta.get("version", "1.0.0"),
+                    meta.get("version", "0.02"),
                     meta.get("author", ""),
                     json.dumps(meta.get("tags", []), ensure_ascii=False),
                     meta.get("model", ""),

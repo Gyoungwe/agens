@@ -2,7 +2,7 @@
 skill_id:    summarize
 name:        内容摘要
 description: 对长文本进行结构化摘要提炼
-version:     1.0.0
+version:     0.02
 author:      system
 tags:        [nlp, summary, text]
 agents:      []

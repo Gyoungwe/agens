@@ -326,7 +326,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Multi-Agent System API",
     description="Multi-Agent 智能协作系统 REST API",
-    version="1.0.0",
+    version="0.02",
     lifespan=lifespan,
 )
 
@@ -612,7 +612,7 @@ async def list_skills():
                 skill_id=s["skill_id"],
                 name=s["name"],
                 description=s.get("description", ""),
-                version=s.get("version", "1.0.0"),
+                version=s.get("version", "0.02"),
                 tags=[],
                 enabled=bool(s.get("enabled", 1)),
             )
@@ -667,7 +667,7 @@ async def search_skills(q: str = ""):
                 skill_id=s["skill_id"],
                 name=s["name"],
                 description=s.get("description", ""),
-                version=s.get("version", "1.0.0"),
+                version=s.get("version", "0.02"),
                 tags=[],
                 enabled=bool(s.get("enabled", 1)),
             )

@@ -50,7 +50,7 @@ try:
                         <p><strong>ID:</strong> <code>{skill["skill_id"]}</code></p>
                         <p><strong>Name:</strong> {skill.get("name", "N/A")}</p>
                         <p><strong>Description:</strong> {skill.get("description", "N/A")}</p>
-                        <p><strong>Version:</strong> {skill.get("version", "1.0.0")}</p>
+                        <p><strong>Version:</strong> {skill.get("version", "0.02")}</p>
                         <p><strong>Author:</strong> {skill.get("author", "N/A")}</p>
                         <p><strong>Tags:</strong> {skill.get("tags", "N/A")}</p>
                     </div>

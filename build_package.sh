@@ -167,7 +167,7 @@ npm start
 
 ## 版本信息
 
-- 版本: 1.0.0
+- 版本: 0.02
 - Python: 3.9+
 - Node.js: 18+ (Electron)
 EOF
