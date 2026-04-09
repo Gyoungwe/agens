@@ -502,6 +502,29 @@ class HookRegistry:
                 metadata={"hook_name": hook_name, "error": str(e)},
             )
 
+        try:
+            coro = func(*args, **kwargs)
+            print(f"[DEBUG] coro created: {coro}")
+            result = await asyncio.wait_for(coro, timeout=timeout)
+            print(f"[DEBUG] result: {result}")
+            if hasattr(result, "hook_name"):
+                result.hook_name = hook_name
+            elif isinstance(result, HookResult):
+                result.hook_name = hook_name
+            return result
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[HookRegistry] Hook {hook_name} 执行超时 ({hook.timeout_ms}ms)"
+            )
+            return HookResult.timeout(hook_name, hook.timeout_ms)
+        except Exception as e:
+            logger.error(f"[HookRegistry] Hook {hook_name} 执行异常: {e}")
+            return HookResult(
+                allowed=not hook.critical,
+                error_message=f"Hook {hook_name} 执行失败: {e}",
+                metadata={"hook_name": hook_name, "error": str(e)},
+            )
+
     async def run_pre_hooks(self, event: ToolUseEvent) -> HookResult:
         """
         执行所有 pre_tool hooks

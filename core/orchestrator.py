@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator, Dict, List, Set
 
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
-from core.events import EventEnvelope, AgentEventType
+from core.events import EventEnvelope, AgentEvent, AgentEventType
 from bus.message_bus import MessageBus, DeduplicationCache
 from utils.retry import retry_with_backoff, RetryError
 
