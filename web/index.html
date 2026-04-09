@@ -444,7 +444,6 @@
         .message-content code:not(pre code) { background: var(--bg-tertiary); padding: 2px 5px; border-radius: 3px; font-size: 12px; }
 
         .typing-content { opacity: 0.9; }
-        }
 
         .message-content code {
             font-family: inherit;
@@ -1862,10 +1861,6 @@
             contentEl.innerHTML = rendered;
             contentEl.classList.remove('typing-content');
             msgEl.classList.remove('streaming');
-        }
-
-            contentEl.innerHTML = rendered;
-            contentEl.classList.remove('typing-content');
         }
 
         // 直接更新消息内容（不流式，用于 agent 事件）
