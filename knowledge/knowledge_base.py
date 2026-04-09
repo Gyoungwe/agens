@@ -81,24 +81,22 @@ class KnowledgeBase:
                     schema=schema,
                     exist_ok=True,
                 )
-            except Exception:
-                try:
-                    existing = db.open_table(self.TABLE_NAME)
-                    existing_schema = existing.schema()
-                    if "scope" not in str(existing_schema):
-                        logger.warning("知识库表 schema 不兼容，删除旧表并重建...")
+            except (ValueError, RuntimeError) as e:
+                if (
+                    "Schema Error" in str(e)
+                    or "already exists" in str(e)
+                    or "multiple manifest" in str(e)
+                ):
+                    try:
                         db.drop_table(self.TABLE_NAME)
                         self._lance_table = db.create_table(
                             self.TABLE_NAME,
                             schema=schema,
                         )
-                    else:
-                        self._lance_table = existing
-                except Exception:
-                    self._lance_table = db.create_table(
-                        self.TABLE_NAME,
-                        schema=schema,
-                    )
+                    except Exception:
+                        self._lance_table = None
+                else:
+                    raise
 
             logger.info(f"✅ LanceDB knowledge base ready at {self._db_path}")
             self._ready = True

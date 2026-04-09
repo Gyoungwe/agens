@@ -89,8 +89,12 @@ class VectorStore:
                     schema=schema,
                     exist_ok=True,
                 )
-            except ValueError as e:
-                if "Schema Error" in str(e) or "already exists" in str(e):
+            except (ValueError, RuntimeError) as e:
+                if (
+                    "Schema Error" in str(e)
+                    or "already exists" in str(e)
+                    or "multiple manifest" in str(e)
+                ):
                     try:
                         existing = db.open_table(self.TABLE_NAME)
                         existing_schema = existing.schema
