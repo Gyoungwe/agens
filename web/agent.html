@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 管理 - Agens</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/theme/monokai.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/markdown/markdown.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --success: #4ecca3;
+            --warning: #f0883e;
+            --border: #2a2a4a;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-secondary { background: var(--bg-tertiary); }
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); }
+        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
+        .input:focus { outline: none; border-color: var(--accent); }
+        .agent-card { cursor: pointer; transition: all 0.2s; }
+        .agent-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .agent-card.active { border-color: var(--success); background: rgba(78, 204, 163, 0.1); }
+        .skill-tag { background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 12px; margin: 2px; display: inline-block; }
+        .CodeMirror { height: 300px; font-size: 13px; border-radius: 8px; }
+        .diff-added { background: rgba(78, 204, 163, 0.2); }
+        .diff-removed { background: rgba(233, 69, 96, 0.2); }
+        .diff-modified { background: rgba(240, 136, 62, 0.2); }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--accent); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <header class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold">🤖 Agent 管理</h1>
+                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理 Agent 身份、技能和配置</p>
+            </div>
+            <a href="/" class="btn btn-secondary">← 返回主页</a>
+        </header>
+
+        <div class="grid grid-cols-12 gap-6">
+            <!-- Agent List -->
+            <div class="col-span-3">
+                <div class="card">
+                    <h2 class="text-lg font-semibold mb-4">Agent 列表</h2>
+                    <div id="agentList" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Agent Details -->
+            <div class="col-span-9">
+                <!-- Tabs -->
+                <div class="flex border-b mb-4" style="border-color: var(--border)">
+                    <button class="tab-btn active" onclick="switchTab('profile')">📋 身份配置</button>
+                    <button class="tab-btn" onclick="switchTab('skills')">🛠️ 技能管理</button>
+                    <button class="tab-btn" onclick="switchTab('backups')">💾 备份记录</button>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="tab-profile" class="tab-content">
+                    <div class="card">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-semibold" id="agentTitle">选择 Agent</h2>
+                            <button class="btn btn-success" onclick="saveSoul()" id="saveBtn" disabled>💾 保存修改</button>
+                        </div>
+
+                        <div id="noAgent" class="text-center py-12" style="color: var(--text-secondary)">
+                            <p class="text-4xl mb-4">👈</p>
+                            <p>请从左侧选择一个 Agent</p>
+                        </div>
+
+                        <div id="agentForm" class="hidden">
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">名称</label>
+                                    <input type="text" id="input-name" class="input">
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">角色</label>
+                                    <input type="text" id="input-role" class="input">
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">Provider</label>
+                                    <select id="input-provider" class="input">
+                                        <option value="deepseek">DeepSeek</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">优先级</label>
+                                    <select id="input-priority" class="input">
+                                        <option value="high">高 (high)</option>
+                                        <option value="normal">普通 (normal)</option>
+                                        <option value="low">低 (low)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">Model</label>
+                                    <input type="text" id="input-model" class="input">
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1" style="color: var(--text-secondary)">Max Tokens</label>
+                                    <input type="number" id="input-max_tokens" class="input">
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="block text-sm mb-1" style="color: var(--text-secondary)">Skills</label>
+                                <div id="input-skills" class="flex flex-wrap gap-2"></div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="block text-sm mb-1" style="color: var(--text-secondary)">正文内容 (Markdown)</label>
+                                <textarea id="soulBody"></textarea>
+                            </div>
+
+                            <!-- Diff Preview -->
+                            <div id="diffPreview" class="hidden mt-4 p-4 rounded-lg" style="background: var(--bg-tertiary)">
+                                <h3 class="font-semibold mb-2">📊 变更预览</h3>
+                                <div id="diffContent"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skills Tab -->
+                <div id="tab-skills" class="tab-content hidden">
+                    <div class="card">
+                        <h2 class="text-xl font-semibold mb-4">🛠️ 技能列表</h2>
+                        <div id="skillList" class="grid grid-cols-3 gap-4"></div>
+                    </div>
+                </div>
+
+                <!-- Backups Tab -->
+                <div id="tab-backups" class="tab-content hidden">
+                    <div class="card">
+                        <h2 class="text-xl font-semibold mb-4">💾 备份记录</h2>
+                        <div id="backupList" class="space-y-2"></div>
+                        <div id="noBackups" class="text-center py-8" style="color: var(--text-secondary)">暂无备份记录</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let agents = [];
+        let currentAgent = null;
+        let soulEditor = null;
+        let originalSoul = null;
+
+        async function init() {
+            await loadAgents();
+        }
+
+        async function loadAgents() {
+            try {
+                const res = await fetch(`${API_BASE}/agents/`);
+                const data = await res.json();
+                agents = data.agents || [];
+                renderAgentList();
+            } catch (e) {
+                showToast('加载 Agent 列表失败: ' + e, 'error');
+            }
+        }
+
+        function renderAgentList() {
+            const list = document.getElementById('agentList');
+            list.innerHTML = agents.map(agent => `
+                <div class="agent-card p-3 rounded-lg border" style="border-color: var(--border); ${currentAgent?.agent_id === agent.agent_id ? 'border-color: var(--success); background: rgba(78, 204, 163, 0.1);' : ''}" onclick="selectAgent('${agent.agent_id}')">
+                    <div class="font-semibold">${agent.agent_id}</div>
+                    <div class="text-xs mt-1" style="color: var(--text-secondary)">
+                        ${agent.skill_count} 个技能
+                    </div>
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        ${(agent.skills || []).slice(0, 3).map(s => `<span class="skill-tag">${s}</span>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function selectAgent(agentId) {
+            try {
+                const res = await fetch(`${API_BASE}/agents/${agentId}`);
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('加载 Agent 失败', 'error');
+                    return;
+                }
+
+                currentAgent = data.agent;
+                renderAgentList();
+                renderAgentForm();
+                loadBackups();
+                switchTab('profile');
+            } catch (e) {
+                showToast('加载 Agent 失败: ' + e, 'error');
+            }
+        }
+
+        function renderAgentForm() {
+            const agent = currentAgent;
+            if (!agent) return;
+
+            document.getElementById('noAgent').classList.add('hidden');
+            document.getElementById('agentForm').classList.remove('hidden');
+            document.getElementById('agentTitle').textContent = `📋 ${agent.agent_id}`;
+            document.getElementById('saveBtn').disabled = false;
+
+            const meta = agent.meta || {};
+            document.getElementById('input-name').value = meta.name || '';
+            document.getElementById('input-role').value = meta.role || '';
+            document.getElementById('input-provider').value = meta.provider || 'deepseek';
+            document.getElementById('input-priority').value = meta.priority || 'normal';
+            document.getElementById('input-model').value = meta.model || '';
+            document.getElementById('input-max_tokens').value = meta.max_tokens || 2048;
+
+            const skillsEl = document.getElementById('input-skills');
+            skillsEl.innerHTML = (meta.skills || []).map(s => `<span class="skill-tag">${s}</span>`).join('');
+
+            const body = agent.body || '';
+            originalSoul = { meta, body };
+
+            if (soulEditor) {
+                soulEditor.setValue(body);
+            } else {
+                const textarea = document.getElementById('soulBody');
+                soulEditor = CodeMirror.fromTextArea(textarea, {
+                    mode: 'markdown',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    lineWrapping: true
+                });
+                soulEditor.setValue(body);
+                soulEditor.on('change', () => checkForChanges());
+            }
+
+            document.getElementById('diffPreview').classList.add('hidden');
+        }
+
+        function checkForChanges() {
+            if (!currentAgent || !originalSoul) return;
+
+            const meta = {
+                name: document.getElementById('input-name').value,
+                role: document.getElementById('input-role').value,
+                provider: document.getElementById('input-provider').value,
+                priority: document.getElementById('input-priority').value,
+                model: document.getElementById('input-model').value,
+                max_tokens: parseInt(document.getElementById('input-max_tokens').value) || 2048,
+                skills: originalSoul.meta.skills || []
+            };
+            const body = soulEditor ? soulEditor.getValue() : '';
+
+            const diff = computeDiff(originalSoul, { meta, body });
+
+            if (diff.hasChanges) {
+                document.getElementById('diffPreview').classList.remove('hidden');
+                document.getElementById('diffContent').innerHTML = diff.summary;
+            } else {
+                document.getElementById('diffPreview').classList.add('hidden');
+            }
+        }
+
+        function computeDiff(old, ne_) {
+            const result = { hasChanges: false, summary: '' };
+            const parts = [];
+
+            for (const key of Object.keys(ne_.meta)) {
+                if (JSON.stringify(old.meta[key]) !== JSON.stringify(ne_.meta[key])) {
+                    result.hasChanges = true;
+                    parts.push(`<span class="diff-modified">修改 ${key}</span>`);
+                }
+            }
+            for (const key of Object.keys(old.meta)) {
+                if (!(key in ne_.meta)) {
+                    result.hasChanges = true;
+                    parts.push(`<span class="diff-removed">删除 ${key}</span>`);
+                }
+            }
+            if (old.body !== ne_.body) {
+                result.hasChanges = true;
+                parts.push('<span class="diff-modified">正文有变更</span>');
+            }
+
+            result.summary = parts.length ? parts.join(' ') : '无变更';
+            return result;
+        }
+
+        async function saveSoul() {
+            if (!currentAgent) return;
+
+            const meta = {
+                name: document.getElementById('input-name').value,
+                role: document.getElementById('input-role').value,
+                provider: document.getElementById('input-provider').value,
+                priority: document.getElementById('input-priority').value,
+                model: document.getElementById('input-model').value,
+                max_tokens: parseInt(document.getElementById('input-max_tokens').value) || 2048,
+                skills: originalSoul.meta.skills || []
+            };
+            const body = soulEditor ? soulEditor.getValue() : '';
+
+            try {
+                const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/soul`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ meta, body })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('保存成功! ' + (data.diff?.summary || ''), 'success');
+                    originalSoul = { meta, body };
+                    checkForChanges();
+                    await loadAgents();
+                } else {
+                    showToast('保存失败', 'error');
+                }
+            } catch (e) {
+                showToast('保存失败: ' + e, 'error');
+            }
+        }
+
+        async function loadBackups() {
+            if (!currentAgent) return;
+            try {
+                const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/backups`);
+                const data = await res.json();
+                const backups = data.backups || [];
+                const list = document.getElementById('backupList');
+                const noBackups = document.getElementById('noBackups');
+
+                if (backups.length === 0) {
+                    list.innerHTML = '';
+                    noBackups.classList.remove('hidden');
+                } else {
+                    noBackups.classList.add('hidden');
+                    list.innerHTML = backups.map(b => `
+                        <div class="flex items-center justify-between p-3 rounded-lg" style="background: var(--bg-tertiary)">
+                            <div>
+                                <div class="text-sm">${b.name}</div>
+                                <div class="text-xs" style="color: var(--text-secondary)">${b.created_at}</div>
+                            </div>
+                            <button class="btn btn-secondary text-sm" onclick="restoreBackup('${b.name}')">恢复</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Failed to load backups:', e);
+            }
+        }
+
+        async function restoreBackup(backupName) {
+            if (!confirm('确定要恢复这个备份吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/backups/${backupName}/restore`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('恢复成功', 'success');
+                    await selectAgent(currentAgent.agent_id);
+                } else {
+                    showToast('恢复失败', 'error');
+                }
+            } catch (e) {
+                showToast('恢复失败: ' + e, 'error');
+            }
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(div => div.classList.add('hidden'));
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+
+            if (tab === 'skills' && currentAgent) {
+                loadAgentSkills();
+            }
+        }
+
+        async function loadAgentSkills() {
+            if (!currentAgent) return;
+            try {
+                const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/skills`);
+                const data = await res.json();
+                const skills = data.skills || [];
+                const list = document.getElementById('skillList');
+                list.innerHTML = skills.length === 0
+                    ? '<p style="color: var(--text-secondary)">暂无技能</p>'
+                    : skills.map(s => `
+                        <div class="p-4 rounded-lg" style="background: var(--bg-tertiary)">
+                            <div class="font-semibold">${s.name || s.skill_id}</div>
+                            <div class="text-sm mt-1" style="color: var(--text-secondary)">${s.description || ''}</div>
+                            <div class="flex gap-2 mt-2">
+                                <span class="skill-tag">v${s.version || '1.0'}</span>
+                                <span class="skill-tag">${s.source || 'local'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+            } catch (e) {
+                console.error('Failed to load skills:', e);
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast toast-${type}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        // Listen for changes
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('change', checkForChanges);
+        });
+
+        init();
+    </script>
+</body>
+</html>

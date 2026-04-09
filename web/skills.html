@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技能管理 - Agens</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --success: #4ecca3;
+            --warning: #f0883e;
+            --border: #2a2a4a;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-secondary { background: var(--bg-tertiary); }
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
+        .input:focus { outline: none; border-color: var(--accent); }
+        textarea.input { min-height: 120px; resize: vertical; }
+        .skill-card { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; transition: all 0.2s; }
+        .skill-card:hover { transform: translateY(-2px); }
+        .tag { background: var(--bg-secondary); padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px; }
+        .tag-enabled { border-left: 3px solid var(--success); }
+        .tag-disabled { border-left: 3px solid var(--accent); opacity: 0.6; }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--accent); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .json-preview { background: #000; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+        .warning-text { color: var(--warning); font-size: 12px; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold">🛠️ 技能管理</h1>
+                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理、安装和导入 Agent 技能</p>
+            </div>
+            <div class="flex gap-3">
+                <button class="btn btn-secondary" onclick="showImportModal()">📥 导入 Claude Skill</button>
+                <a href="/" class="btn btn-secondary">← 返回主页</a>
+            </div>
+        </header>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="card text-center">
+                <div class="text-3xl font-bold" id="totalSkills">0</div>
+                <div class="text-sm" style="color: var(--text-secondary)">总技能数</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold" id="enabledSkills">0</div>
+                <div class="text-sm" style="color: var(--text-secondary)">已启用</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold" id="claudeSkills">0</div>
+                <div class="text-sm" style="color: var(--text-secondary)">Claude 导入</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold" id="localSkills">0</div>
+                <div class="text-sm" style="color: var(--text-secondary)">本地技能</div>
+            </div>
+        </div>
+
+        <!-- Skills Grid -->
+        <div class="card">
+            <h2 class="text-lg font-semibold mb-4">📦 已安装技能</h2>
+            <div id="skillsGrid" class="grid grid-cols-3 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="importModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">📥 导入 Claude Skill</h2>
+                <button onclick="hideImportModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm mb-2" style="color: var(--text-secondary)">Claude Tool JSON Schema</label>
+                <textarea id="claudeSchema" class="input" placeholder='{
+  "name": "my_tool",
+  "description": "工具描述",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "param1": {
+        "type": "string",
+        "description": "参数描述"
+      }
+    },
+    "required": ["param1"]
+  }
+}'></textarea>
+            </div>
+
+            <div class="flex gap-3 mb-4">
+                <button class="btn" onclick="importClaudeSkill()">🔍 预览草稿</button>
+                <button class="btn btn-secondary" onclick="hideImportModal()">取消</button>
+            </div>
+
+            <div id="previewSection" class="hidden">
+                <h3 class="font-semibold mb-2">📋 草稿预览</h3>
+                <div id="previewContent"></div>
+                <div id="previewWarnings" class="warning-text mb-4"></div>
+                <button id="installBtn" class="btn btn-success" onclick="installDraft()">✅ 安装技能</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Draft ID (hidden) -->
+    <input type="hidden" id="currentDraftId">
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let skills = [];
+        let currentDraftId = null;
+
+        async function init() {
+            await loadSkills();
+        }
+
+        async function loadSkills() {
+            try {
+                const res = await fetch(`${API_BASE}/skills/`);
+                const data = await res.json();
+                skills = data.skills || [];
+                renderStats();
+                renderSkills();
+            } catch (e) {
+                showToast('加载技能列表失败', 'error');
+            }
+        }
+
+        function renderStats() {
+            document.getElementById('totalSkills').textContent = skills.length;
+            document.getElementById('enabledSkills').textContent = skills.filter(s => s.enabled).length;
+            document.getElementById('claudeSkills').textContent = skills.filter(s => s.source === 'claude_skill').length;
+            document.getElementById('localSkills').textContent = skills.filter(s => s.source === 'local').length;
+        }
+
+        function renderSkills() {
+            const grid = document.getElementById('skillsGrid');
+            if (skills.length === 0) {
+                grid.innerHTML = '<p class="col-span-3 text-center py-8" style="color: var(--text-secondary)">暂无技能</p>';
+                return;
+            }
+
+            grid.innerHTML = skills.map(skill => {
+                const tags = JSON.parse(skill.tags || '[]');
+                const agentIds = JSON.parse(skill.agent_ids || '[]');
+                return `
+                <div class="skill-card ${skill.enabled ? 'tag-enabled' : 'tag-disabled'}">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <div class="font-semibold">${skill.name || skill.skill_id}</div>
+                            <div class="text-xs" style="color: var(--text-secondary)">${skill.skill_id}</div>
+                        </div>
+                        <span class="tag">v${skill.version || '1.0'}</span>
+                    </div>
+                    <p class="text-sm mb-3" style="color: var(--text-secondary)">${skill.description || '无描述'}</p>
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${tags.map(t => `<span class="tag">${t}</span>`).join('')}
+                        ${agentIds.map(a => `<span class="tag">${a}</span>`).join('')}
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-sm ${skill.enabled ? 'btn-warning' : 'btn-success'}" onclick="toggleSkill('${skill.skill_id}', ${!skill.enabled})">
+                            ${skill.enabled ? '禁用' : '启用'}
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="reloadSkill('${skill.skill_id}')">🔄 重载</button>
+                        <button class="btn btn-sm btn-secondary" onclick="uninstallSkill('${skill.skill_id}')">🗑️</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        async function toggleSkill(skillId, enable) {
+            try {
+                const endpoint = enable ? 'enable' : 'disable';
+                await fetch(`${API_BASE}/skills/${endpoint}/${skillId}`, { method: 'POST' });
+                showToast(`${enable ? '启用' : '禁用'}成功`, 'success');
+                await loadSkills();
+            } catch (e) {
+                showToast('操作失败', 'error');
+            }
+        }
+
+        async function reloadSkill(skillId) {
+            try {
+                await fetch(`${API_BASE}/skills/reload/${skillId}`, { method: 'POST' });
+                showToast('重载成功', 'success');
+            } catch (e) {
+                showToast('重载失败', 'error');
+            }
+        }
+
+        async function uninstallSkill(skillId) {
+            if (!confirm(`确定要卸载技能 ${skillId} 吗？`)) return;
+            try {
+                await fetch(`${API_BASE}/skills/${skillId}`, { method: 'DELETE' });
+                showToast('卸载成功', 'success');
+                await loadSkills();
+            } catch (e) {
+                showToast('卸载失败', 'error');
+            }
+        }
+
+        function showImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
+            document.getElementById('previewSection').classList.add('hidden');
+            document.getElementById('currentDraftId').value = '';
+        }
+
+        function hideImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        async function importClaudeSkill() {
+            const schemaText = document.getElementById('claudeSchema').value.trim();
+            if (!schemaText) {
+                showToast('请输入 JSON Schema', 'error');
+                return;
+            }
+
+            let schema;
+            try {
+                schema = JSON.parse(schemaText);
+            } catch (e) {
+                showToast('JSON 格式错误', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/skills/import/claude`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(schema)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    currentDraftId = data.draft_id;
+                    document.getElementById('currentDraftId').value = currentDraftId;
+
+                    const preview = data.preview;
+                    const warnings = preview.warnings || [];
+
+                    document.getElementById('previewContent').innerHTML = `
+                        <div class="json-preview mb-3">
+                            <div class="font-semibold mb-2">工具名称: ${preview.tool_name}</div>
+                            <div class="mb-2">描述: ${preview.description || '无'}</div>
+                            <div class="mb-2">参数:</div>
+                            <ul class="ml-4">
+                                ${(preview.parameters || []).map(p => `
+                                    <li>${p.name} (${p.type}) - ${p.required ? '必需' : '可选'}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+
+                    document.getElementById('previewWarnings').innerHTML = warnings.length
+                        ? `⚠️ 警告: ${warnings.join(', ')}`
+                        : '';
+
+                    document.getElementById('previewSection').classList.remove('hidden');
+                } else {
+                    showToast('预览失败', 'error');
+                }
+            } catch (e) {
+                showToast('预览失败: ' + e, 'error');
+            }
+        }
+
+        async function installDraft() {
+            const draftId = document.getElementById('currentDraftId').value;
+            if (!draftId) {
+                showToast('请先预览草稿', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/skills/drafts/${draftId}/install`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast(`技能 ${data.skill_id} 安装成功!`, 'success');
+                    hideImportModal();
+                    await loadSkills();
+                } else {
+                    showToast('安装失败: ' + (data.error || '未知错误'), 'error');
+                    if (data.warnings?.length) {
+                        showToast('警告: ' + data.warnings.join(', '), 'error');
+                    }
+                }
+            } catch (e) {
+                showToast('安装失败: ' + e, 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast toast-${type}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

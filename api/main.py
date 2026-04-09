@@ -1120,6 +1120,21 @@ async def root():
     return FileResponse(str(web_path / "index.html"))
 
 
+@app.get("/agent.html")
+async def agent_page():
+    return FileResponse(str(web_path / "agent.html"))
+
+
+@app.get("/skills.html")
+async def skills_page():
+    return FileResponse(str(web_path / "skills.html"))
+
+
+@app.get("/evolution.html")
+async def evolution_page():
+    return FileResponse(str(web_path / "evolution.html"))
+
+
 if __name__ == "__main__":
     import uvicorn
 
