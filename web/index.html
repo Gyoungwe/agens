@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent 智能协作系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1e1e2e;
+            --bg-secondary: #2d2d44;
+            --bg-tertiary: #363654;
+            --bg-hover: #414266;
+            --text-primary: #cdd6f4;
+            --text-secondary: #a6adc8;
+            --accent: #89b4fa;
+            --accent-hover: #6ca8fa;
+            --success: #a6e3a1;
+            --warning: #f9e2af;
+            --error: #f38ba8;
+            --border: #45475a;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 14px;
+            color: var(--accent);
+            margin-bottom: 3px;
+        }
+
+        .sidebar-header .subtitle {
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        .nav-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 10px 5px;
+            text-align: center;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+        }
+
+        .nav-tab:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .nav-tab.active {
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .nav-content {
+            flex: 1;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .nav-content.active {
+            display: block;
+        }
+
+        .new-chat-btn {
+            margin: 10px;
+            padding: 10px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .session-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            margin: 2px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .session-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .session-item.active {
+            background: var(--bg-tertiary);
+        }
+
+        .session-item .icon {
+            font-size: 12px;
+        }
+
+        .session-item .title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 面板样式 */
+        .panel {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-header {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .panel-item {
+            padding: 8px 10px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+
+        .panel-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .panel-item-name {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .panel-item-status {
+            font-size: 10px;
+        }
+
+        .status-running { color: var(--success); }
+        .status-stopped { color: var(--error); }
+        .status-warning { color: var(--warning); }
+
+        /* 主内容区 */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .model-selector:hover {
+            background: var(--bg-hover);
+        }
+
+        .model-name {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            background: var(--success);
+            color: var(--bg-primary);
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .header-btn {
+            padding: 6px 10px;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .header-btn:hover {
+            background: var(--bg-hover);
+        }
+
+        /* 聊天区 */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            margin-right: auto;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+
+        .message.user .message-header {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .message.user .message-avatar {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--success);
+            color: var(--bg-primary);
+        }
+
+        .message-time {
+            color: var(--text-secondary);
+        }
+
+        .message-role {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        .message.assistant .message-content {
+            background: var(--bg-secondary);
+        }
+
+        .message-content pre {
+            background: var(--bg-primary);
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+
+        .message-content code {
+            font-family: inherit;
+        }
+
+        /* Agent 执行信息 */
+        .agent-info {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin: 6px 0;
+            font-size: 11px;
+        }
+
+        .agent-info-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .agent-name {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .agent-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .agent-status.running {
+            background: var(--success);
+            color: var(--bg-primary);
+        }
+
+        .agent-status.done {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        /* 输入区 */
+        .input-container {
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .input-box {
+            flex: 1;
+            display: flex;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .input-box textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 13px;
+            padding: 10px 12px;
+            resize: none;
+            max-height: 120px;
+        }
+
+        .send-btn {
+            padding: 10px 16px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 加载状态 */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* 空白状态 */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+
+        .empty-state h2 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .empty-state p {
+            font-size: 12px;
+        }
+
+        /* 弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            width: 400px;
+            max-height: 70vh;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 14px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .provider-item, .hook-item, .skill-item {
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .provider-item:hover, .hook-item:hover, .skill-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .provider-item.active {
+            border: 2px solid var(--accent);
+        }
+
+        .provider-item h3, .hook-item h3, .skill-item h3 {
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .provider-item p, .hook-item p, .skill-item p {
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        .provider-check {
+            float: right;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--bg-primary);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .provider-item.active .provider-check {
+            display: flex;
+        }
+
+        /* Hook 标签 */
+        .hook-tag {
+            display: inline-block;
+            padding: 2px 6px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 4px;
+        }
+
+        /* 统计数字 */
+        .stat-number {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>🚀 Multi-Agent</h1>
+                <div class="subtitle">智能协作系统 v1.0</div>
+            </div>
+
+            <div class="nav-tabs">
+                <div class="nav-tab active" onclick="switchTab('sessions')">💬</div>
+                <div class="nav-tab" onclick="switchTab('agents')">🤖</div>
+                <div class="nav-tab" onclick="switchTab('hooks')">🔗</div>
+                <div class="nav-tab" onclick="switchTab('skills')">🔧</div>
+            </div>
+
+            <!-- 会话列表 -->
+            <div class="nav-content active" id="sessionsTab">
+                <button class="new-chat-btn" onclick="createNewSession()">+ 新会话</button>
+                <div class="sessions-list" id="sessionsList"></div>
+            </div>
+
+            <!-- Agent 面板 -->
+            <div class="nav-content" id="agentsTab">
+                <div class="panel">
+                    <div class="panel-header">🤖 工作 Agent</div>
+                    <div id="agentsPanel"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">📊 系统状态</div>
+                    <div id="systemStats"></div>
+                </div>
+            </div>
+
+            <!-- Hooks 面板 -->
+            <div class="nav-content" id="hooksTab">
+                <div class="panel">
+                    <div class="panel-header">🔗 已注册 Hooks</div>
+                    <div id="hooksPanel"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">📝 Hook 使用记录</div>
+                    <div id="hooksLog"></div>
+                </div>
+            </div>
+
+            <!-- 技能面板 -->
+            <div class="nav-content" id="skillsTab">
+                <div class="panel">
+                    <div class="panel-header">🔧 可用技能</div>
+                    <div id="skillsPanel"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main">
+            <!-- 顶部栏 -->
+            <div class="header">
+                <div class="header-left">
+                    <div class="model-selector" onclick="showModelSelector()">
+                        <span class="model-name" id="currentModel">MiniMax M2.7</span>
+                        <span>▼</span>
+                    </div>
+                    <div class="status-badge" id="statusBadge">就绪</div>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn" onclick="reloadSystem()">🔄</button>
+                    <button class="header-btn" onclick="showDebug()">🐛</button>
+                </div>
+            </div>
+
+            <!-- 聊天区 -->
+            <div class="chat-container" id="chatContainer">
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">🤖</div>
+                    <h2>Multi-Agent 智能协作系统</h2>
+                    <p>开始对话，探索 AI 的无限可能</p>
+                </div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <div class="input-box">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="输入消息..." 
+                            rows="1"
+                            onkeydown="handleKeyDown(event)"
+                            oninput="autoResize(this)"
+                        ></textarea>
+                    </div>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模型选择弹窗 -->
+    <div class="modal-overlay" id="modelSelectorModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>选择模型</h2>
+                <button class="modal-close" onclick="closeModelSelector()">×</button>
+            </div>
+            <div class="modal-body" id="providersList"></div>
+        </div>
+    </div>
+
+    <!-- Debug 弹窗 -->
+    <div class="modal-overlay" id="debugModal">
+        <div class="modal" style="width: 500px;">
+            <div class="modal-header">
+                <h2>🐛 系统调试信息</h2>
+                <button class="modal-close" onclick="closeDebug()">×</button>
+            </div>
+            <div class="modal-body" id="debugContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态
+        let currentSessionId = null;
+        let currentProvider = 'minimax_m2';
+        let providers = [];
+        let isLoading = false;
+
+        const API_BASE = 'http://localhost:18792';
+
+        // 初始化
+        async function init() {
+            await checkHealth();
+            await loadSessions();
+            await loadProviders();
+            await loadAgents();
+            await loadHooks();
+            await loadSkills();
+        }
+
+        // 切换标签
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+        }
+
+        // 健康检查
+        async function checkHealth() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                document.getElementById('statusBadge').textContent = data.status === 'healthy' ? '就绪' : '初始化中';
+                document.getElementById('statusBadge').style.background = data.status === 'healthy' ? 'var(--success)' : 'var(--warning)';
+                document.getElementById('currentModel').textContent = data.model;
+            } catch (e) {
+                document.getElementById('statusBadge').textContent = '离线';
+                document.getElementById('statusBadge').style.background = 'var(--error)';
+            }
+        }
+
+        // 加载会话列表
+        async function loadSessions() {
+            try {
+                const res = await fetch(`${API_BASE}/sessions`);
+                const sessions = await res.json();
+                const list = document.getElementById('sessionsList');
+                if (sessions.length === 0) {
+                    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:11px;">暂无会话</div>';
+                    return;
+                }
+                list.innerHTML = sessions.map(s => `
+                    <div class="session-item ${s.session_id === currentSessionId ? 'active' : ''}" 
+                         onclick="selectSession('${s.session_id}')">
+                        <span class="icon">💬</span>
+                        <span class="title">${s.title || '新会话'}</span>
+                        <span style="font-size:10px;color:var(--text-secondary)">${s.message_count || 0}</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load sessions:', e);
+            }
+        }
+
+        // 加载 Agent 信息
+        async function loadAgents() {
+            try {
+                const res = await fetch(`${API_BASE}/debug/agents`);
+                const data = await res.json();
+                
+                const panel = document.getElementById('agentsPanel');
+                if (data.agents && data.agents.length > 0) {
+                    panel.innerHTML = data.agents.map(a => `
+                        <div class="panel-item">
+                            <div class="panel-item-header">
+                                <span class="panel-item-name">${a.id}</span>
+                                <span class="panel-item-status ${a.running ? 'status-running' : 'status-stopped'}">
+                                    ${a.running ? '运行中' : '已停止'}
+                                </span>
+                            </div>
+                            <div style="font-size:10px;color:var(--text-secondary)">${a.skills ? a.skills.join(', ') : '无技能'}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    panel.innerHTML = '<div style="padding:10px;color:var(--error);font-size:11px;">⚠️ 没有注册的 Agent</div>';
+                }
+
+                const stats = document.getElementById('systemStats');
+                stats.innerHTML = `
+                    <div class="panel-item">
+                        <span class="stat-number">${data.agents ? data.agents.length : 0}</span>
+                        <span class="stat-label"> / ${data.bus_agents ? data.bus_agents.length : 0} Agent (注册)</span>
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Failed to load agents:', e);
+            }
+        }
+
+        // 加载 Hooks
+        async function loadHooks() {
+            try {
+                const res = await fetch(`${API_BASE}/hooks`);
+                const hooks = await res.json();
+                const panel = document.getElementById('hooksPanel');
+                
+                if (hooks.length === 0) {
+                    panel.innerHTML = '<div style="padding:10px;color:var(--warning);font-size:11px;">暂无 Hook</div>';
+                    return;
+                }
+
+                panel.innerHTML = hooks.map(h => `
+                    <div class="hook-item">
+                        <h3>🔗 ${h.name}</h3>
+                        <p>${h.description || '无描述'}</p>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load hooks:', e);
+            }
+        }
+
+        // 加载技能
+        async function loadSkills() {
+            try {
+                const res = await fetch(`${API_BASE}/skills`);
+                const skills = await res.json();
+                const panel = document.getElementById('skillsPanel');
+                
+                if (skills.length === 0) {
+                    panel.innerHTML = '<div style="padding:10px;color:var(--warning);font-size:11px;">暂无技能</div>';
+                    return;
+                }
+
+                panel.innerHTML = skills.map(s => `
+                    <div class="skill-item">
+                        <h3>🔧 ${s.name}</h3>
+                        <p>${s.description || '无描述'}</p>
+                        <div style="margin-top:6px;">
+                            <span class="hook-tag">v${s.version}</span>
+                            <span class="hook-tag ${s.enabled ? 'status-running' : 'status-stopped'}">${s.enabled ? '启用' : '禁用'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load skills:', e);
+            }
+        }
+
+        // 加载 Provider 列表
+        async function loadProviders() {
+            try {
+                const res = await fetch(`${API_BASE}/providers`);
+                providers = await res.json();
+                renderProviders();
+            } catch (e) {
+                console.error('Failed to load providers:', e);
+            }
+        }
+
+        function renderProviders() {
+            const list = document.getElementById('providersList');
+            list.innerHTML = providers.map(p => `
+                <div class="provider-item ${p.id === currentProvider ? 'active' : ''}" 
+                     onclick="selectProvider('${p.id}')">
+                    <div>
+                        <h3>${p.name}</h3>
+                        <p>${p.model}</p>
+                    </div>
+                    <div class="provider-check">✓</div>
+                </div>
+            `).join('');
+        }
+
+        // 选择 Provider
+        async function selectProvider(providerId) {
+            try {
+                await fetch(`${API_BASE}/providers/${providerId}/use`, { method: 'POST' });
+                currentProvider = providerId;
+                const p = providers.find(x => x.id === providerId);
+                document.getElementById('currentModel').textContent = p.model;
+                closeModelSelector();
+                renderProviders();
+            } catch (e) {
+                console.error('Failed to select provider:', e);
+            }
+        }
+
+        // 创建新会话
+        async function createNewSession() {
+            try {
+                const res = await fetch(`${API_BASE}/sessions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: '新会话' })
+                });
+                const data = await res.json();
+                currentSessionId = data.session_id;
+                await loadSessions();
+                clearChat();
+            } catch (e) {
+                console.error('Failed to create session:', e);
+            }
+        }
+
+        // 选择会话
+        async function selectSession(sessionId) {
+            currentSessionId = sessionId;
+            await loadSessions();
+            await loadChatHistory(sessionId);
+        }
+
+        // 加载聊天历史
+        async function loadChatHistory(sessionId) {
+            try {
+                const res = await fetch(`${API_BASE}/chat/history/${sessionId}`);
+                const history = await res.json();
+                renderMessages(history.messages || []);
+            } catch (e) {
+                console.error('Failed to load chat history:', e);
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message || isLoading) return;
+
+            input.value = '';
+            input.style.height = 'auto';
+
+            appendMessage('user', message);
+            showTyping();
+            isLoading = true;
+            document.getElementById('sendBtn').disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, session_id: currentSessionId })
+                });
+
+                const data = await res.json();
+                currentSessionId = data.session_id;
+
+                hideTyping();
+                appendMessage('assistant', data.response);
+                await loadSessions();
+                await loadAgents(); // 更新 Agent 状态
+
+            } catch (e) {
+                hideTyping();
+                appendMessage('assistant', '抱歉发生了错误，请稍后重试。');
+            }
+
+            isLoading = false;
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        // 添加消息
+        function appendMessage(role, content) {
+            const container = document.getElementById('chatContainer');
+            const empty = document.getElementById('emptyState');
+            if (empty) empty.remove();
+
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = `
+                <div class="message-header">
+                    <div class="message-avatar">${role === 'user' ? '👤' : '🤖'}</div>
+                    <span class="message-role">${role === 'user' ? '用户' : '助手'}</span>
+                    <span class="message-time">${formatTime(new Date().toISOString())}</span>
+                </div>
+                <div class="message-content">${formatContent(content)}</div>
+            `;
+            container.appendChild(msg);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 渲染消息历史
+        function renderMessages(messages) {
+            const container = document.getElementById('chatContainer');
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" id="emptyState">
+                        <div class="icon">💬</div>
+                        <h2>会话历史</h2>
+                        <p>发送消息开始新对话</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = messages.map(m => `
+                <div class="message ${m.role}">
+                    <div class="message-header">
+                        <div class="message-avatar">${m.role === 'user' ? '👤' : '🤖'}</div>
+                        <span class="message-role">${m.role === 'user' ? '用户' : '助手'}</span>
+                        <span class="message-time">${formatTime(m.created_at || new Date().toISOString())}</span>
+                    </div>
+                    <div class="message-content">${formatContent(m.content)}</div>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearChat() {
+            document.getElementById('chatContainer').innerHTML = `
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">🤖</div>
+                    <h2>Multi-Agent 智能协作系统</h2>
+                    <p>开始对话，探索 AI 的无限可能</p>
+                </div>
+            `;
+        }
+
+        // 格式化内容
+        function formatContent(content) {
+            if (!content) return '';
+            content = content.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+            content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+            content = content.split('\n\n').map(p => `<p>${p}</p>`).join('');
+            return content;
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return '';
+            const d = new Date(isoString);
+            return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function showTyping() {
+            const container = document.getElementById('chatContainer');
+            const typing = document.createElement('div');
+            typing.className = 'message assistant';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = `
+                <div class="message-header">
+                    <div class="message-avatar">🤖</div>
+                </div>
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            container.appendChild(typing);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+        }
+
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // 弹窗
+        function showModelSelector() {
+            document.getElementById('modelSelectorModal').classList.add('active');
+        }
+
+        function closeModelSelector() {
+            document.getElementById('modelSelectorModal').classList.remove('active');
+        }
+
+        async function showDebug() {
+            try {
+                const res = await fetch(`${API_BASE}/debug/status`);
+                const data = await res.json();
+                const content = document.getElementById('debugContent');
+                content.innerHTML = `
+                    <div style="margin-bottom:15px;">
+                        <h3 style="margin-bottom:10px;">系统状态</h3>
+                        <div class="panel-item">
+                            <div class="panel-item-header">
+                                <span>初始化状态</span>
+                                <span class="${data.initialized ? 'status-running' : 'status-warning'}">${data.initialized ? '已完成' : '未完成'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <h3 style="margin-bottom:10px;">注册的 Agent (${data.agents ? data.agents.length : 0})</h3>
+                        ${(data.agents || []).map(a => `
+                            <div class="panel-item">
+                                <div class="panel-item-header">
+                                    <span class="panel-item-name">${a.id}</span>
+                                    <span class="${a.running ? 'status-running' : 'status-stopped'}">${a.running ? '运行中' : '已停止'}</span>
+                                </div>
+                            </div>
+                        `).join('') || '<div style="color:var(--error)">⚠️ 没有注册的 Agent</div>'}
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <h3 style="margin-bottom:10px;">MessageBus 注册的 Agent</h3>
+                        <div class="panel-item">
+                            ${(data.bus_agents || []).join(', ') || '无'}
+                        </div>
+                    </div>
+                `;
+                document.getElementById('debugModal').classList.add('active');
+            } catch (e) {
+                alert('获取调试信息失败: ' + e);
+            }
+        }
+
+        function closeDebug() {
+            document.getElementById('debugModal').classList.remove('active');
+        }
+
+        async function reloadSystem() {
+            if (!confirm('确定要重新加载系统吗？')) return;
+            try {
+                await fetch(`${API_BASE}/debug/reload`, { method: 'POST' });
+                await init();
+                alert('系统已重新加载');
+            } catch (e) {
+                alert('重新加载失败: ' + e);
+            }
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>

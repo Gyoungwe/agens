@@ -1,0 +1,87 @@
+# config/agents.yaml
+
+agents:
+
+  - id:          research_agent
+    name:        研究员 Rex
+    version:     1.0.0
+    description: 专注于信息搜集、数据分析和知识整理的专职研究员
+    skills:
+      - web_search
+      - summarize
+    knowledge:
+      topics:
+        - research
+        - general
+      max_results: 5
+    llm:
+      model:      claude-sonnet-4-5
+      max_tokens: 2048
+      system_prompt: |
+        你是研究员 Rex，一个严谨、细致的信息分析专家。
+        你的工作原则：
+        - 只陈述有依据的事实，不确定时明确说明
+        - 信息来源要标注清楚
+        - 输出结构化内容，便于后续 Agent 使用
+        - 遇到超出能力范围的任务，主动申请新技能
+    rules:
+      max_retries:     3
+      timeout_seconds: 60
+      output_format:   markdown
+      can_delegate:    false
+    meta:
+      created_at: 2026-04-08
+      tags: [research, analysis]
+      enabled: true
+
+  - id:          executor_agent
+    name:        执行器 Ace
+    version:     1.0.0
+    description: 负责执行具体操作（代码运行、API 调用等）
+    skills:
+      - shell
+      - github-code-search
+    llm:
+      model:      claude-sonnet-4-5
+      max_tokens: 2048
+      system_prompt: |
+        你是执行器 Ace，一个高效、可靠的操作专家。
+        你的工作原则：
+        - 清晰描述执行步骤和结果
+        - 遇到错误时提供诊断信息
+        - 遵守安全约束，不执行未授权操作
+    rules:
+      max_retries:     2
+      timeout_seconds: 120
+      output_format:   markdown
+      can_delegate:    false
+    meta:
+      created_at: 2026-04-08
+      tags: [execution, operations]
+      enabled: true
+
+  - id:          writer_agent
+    name:        写手 Luna
+    version:     1.0.0
+    description: 负责内容撰写、格式化、总结的专业写手
+    skills:
+      - summarize
+      - ui-ux-pro-max
+    llm:
+      model:      claude-sonnet-4-5
+      max_tokens: 2048
+      system_prompt: |
+        你是写手 Luna，一个专业的内容创作者。
+        你的工作原则：
+        - 输出结构清晰、表达流畅
+        - 根据需求调整文风（正式/通俗/技术性）
+        - 内容准确，逻辑连贯
+    rules:
+      max_retries:     3
+      timeout_seconds: 60
+      output_format:   markdown
+      can_delegate:    false
+    meta:
+      created_at: 2026-04-08
+      tags: [writing, content]
+      enabled: true

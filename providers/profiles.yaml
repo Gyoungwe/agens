@@ -1,0 +1,46 @@
+# providers/profiles.yaml
+# Provider 配置（API Key 已内置，可通过环境变量覆盖）
+
+default: siliconflow
+
+profiles:
+
+  - id:       minimax_m2
+    type:     openai
+    name:     MiniMax M2.7
+    model:    MiniMax-M2.7
+    base_url: https://api.minimaxi.com/v1
+    api_key:  sk-cp-qjBXaAt2bmqLvwHwKKOLKGmNK1_rPr5nERXJ4RlLLwZC1Zx-zsCibrFoDayBD8G1_KqhLLPmyyTb6teTSYHod5q4e42ZVFPRSxbeUekUGsN0QVBJF-rhjjU
+
+  - id:       siliconflow
+    type:     openai
+    name:     SiliconFlow (Qwen)
+    model:    Qwen/Qwen2.5-7B-Instruct
+    base_url: https://api.siliconflow.cn/v1
+    api_key:  sk-unvzxjvgymzfsgvjfywnkfcmsrgwqbmgdpqlpbnbqabvriqv
+
+  - id:       cursor2api
+    type:     openai
+    name:     Cursor2API (Gemini)
+    model:    google/gemini-3-flash
+    base_url: http://localhost:3010
+    api_key:  cursor-local
+
+  - id:       anthropic_claude3sonnet
+    type:     anthropic
+    name:     Anthropic Claude 3 Sonnet
+    model:    claude-3-sonnet-20240229
+    api_key:  ${ANTHROPIC_API_KEY}
+
+  - id:       anthropic_claude3haiku
+    type:     anthropic
+    name:     Anthropic Claude 3 Haiku
+    model:    claude-3-haiku-20240307
+    api_key:  ${ANTHROPIC_API_KEY}
+
+  - id:       deepseek
+    type:     openai
+    name:     DeepSeek
+    model:    deepseek-chat
+    base_url: https://api.deepseek.com/v1
+    api_key:  ${DEEPSEEK_API_KEY}

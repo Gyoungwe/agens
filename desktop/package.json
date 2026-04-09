@@ -1,0 +1,47 @@
+{
+  "name": "multi-agent-system",
+  "version": "1.0.0",
+  "description": "Multi-Agent 智能协作系统",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.multiagent.system",
+    "productName": "Multi-Agent System",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "../web/**",
+      "../api/**",
+      "../config/**",
+      "../providers/**",
+      "../skills/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../data",
+        "to": "data"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
