@@ -92,8 +92,18 @@
             </div>
 
             <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">Claude Tool JSON Schema</label>
-                <textarea id="claudeSchema" class="input" placeholder='{
+                <label class="block text-sm mb-2" style="color: var(--text-secondary)">导入方式</label>
+                <div class="flex gap-3 mb-3">
+                    <button id="tab-paste" class="btn btn-secondary" onclick="switchImportTab('paste')">📝 粘贴 JSON</button>
+                    <button id="tab-file" class="btn" onclick="switchImportTab('file')">📁 上传文件</button>
+                </div>
+            </div>
+
+            <!-- Paste Tab -->
+            <div id="import-paste">
+                <div class="mb-4">
+                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Claude Tool JSON Schema</label>
+                    <textarea id="claudeSchema" class="input" placeholder='{
   "name": "my_tool",
   "description": "工具描述",
   "input_schema": {
@@ -106,7 +116,17 @@
     },
     "required": ["param1"]
   }
-}'></textarea>
+}' style="min-height: 200px;"></textarea>
+                </div>
+            </div>
+
+            <!-- File Tab -->
+            <div id="import-file" class="hidden">
+                <div class="mb-4">
+                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">选择 JSON 文件</label>
+                    <input type="file" id="schemaFile" accept=".json" class="input" onchange="handleFileSelect(event)">
+                </div>
+                <div id="fileContentPreview" class="json-preview mb-4 hidden"></div>
             </div>
 
             <div class="flex gap-3 mb-4">
@@ -236,10 +256,63 @@
             document.getElementById('importModal').classList.remove('hidden');
             document.getElementById('previewSection').classList.add('hidden');
             document.getElementById('currentDraftId').value = '';
+            document.getElementById('claudeSchema').value = '';
+            document.getElementById('schemaFile').value = '';
+            document.getElementById('fileContentPreview').classList.add('hidden');
+            switchImportTab('paste');
         }
 
         function hideImportModal() {
             document.getElementById('importModal').classList.add('hidden');
+        }
+
+        function switchImportTab(tab) {
+            document.getElementById('tab-paste').classList.remove('btn-secondary');
+            document.getElementById('tab-paste').classList.add('btn');
+            document.getElementById('tab-file').classList.remove('btn-secondary');
+            document.getElementById('tab-file').classList.add('btn');
+            
+            if (tab === 'paste') {
+                document.getElementById('tab-paste').classList.remove('btn');
+                document.getElementById('tab-paste').classList.add('btn-secondary');
+                document.getElementById('import-paste').classList.remove('hidden');
+                document.getElementById('import-file').classList.add('hidden');
+            } else {
+                document.getElementById('tab-file').classList.remove('btn');
+                document.getElementById('tab-file').classList.add('btn-secondary');
+                document.getElementById('import-paste').classList.add('hidden');
+                document.getElementById('import-file').classList.remove('hidden');
+            }
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            console.log('[Skills Page] Selected file:', file.name);
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                console.log('[Skills Page] File content length:', content.length);
+                
+                try {
+                    const parsed = JSON.parse(content);
+                    document.getElementById('claudeSchema').value = JSON.stringify(parsed, null, 2);
+                    document.getElementById('fileContentPreview').classList.remove('hidden');
+                    document.getElementById('fileContentPreview').innerHTML = `<strong>文件内容预览:</strong><br>${escapeHtml(content.substring(0, 500))}${content.length > 500 ? '...' : ''}`;
+                    showToast('文件加载成功', 'success');
+                } catch (e) {
+                    showToast('JSON 解析失败: ' + e.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         async function importClaudeSkill() {

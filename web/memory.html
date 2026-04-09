@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>记忆管理 - Agens</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --success: #4ecca3;
+            --warning: #f0883e;
+            --border: #2a2a4a;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-secondary { background: var(--bg-tertiary); }
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
+        .input:focus { outline: none; border-color: var(--accent); }
+        textarea.input { min-height: 80px; resize: vertical; }
+        .memory-card { background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+        .memory-card .owner { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); }
+        .memory-card .text { font-size: 13px; margin-top: 8px; line-height: 1.5; }
+        .memory-card .meta { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--accent); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .stats-card { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; text-align: center; }
+        .stats-card .value { font-size: 24px; font-weight: bold; color: var(--accent); }
+        .stats-card .label { font-size: 12px; color: var(--text-secondary); }
+        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold">🧠 记忆管理</h1>
+                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理 Agent 记忆和共享知识库</p>
+            </div>
+            <div class="flex gap-3">
+                <button class="btn btn-secondary" onclick="refreshMemories()">🔄 刷新</button>
+                <a href="/" class="btn btn-secondary">← 返回主页</a>
+            </div>
+        </header>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="stats-card">
+                <div class="value" id="totalMemories">0</div>
+                <div class="label">总记忆数</div>
+            </div>
+            <div class="stats-card">
+                <div class="value" id="globalMemories">0</div>
+                <div class="label">共享记忆</div>
+            </div>
+            <div class="stats-card">
+                <div class="value" id="agentMemories">0</div>
+                <div class="label">Agent 记忆</div>
+            </div>
+            <div class="stats-card">
+                <div class="value" id="sessionMemories">0</div>
+                <div class="label">会话记忆</div>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="flex border-b mb-6" style="border-color: var(--border)">
+            <button class="tab-btn active" onclick="switchFilter('all', this)">📋 全部</button>
+            <button class="tab-btn" onclick="switchFilter('global', this)">🌐 共享记忆</button>
+            <button class="tab-btn" onclick="switchFilter('agent', this)">🤖 Agent 记忆</button>
+            <button class="tab-btn" onclick="switchFilter('session', this)">💬 会话记忆</button>
+        </div>
+
+        <!-- Search -->
+        <div class="card mb-6">
+            <div class="flex gap-3">
+                <input type="text" id="searchQuery" class="input flex-1" placeholder="搜索记忆内容..." onkeyup="handleSearchKeyup(event)">
+                <select id="searchOwner" class="input" style="width: auto;">
+                    <option value="">全部 Owner</option>
+                </select>
+                <button class="btn" onclick="searchMemories()">🔍 搜索</button>
+            </div>
+        </div>
+
+        <!-- Memory List -->
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">📝 记忆列表</h2>
+                <button class="btn btn-success btn-sm" onclick="showAddMemoryModal()">+ 添加记忆</button>
+            </div>
+            <div id="loadingMemories" class="loading">加载中...</div>
+            <div id="memoryList"></div>
+            <div id="emptyMemories" class="text-center py-8 hidden" style="color: var(--text-secondary)">
+                <p class="text-4xl mb-4">🧠</p>
+                <p>暂无记忆</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Memory Modal -->
+    <div id="addMemoryModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">➕ 添加记忆</h2>
+                <button onclick="hideAddMemoryModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm mb-2" style="color: var(--text-secondary)">记忆内容</label>
+                <textarea id="memoryText" class="input" placeholder="输入记忆内容..." style="min-height: 120px;"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Owner 类型</label>
+                    <select id="memoryOwnerType" class="input" onchange="handleOwnerTypeChange()">
+                        <option value="global">🌐 共享 (global)</option>
+                        <option value="agent">🤖 Agent</option>
+                        <option value="session">💬 会话</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Owner ID</label>
+                    <input type="text" id="memoryOwnerId" class="input" placeholder="agent_id 或 session_id">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm mb-2" style="color: var(--text-secondary)">来源</label>
+                <input type="text" id="memorySource" class="input" placeholder="manual" value="manual">
+            </div>
+
+            <div class="flex gap-3">
+                <button class="btn btn-success" onclick="addMemory()">✅ 添加</button>
+                <button class="btn btn-secondary" onclick="hideAddMemoryModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Results Modal -->
+    <div id="searchResultsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">🔍 搜索结果</h2>
+                <button onclick="hideSearchResultsModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+            </div>
+            <div id="searchResultsList"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <style>
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    </style>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let memories = [];
+        let owners = [];
+
+        async function init() {
+            console.log('[Memory Page] Initializing...');
+            await loadStats();
+            await loadMemories();
+            await loadOwners();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/memory/stats`);
+                const data = await res.json();
+                if (data.success) {
+                    const stats = data.stats;
+                    const byOwner = stats.by_owner || {};
+                    
+                    let globalCount = 0, agentCount = 0, sessionCount = 0;
+                    for (const [owner, count] of Object.entries(byOwner)) {
+                        if (owner === 'global') globalCount = count;
+                        else if (owner.startsWith('agent_')) agentCount += count;
+                        else sessionCount += count;
+                    }
+                    
+                    document.getElementById('totalMemories').textContent = stats.total || 0;
+                    document.getElementById('globalMemories').textContent = globalCount;
+                    document.getElementById('agentMemories').textContent = agentCount;
+                    document.getElementById('sessionMemories').textContent = sessionCount;
+                }
+            } catch (e) {
+                console.error('[Memory Page] Failed to load stats:', e);
+            }
+        }
+
+        async function loadOwners() {
+            try {
+                const res = await fetch(`${API_BASE}/memory/?limit=1000`);
+                const data = await res.json();
+                if (data.success) {
+                    const ownerSet = new Set();
+                    data.memories.forEach(m => ownerSet.add(m.owner));
+                    owners = Array.from(ownerSet);
+                    
+                    const select = document.getElementById('searchOwner');
+                    select.innerHTML = '<option value="">全部 Owner</option>';
+                    owners.forEach(o => {
+                        select.innerHTML += `<option value="${o}">${o}</option>`;
+                    });
+                }
+            } catch (e) {
+                console.error('[Memory Page] Failed to load owners:', e);
+            }
+        }
+
+        async function loadMemories() {
+            console.log('[Memory Page] Loading memories...');
+            document.getElementById('loadingMemories').classList.remove('hidden');
+            document.getElementById('memoryList').innerHTML = '';
+            document.getElementById('emptyMemories').classList.add('hidden');
+
+            try {
+                const owner = document.getElementById('searchOwner').value;
+                const url = owner 
+                    ? `${API_BASE}/memory/?owner=${encodeURIComponent(owner)}&limit=100`
+                    : `${API_BASE}/memory/?limit=100`;
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                console.log('[Memory Page] Memories data:', data);
+                
+                memories = data.memories || [];
+                renderMemories(memories);
+            } catch (e) {
+                console.error('[Memory Page] Failed to load memories:', e);
+                showToast('加载记忆失败: ' + e.message, 'error');
+            } finally {
+                document.getElementById('loadingMemories').classList.add('hidden');
+            }
+        }
+
+        function renderMemories(memoriesToRender) {
+            const list = document.getElementById('memoryList');
+            
+            if (memoriesToRender.length === 0) {
+                list.innerHTML = '';
+                document.getElementById('emptyMemories').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('emptyMemories').classList.add('hidden');
+            list.innerHTML = memoriesToRender.map(m => `
+                <div class="memory-card">
+                    <div class="flex items-center justify-between">
+                        <span class="owner">${escapeHtml(m.owner)}</span>
+                        <div class="flex gap-2">
+                            <button class="btn btn-sm btn-secondary" onclick="searchSimilar('${escapeHtml(m.text.replace(/'/g, "\\'"))}')">🔍 相似</button>
+                            <button class="btn btn-sm btn-warning" onclick="deleteMemory('${m.id}')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="text">${escapeHtml(m.text)}</div>
+                    <div class="meta">
+                        来源: ${m.source || 'unknown'} | 创建: ${formatTime(m.created_at)} | 版本: ${m.version || '0.02'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function switchFilter(filter, btnElement) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            
+            const select = document.getElementById('searchOwner');
+            if (filter === 'all') {
+                select.value = '';
+            } else if (filter === 'global') {
+                select.value = 'global';
+            } else if (filter === 'agent') {
+                select.value = '';
+            } else if (filter === 'session') {
+                select.value = '';
+            }
+            
+            loadMemories();
+        }
+
+        function handleSearchKeyup(event) {
+            if (event.key === 'Enter') {
+                searchMemories();
+            }
+        }
+
+        async function searchMemories() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) {
+                loadMemories();
+                return;
+            }
+
+            const owner = document.getElementById('searchOwner').value;
+
+            console.log('[Memory Page] Searching:', query, 'owner:', owner);
+
+            try {
+                const url = `${API_BASE}/memory/search?query=${encodeURIComponent(query)}&top_k=20${owner ? '&owner=' + encodeURIComponent(owner) : ''}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.success) {
+                    showSearchResults(data.results || []);
+                } else {
+                    showToast('搜索失败', 'error');
+                }
+            } catch (e) {
+                console.error('[Memory Page] Search failed:', e);
+                showToast('搜索失败: ' + e.message, 'error');
+            }
+        }
+
+        async function searchSimilar(text) {
+            try {
+                const res = await fetch(`${API_BASE}/memory/search?query=${encodeURIComponent(text)}&top_k=5`);
+                const data = await res.json();
+                if (data.success) {
+                    showSearchResults(data.results || []);
+                }
+            } catch (e) {
+                showToast('相似搜索失败', 'error');
+            }
+        }
+
+        function showSearchResults(results) {
+            const modal = document.getElementById('searchResultsModal');
+            const list = document.getElementById('searchResultsList');
+            
+            if (results.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-secondary)">没有找到相关记忆</p>';
+            } else {
+                list.innerHTML = results.map(r => `
+                    <div class="memory-card">
+                        <div class="flex items-center justify-between">
+                            <span class="owner">${escapeHtml(r.owner || r.metadata?.owner || 'unknown')}</span>
+                            <span style="color: var(--success)">相似度: ${((r.score || 0) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="text">${escapeHtml(r.text)}</div>
+                    </div>
+                `).join('');
+            }
+            
+            modal.classList.remove('hidden');
+        }
+
+        function hideSearchResultsModal() {
+            document.getElementById('searchResultsModal').classList.add('hidden');
+        }
+
+        function showAddMemoryModal() {
+            document.getElementById('addMemoryModal').classList.remove('hidden');
+            document.getElementById('memoryText').value = '';
+            document.getElementById('memoryOwnerType').value = 'global';
+            document.getElementById('memoryOwnerId').value = '';
+            document.getElementById('memorySource').value = 'manual';
+            handleOwnerTypeChange();
+        }
+
+        function hideAddMemoryModal() {
+            document.getElementById('addMemoryModal').classList.add('hidden');
+        }
+
+        function handleOwnerTypeChange() {
+            const type = document.getElementById('memoryOwnerType').value;
+            const ownerInput = document.getElementById('memoryOwnerId');
+            
+            if (type === 'global') {
+                ownerInput.value = 'global';
+                ownerInput.disabled = true;
+            } else if (type === 'agent') {
+                ownerInput.value = '';
+                ownerInput.placeholder = 'research_agent';
+                ownerInput.disabled = false;
+            } else {
+                ownerInput.value = '';
+                ownerInput.placeholder = 'session_id';
+                ownerInput.disabled = false;
+            }
+        }
+
+        async function addMemory() {
+            const text = document.getElementById('memoryText').value.trim();
+            if (!text) {
+                showToast('请输入记忆内容', 'error');
+                return;
+            }
+
+            const ownerType = document.getElementById('memoryOwnerType').value;
+            let owner = document.getElementById('memoryOwnerId').value.trim();
+            if (!owner) owner = ownerType === 'global' ? 'global' : prompt('请输入 Owner ID:');
+            if (!owner) return;
+
+            const source = document.getElementById('memorySource').value.trim() || 'manual';
+            const sessionId = ownerType === 'session' ? owner : 'memory_' + Date.now();
+
+            try {
+                const res = await fetch(`${API_BASE}/memory/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text,
+                        session_id: sessionId,
+                        owner,
+                        source,
+                    })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    showToast('记忆添加成功', 'success');
+                    hideAddMemoryModal();
+                    await loadMemories();
+                    await loadStats();
+                } else {
+                    showToast('添加失败', 'error');
+                }
+            } catch (e) {
+                console.error('[Memory Page] Add memory failed:', e);
+                showToast('添加失败: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteMemory(memoryId) {
+            if (!confirm('确定要删除这条记忆吗？')) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/memory/${memoryId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    showToast('记忆已删除', 'success');
+                    await loadMemories();
+                    await loadStats();
+                } else {
+                    showToast('删除失败', 'error');
+                }
+            } catch (e) {
+                console.error('[Memory Page] Delete memory failed:', e);
+                showToast('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        async function refreshMemories() {
+            await loadStats();
+            await loadMemories();
+            showToast('已刷新', 'success');
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return 'unknown';
+            try {
+                const d = new Date(isoString);
+                return d.toLocaleString('zh-CN');
+            } catch {
+                return isoString;
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast toast-${type}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

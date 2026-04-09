@@ -417,6 +417,82 @@ class VectorStore:
             logger.warning(f"Count failed: {e}")
             return 0
 
+    async def list_memories(
+        self, owner: str = None, scope: str = "memory", limit: int = 100
+    ) -> List[dict]:
+        """列出记忆"""
+        try:
+            all_data = self._table.to_arrow().to_pydict()
+            memories = []
+            for i in range(len(all_data.get("id", []))):
+                if all_data["scope"][i] != scope:
+                    continue
+                if owner and all_data["owner"][i] != owner:
+                    continue
+
+                metadata = {}
+                try:
+                    metadata = (
+                        json.loads(all_data["metadata"][i])
+                        if all_data["metadata"][i]
+                        else {}
+                    )
+                except Exception:
+                    pass
+
+                memories.append(
+                    {
+                        "id": all_data["id"][i],
+                        "text": all_data["text"][i],
+                        "created_at": all_data["created_at"][i],
+                        "owner": all_data["owner"][i],
+                        "source": all_data["source"][i],
+                        "version": all_data["version"][i],
+                        "ttl_seconds": all_data["ttl_seconds"][i],
+                        "metadata": metadata,
+                    }
+                )
+
+                if len(memories) >= limit:
+                    break
+
+            return memories
+        except Exception as e:
+            logger.warning(f"List memories failed: {e}")
+            return []
+
+    async def get_stats_by_owner(self) -> dict:
+        """获取按 owner 分组的统计"""
+        try:
+            all_data = self._table.to_arrow().to_pydict()
+            stats = {}
+            for i in range(len(all_data.get("id", []))):
+                if all_data["scope"][i] != "memory":
+                    continue
+                owner = all_data["owner"][i]
+                if owner not in stats:
+                    stats[owner] = 0
+                stats[owner] += 1
+            return stats
+        except Exception as e:
+            logger.warning(f"Get stats by owner failed: {e}")
+            return {}
+
+    async def clear(self, owner: str = None) -> int:
+        """清除记忆，返回清除数量"""
+        try:
+            if owner:
+                self._table.delete(f'owner = "{owner}"')
+                logger.info(f"Cleared memories for owner: {owner}")
+                return 1
+            else:
+                self._table.delete('scope = "memory"')
+                logger.info("Cleared all memories")
+                return 1
+        except Exception as e:
+            logger.warning(f"Clear memories failed: {e}")
+            return 0
+
     async def cleanup_expired(self) -> int:
         """清理过期记忆，返回清理数量"""
         try:

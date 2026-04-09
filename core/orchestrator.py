@@ -253,6 +253,92 @@ class Orchestrator(BaseAgent):
 
         return final
 
+    async def run_single_agent(
+        self,
+        user_input: str,
+        agent_id: str,
+        session_id: str = None,
+        trace_id: str = None,
+    ) -> str:
+        """
+        直接运行单个 Agent（不经过 Orchestrator 调度）
+
+        用于独立 Agent 问答模式
+
+        Args:
+            user_input: 用户输入
+            agent_id: 目标 Agent ID
+            session_id: 会话 ID（可选）
+            trace_id: 追踪 ID（可选）
+
+        Returns:
+            Agent 的响应结果
+        """
+        sm = self.session_manager
+        if trace_id:
+            self._current_trace_id = trace_id
+        else:
+            trace_id = str(uuid.uuid4())
+            self._current_trace_id = trace_id
+
+        if session_id:
+            sm.resume_session(session_id)
+        else:
+            sm.new_session(title=user_input[:40])
+            session_id = sm.current_session_id
+
+        await sm.add_user_message(user_input)
+
+        self._pending[trace_id] = {agent_id: None}
+        self._pending_timestamps[trace_id] = time.time()
+        self._events[trace_id] = asyncio.Event()
+
+        self._emit_event(
+            EventEnvelope.agent_start(
+                agent_id=agent_id,
+                trace_id=trace_id,
+                instruction=user_input,
+            )
+        )
+
+        await self._send_task_with_retry(
+            recipient=agent_id,
+            trace_id=trace_id,
+            instruction=user_input,
+            original_input=user_input,
+        )
+
+        results = await self._wait_for_results(trace_id, timeout=120)
+
+        final = ""
+        if results and agent_id in results:
+            final = results[agent_id]
+            if hasattr(final, "output"):
+                final = final.output
+            elif isinstance(final, dict):
+                final = final.get("output", str(final))
+
+        self._emit_event(
+            EventEnvelope.agent_done(
+                agent_id=agent_id,
+                trace_id=trace_id,
+                result=final,
+            )
+        )
+
+        self._emit_event(
+            EventEnvelope.final_response(
+                agent_id=agent_id,
+                trace_id=trace_id,
+                response=final,
+                session_id=session_id,
+            )
+        )
+
+        await sm.add_assistant_message(final)
+
+        return final
+
     async def run_stream(
         self,
         user_input: str,

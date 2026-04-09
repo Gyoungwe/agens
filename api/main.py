@@ -26,7 +26,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sse_starlette import EventSourceResponse
 
-from api.routers import skill_router, agent_router, soul_router, evolution_router
+from api.routers import (
+    skill_router,
+    agent_router,
+    soul_router,
+    evolution_router,
+    memory_router,
+)
 
 load_dotenv()
 
@@ -398,6 +404,7 @@ app.include_router(skill_router)
 app.include_router(agent_router)
 app.include_router(soul_router)
 app.include_router(evolution_router)
+app.include_router(memory_router)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -470,6 +477,53 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logging.error(
             f"🌐 [/chat] ❌ 错误 | trace_id={trace_id} | {type(e).__name__}: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agents/{agent_id}/chat")
+async def chat_with_agent(agent_id: str, request: ChatRequest):
+    """
+    直接与指定 Agent 聊天（不经过 Orchestrator 调度）
+
+    用于独立 Agent 问答模式
+    """
+    trace_id = str(uuid.uuid4())
+    logging.info(
+        f"🌐 [agents/{agent_id}/chat] 请求开始 | trace_id={trace_id} | message='{request.message[:50]}...' "
+    )
+    try:
+        orch = state._get_orchestrator()
+
+        valid_agent_ids = [
+            a.agent_id for a in state._all_agents if a.agent_id != "orchestrator"
+        ]
+        if agent_id not in valid_agent_ids:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+        result = await orch.run_single_agent(
+            user_input=request.message,
+            agent_id=agent_id,
+            session_id=request.session_id,
+            trace_id=trace_id,
+        )
+
+        logging.info(
+            f"🌐 [agents/{agent_id}/chat] ✅ 完成 | trace_id={trace_id} | response_len={len(result) if result else 0}"
+        )
+
+        return {
+            "success": True,
+            "response": result,
+            "session_id": orch._current_session_id,
+            "agent_id": agent_id,
+            "provider": state.provider_registry.active_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(
+            f"🌐 [agents/{agent_id}/chat] ❌ 错误 | trace_id={trace_id} | {type(e).__name__}: {e}"
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1133,6 +1187,11 @@ async def skills_page():
 @app.get("/evolution.html")
 async def evolution_page():
     return FileResponse(str(web_path / "evolution.html"))
+
+
+@app.get("/memory.html")
+async def memory_page():
+    return FileResponse(str(web_path / "memory.html"))
 
 
 if __name__ == "__main__":

@@ -102,7 +102,7 @@ class ClaudeSkillAdapter:
     def generate_execute_template(
         self, tool_name: str, description: str, parameters: List[Dict]
     ) -> str:
-        """生成 execute() 函数骨架"""
+        """生成 execute() 函数骨架（仅方法体）"""
         param_lines = []
         for p in parameters:
             line = f'            "{p["name"]}": {self._type_hint(p)}'
@@ -112,18 +112,7 @@ class ClaudeSkillAdapter:
 
         params_str = ",\n".join(param_lines) if param_lines else ""
 
-        template = f'''    async def execute(self, instruction: str, context: dict = {{}}) -> str:
-        """
-        {description}
-
-        Args:
-            instruction: 用户指令
-            context: 执行上下文
-
-        Returns:
-            执行结果
-        """
-        import json
+        template = f"""        import json
         import logging
         logger = logging.getLogger(__name__)
 
@@ -148,7 +137,7 @@ class ClaudeSkillAdapter:
 
         # 返回 JSON 结果
         return json.dumps(result, ensure_ascii=False, indent=2)
-'''
+"""
         return template
 
     def _type_hint(self, param: Dict) -> str:
@@ -288,8 +277,15 @@ async def create_skill() -> {class_name}Skill:
 
     def _to_class_name(self, tool_name: str) -> str:
         """将 tool_name 转换为类名"""
-        parts = tool_name.replace("-", "_").replace("_", " ").title().split()
-        return "".join(parts) + "Skill"
+        clean_name = tool_name
+
+        if clean_name.lower().endswith("_skill"):
+            clean_name = clean_name[:-6]
+        elif clean_name.lower().endswith("skill"):
+            clean_name = clean_name[:-5]
+
+        parts = clean_name.replace("-", "_").replace("_", " ").title().split()
+        return "".join(parts)
 
     def _generate_param_doc(self, parameters: List[Dict]) -> str:
         """生成参数文档"""
