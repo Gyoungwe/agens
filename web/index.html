@@ -727,6 +727,45 @@
             padding: 30px;
             color: var(--text-secondary);
         }
+
+        /* Agent 事件样式 */
+        .agent-event {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 11px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .agent-event-start { border-left: 3px solid var(--accent); }
+        .agent-event-thinking { border-left: 3px solid var(--warning); }
+        .agent-event-tool { border-left: 3px solid #9b59b6; }
+        .agent-event-output { border-left: 3px solid var(--success); }
+        .agent-event-done { border-left: 3px solid var(--success); }
+
+        .event-time {
+            color: var(--text-secondary);
+            margin-right: 8px;
+            font-size: 10px;
+        }
+
+        .event-agent {
+            color: var(--accent);
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .event-message {
+            color: var(--text-primary);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
     </style>
 </head>
 <body>
@@ -797,6 +836,13 @@
                     <div class="panel-header">📊 任务结果</div>
                     <div id="taskResults"></div>
                 </div>
+                <!-- 实时事件显示 -->
+                <div class="panel">
+                    <div class="panel-header">⚡ 实时事件流</div>
+                    <div id="liveEvents" style="max-height: 200px; overflow-y: auto; padding: 10px;">
+                        <div style="color: var(--text-secondary); font-size: 11px;">等待事件...</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -824,6 +870,8 @@
                     <h2>Multi-Agent 智能协作系统</h2>
                     <p>开始对话，探索 AI 的无限可能</p>
                 </div>
+                <!-- Agent 事件流显示 -->
+                <div id="agentEvents" style="display:none;"></div>
             </div>
 
             <!-- 输入区 -->
@@ -1345,7 +1393,7 @@
             }
         }
 
-        // 发送消息
+        // 发送消息 - 使用 SSE 流式接收
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
@@ -1359,28 +1407,155 @@
             isLoading = true;
             document.getElementById('sendBtn').disabled = true;
 
+            // 清空之前的事件显示
+            updateEventTimeline([]);
+
             try {
-                const res = await fetch(`${API_BASE}/chat`, {
+                const res = await fetch(`${API_BASE}/chat/stream`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message, session_id: currentSessionId })
                 });
 
-                const data = await res.json();
-                currentSessionId = data.session_id;
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let events = [];
 
-                hideTyping();
-                appendMessage('assistant', data.response);
-                await loadSessions();
-                await loadAgents(); // 更新 Agent 状态
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                const eventType = data.event;
+                                const eventData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                                
+                                // 收集事件
+                                events.push({
+                                    type: eventType,
+                                    data: eventData,
+                                    timestamp: new Date().toLocaleTimeString()
+                                });
+
+                                // 实时更新事件流显示
+                                updateEventTimeline(events);
+
+                                // 处理不同事件类型
+                                if (eventType === 'agent_start') {
+                                    showAgentEvent(eventData.agent_id, '开始处理任务', 'start');
+                                } else if (eventType === 'agent_thinking') {
+                                    showAgentEvent(eventData.agent_id, '正在思考...', 'thinking');
+                                } else if (eventType === 'agent_tool_call') {
+                                    showAgentEvent(eventData.agent_id, `调用工具: ${eventData.skill_id}`, 'tool');
+                                } else if (eventType === 'agent_output') {
+                                    showAgentEvent(eventData.agent_id, '完成执行', 'output');
+                                } else if (eventType === 'agent_done') {
+                                    showAgentEvent(eventData.agent_id, '任务完成', 'done');
+                                } else if (eventType === 'final_response') {
+                                    hideTyping();
+                                    appendMessage('assistant', eventData.response || '');
+                                    currentSessionId = eventData.session_id || currentSessionId;
+                                    await loadSessions();
+                                } else if (eventType === 'done') {
+                                    // 最终响应已处理
+                                }
+                            } catch (e) {
+                                console.log('Parse event error:', e);
+                            }
+                        }
+                    }
+                }
 
             } catch (e) {
+                console.error('Chat error:', e);
                 hideTyping();
                 appendMessage('assistant', '抱歉发生了错误，请稍后重试。');
             }
 
             isLoading = false;
             document.getElementById('sendBtn').disabled = false;
+        }
+
+        // 实时显示 Agent 事件
+        function showAgentEvent(agentId, message, type) {
+            const container = document.getElementById('agentEvents');
+            if (!container) return;
+
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `agent-event agent-event-${type}`;
+            eventDiv.innerHTML = `
+                <span class="event-time">${new Date().toLocaleTimeString()}</span>
+                <span class="event-agent">${agentId}</span>
+                <span class="event-message">${message}</span>
+            `;
+            container.insertBefore(eventDiv, container.firstChild);
+
+            // 保留最近20条
+            while (container.children.length > 20) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // 更新事件时间线
+        function updateEventTimeline(events) {
+            const container = document.getElementById('flowTimeline');
+            if (!container) return;
+
+            container.innerHTML = events.slice(-10).map(e => `
+                <div class="flow-item ${e.type === 'final_response' ? 'receiver' : 'sender'}">
+                    <div class="flow-time">${e.timestamp}</div>
+                    <div class="flow-content">
+                        <div class="flow-agent">${getEventIcon(e.type)} ${getEventLabel(e.type)}</div>
+                        <div class="flow-payload">${truncateContent(JSON.stringify(e.data), 150)}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            // 同时更新实时事件面板
+            const liveContainer = document.getElementById('liveEvents');
+            if (liveContainer && events.length > 0) {
+                const latestEvent = events[events.length - 1];
+                liveContainer.innerHTML = events.slice(-15).reverse().map(e => `
+                    <div class="agent-event agent-event-${e.type.split('_').pop()}">
+                        <span class="event-time">${e.timestamp}</span>
+                        <span class="event-agent">${e.data?.agent_id || 'system'}</span>
+                        <span class="event-message">${getEventLabel(e.type)}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function getEventIcon(type) {
+            const icons = {
+                'agent_start': '🚀',
+                'agent_thinking': '💭',
+                'agent_tool_call': '🔧',
+                'agent_output': '📤',
+                'agent_done': '✅',
+                'final_response': '🎯',
+                'error': '❌'
+            };
+            return icons[type] || '📋';
+        }
+
+        function getEventLabel(type) {
+            const labels = {
+                'agent_start': '开始',
+                'agent_thinking': '思考',
+                'agent_tool_call': '工具调用',
+                'agent_output': '输出',
+                'agent_done': '完成',
+                'final_response': '最终响应',
+                'error': '错误'
+            };
+            return labels[type] || type;
         }
 
         // 添加消息

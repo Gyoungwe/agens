@@ -415,15 +415,21 @@ async def chat_stream(request: ChatRequest):
 
             session_id = request.session_id
             if not session_id:
-                session = state.session_manager.new_session(title=request.message[:40])
-                session_id = session.session_id
+                session_id = state.session_manager.new_session(
+                    title=request.message[:40]
+                )
+                logger.info(f"🔧 创建新会话: {session_id}")
 
             trace_id = str(uuid.uuid4())
             event_queue = asyncio.Queue()
 
             async def emit_to_queue(event):
+                logger.debug(
+                    f"📤 事件入队: {event.event_type if hasattr(event, 'event_type') else 'unknown'}"
+                )
                 await event_queue.put(event)
 
+            # 设置所有 Agent 的事件发射器
             for agent in state._all_agents:
                 if hasattr(agent, "set_event_emitter"):
                     agent.set_event_emitter(emit_to_queue)
@@ -434,6 +440,10 @@ async def chat_stream(request: ChatRequest):
 
             orch._current_trace_id = trace_id
             orch.set_event_emitter(emit_to_queue)
+
+            logger.info(
+                f"🚀 开始执行任务, trace_id={trace_id}, session_id={session_id}"
+            )
 
             task = asyncio.create_task(
                 orch.run(
@@ -462,7 +472,9 @@ async def chat_stream(request: ChatRequest):
             yield {"event": "done", "data": f"Final response: {result[:500]}"}
 
         except Exception as e:
-            logger.error(f"Chat stream error: {e}")
+            import traceback
+
+            logger.error(f"Chat stream error: {e}\n{traceback.format_exc()}")
             yield {"event": "error", "data": str(e)}
 
     return EventSourceResponse(event_generator())
