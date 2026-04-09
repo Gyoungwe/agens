@@ -9,21 +9,50 @@ FastAPI 后端 - Multi-Agent 系统 REST API
 import asyncio
 import logging
 import os
+import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from sse_starlette import EventSourceResponse
-from pydantic import BaseModel
+LOG_DIR = Path("./logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+
+def setup_logging():
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = LOG_DIR / f"agens_{today}.log"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    logging.info(f"📝 日志文件: {log_file.absolute()}")
+    return log_file
+
 
 logger = logging.getLogger(__name__)
 
@@ -319,13 +348,15 @@ state = AgentSystemState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 等待初始化完成
+    setup_logging()
+    logging.info("🚀 API 服务器启动")
     task = asyncio.ensure_future(state.initialize_async())
     try:
         await asyncio.wait_for(task, timeout=30.0)
     except asyncio.TimeoutError:
         logger.error("系统初始化超时")
     yield
+    logging.info("👋 API 服务器关闭")
 
 
 app = FastAPI(
@@ -393,9 +424,12 @@ async def chat(request: ChatRequest):
             user_input=request.message,
             session_id=request.session_id,
         )
+        session_id = state.session_manager.current_session_id or ""
+        logging.info(f"🎯 任务完成, session_id={session_id[:8]}...")
+        logging.info(f"📤 响应长度: {len(result) if result else 0} 字符")
         return ChatResponse(
             response=result,
-            session_id=state.session_manager.current_session_id or "",
+            session_id=session_id,
             provider=state.provider_registry.active_id,
         )
     except Exception as e:
