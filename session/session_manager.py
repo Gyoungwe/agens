@@ -101,6 +101,9 @@ class SessionManager:
     def list_sessions(self) -> list[dict]:
         return self.store.list_sessions()
 
+    def get_session(self, session_id: str) -> Optional[dict]:
+        return self.store.get_session(session_id)
+
     def _ensure_session(self):
         if not self._current_session_id:
             self.new_session()

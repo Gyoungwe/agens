@@ -640,7 +640,8 @@ async def get_chat_history(session_id: str):
         session = state.session_manager.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        return session
+        messages = state.session_manager.store.get_messages(session_id)
+        return {**session, "messages": messages}
     except HTTPException:
         raise
     except Exception as e:
