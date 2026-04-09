@@ -54,13 +54,13 @@
         }
 
         .sidebar-header h1 {
-            font-size: 14px;
+            font-size: clamp(14px, 2vw, 18px);
             color: var(--accent);
             margin-bottom: 3px;
         }
 
         .sidebar-header .subtitle {
-            font-size: 10px;
+            font-size: clamp(10px, 1.5vw, 12px);
             color: var(--text-secondary);
         }
 
@@ -73,7 +73,7 @@
             flex: 1;
             padding: 10px 5px;
             text-align: center;
-            font-size: 11px;
+            font-size: clamp(14px, 2vw, 20px);
             cursor: pointer;
             transition: all 0.2s;
             color: var(--text-secondary);
@@ -130,7 +130,8 @@
         }
 
         .session-item .icon {
-            font-size: 12px;
+            font-size: clamp(14px, 2vw, 18px);
+            flex-shrink: 0;
         }
 
         .session-item .title {
@@ -147,7 +148,7 @@
         }
 
         .panel-header {
-            font-size: 11px;
+            font-size: clamp(11px, 1.5vw, 14px);
             color: var(--text-secondary);
             margin-bottom: 8px;
             text-transform: uppercase;
@@ -285,13 +286,13 @@
         }
 
         .message-avatar {
-            width: 24px;
-            height: 24px;
+            width: clamp(24px, 4vw, 36px);
+            height: clamp(24px, 4vw, 36px);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: clamp(12px, 2vw, 18px);
         }
 
         .message.user .message-avatar {
@@ -363,10 +364,10 @@
         }
 
         .agent-event-icon {
-            font-size: 16px;
+            font-size: clamp(16px, 2.5vw, 22px);
             flex-shrink: 0;
-            width: 28px;
-            height: 28px;
+            width: clamp(28px, 4vw, 40px);
+            height: clamp(28px, 4vw, 40px);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -481,7 +482,7 @@
         }
 
         .collab-icon {
-            font-size: 16px;
+            font-size: clamp(16px, 2.5vw, 24px);
             flex-shrink: 0;
         }
 
@@ -637,7 +638,7 @@
         }
 
         .empty-state .icon {
-            font-size: 40px;
+            font-size: clamp(32px, 6vw, 56px);
             margin-bottom: 15px;
         }
 
@@ -819,6 +820,7 @@
 
         .flow-agent {
             font-weight: 600;
+            font-size: clamp(12px, 1.8vw, 16px);
             color: var(--accent);
             margin-bottom: 4px;
         }
@@ -870,7 +872,7 @@
         .task-agent {
             color: var(--accent);
             font-weight: 600;
-            font-size: 12px;
+            font-size: clamp(12px, 1.5vw, 14px);
         }
 
         .task-status {

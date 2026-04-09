@@ -33,7 +33,7 @@
         .agent-card { cursor: pointer; transition: all 0.2s; }
         .agent-card:hover { border-color: var(--accent); transform: translateY(-2px); }
         .agent-card.active { border-color: var(--success); background: rgba(78, 204, 163, 0.1); }
-        .skill-tag { background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 12px; margin: 2px; display: inline-block; }
+        .skill-tag { background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: clamp(11px, 1.5vw, 13px); margin: 2px; display: inline-block; }
         .CodeMirror { height: 300px; font-size: 13px; border-radius: 8px; }
         .diff-added { background: rgba(78, 204, 163, 0.2); }
         .diff-removed { background: rgba(233, 69, 96, 0.2); }
@@ -79,9 +79,9 @@
 
             <div class="col-span-9">
                 <div class="flex border-b mb-4" style="border-color: var(--border)">
-                    <button class="tab-btn active" onclick="switchTab('profile')">📋 身份配置</button>
-                    <button class="tab-btn" onclick="switchTab('skills')">🛠️ 技能管理</button>
-                    <button class="tab-btn" onclick="switchTab('backups')">💾 备份记录</button>
+                    <button class="tab-btn active" onclick="switchTab('profile', this)">📋 身份配置</button>
+                    <button class="tab-btn" onclick="switchTab('skills', this)">🛠️ 技能管理</button>
+                    <button class="tab-btn" onclick="switchTab('backups', this)">💾 备份记录</button>
                 </div>
 
                 <div id="tab-profile" class="tab-content">
@@ -460,12 +460,14 @@
             }
         }
 
-        function switchTab(tab) {
+        function switchTab(tab, btnElement) {
             console.log('[Agent Page] Switching to tab:', tab);
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(div => div.classList.add('hidden'));
 
-            event.target.classList.add('active');
+            if (btnElement) {
+                btnElement.classList.add('active');
+            }
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
 
             if (tab === 'skills' && currentAgent) {

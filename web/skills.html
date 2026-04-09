@@ -134,18 +134,28 @@
         let currentDraftId = null;
 
         async function init() {
+            console.log('[Skills Page] Initializing...');
             await loadSkills();
         }
 
         async function loadSkills() {
+            console.log('[Skills Page] Loading skills...');
             try {
                 const res = await fetch(`${API_BASE}/skills/`);
+                console.log('[Skills Page] /skills/ response status:', res.status);
+
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+
                 const data = await res.json();
+                console.log('[Skills Page] Skills data:', data);
                 skills = data.skills || [];
                 renderStats();
                 renderSkills();
             } catch (e) {
-                showToast('加载技能列表失败', 'error');
+                console.error('[Skills Page] Failed to load skills:', e);
+                showToast('加载技能列表失败: ' + e.message, 'error');
             }
         }
 
@@ -243,9 +253,11 @@
             try {
                 schema = JSON.parse(schemaText);
             } catch (e) {
-                showToast('JSON 格式错误', 'error');
+                showToast('JSON 格式错误: ' + e.message, 'error');
                 return;
             }
+
+            console.log('[Skills Page] Importing Claude skill:', schema);
 
             try {
                 const res = await fetch(`${API_BASE}/skills/import/claude`, {
@@ -253,7 +265,17 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(schema)
                 });
+                console.log('[Skills Page] Import response status:', res.status);
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('[Skills Page] Import failed:', errorText);
+                    showToast('导入失败: HTTP ' + res.status, 'error');
+                    return;
+                }
+
                 const data = await res.json();
+                console.log('[Skills Page] Import response data:', data);
 
                 if (data.success) {
                     currentDraftId = data.draft_id;
@@ -280,11 +302,13 @@
                         : '';
 
                     document.getElementById('previewSection').classList.remove('hidden');
+                    showToast('草稿预览成功', 'success');
                 } else {
-                    showToast('预览失败', 'error');
+                    showToast('预览失败: ' + (data.detail || '未知错误'), 'error');
                 }
             } catch (e) {
-                showToast('预览失败: ' + e, 'error');
+                console.error('[Skills Page] Import error:', e);
+                showToast('预览失败: ' + e.message, 'error');
             }
         }
 
@@ -295,9 +319,21 @@
                 return;
             }
 
+            console.log('[Skills Page] Installing draft:', draftId);
+
             try {
                 const res = await fetch(`${API_BASE}/skills/drafts/${draftId}/install`, { method: 'POST' });
+                console.log('[Skills Page] Install response status:', res.status);
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('[Skills Page] Install failed:', errorText);
+                    showToast('安装失败: HTTP ' + res.status, 'error');
+                    return;
+                }
+
                 const data = await res.json();
+                console.log('[Skills Page] Install response data:', data);
 
                 if (data.success) {
                     showToast(`技能 ${data.skill_id} 安装成功!`, 'success');
@@ -306,11 +342,12 @@
                 } else {
                     showToast('安装失败: ' + (data.error || '未知错误'), 'error');
                     if (data.warnings?.length) {
-                        showToast('警告: ' + data.warnings.join(', '), 'error');
+                        showToast('警告: ' + data.warnings.join(', '), 'warning');
                     }
                 }
             } catch (e) {
-                showToast('安装失败: ' + e, 'error');
+                console.error('[Skills Page] Install error:', e);
+                showToast('安装失败: ' + e.message, 'error');
             }
         }
 
