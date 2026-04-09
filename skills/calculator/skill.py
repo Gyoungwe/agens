@@ -1,7 +1,7 @@
-# skills/web_search.py
+# skill.py
 # 由 Claude Skill Adapter 自动生成
 # 源: claude_skill
-# 生成时间: 2026-04-10T01:48:50.327056
+# 生成时间: 2026-04-10T02:06:29.842080
 
 import logging
 from typing import Any
@@ -9,21 +9,21 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-class WebSearchSkill:
+class CalculatorSkill:
     """
-    Search the web for information
+    Perform mathematical calculations
 
     参数:
-        query (string): The search query [必需]
+        expression (string): Math expression [必需]
 
     示例:
-        >>> skill = WebSearchSkill()
+        >>> skill = CalculatorSkill()
         >>> result = await skill.execute('{"param1": "value1"}')
     """
 
     def __init__(self):
-        self.name = "web_search"
-        self.description = """Search the web for information"""
+        self.name = "calculator"
+        self.description = """Perform mathematical calculations"""
         self.version = "1.0.0"
         self.source = "claude_skill"
 
@@ -49,16 +49,16 @@ class WebSearchSkill:
             params = {}
 
         # 参数验证
-        required_params = ["query"]
+        required_params = ["expression"]
         missing = [p for p in required_params if p not in params]
         if missing:
             raise ValueError(f"Missing required parameters: {missing}")
 
-        # TODO: 实现 web_search 技能逻辑
-        logger.info(f"Executing web_search with params: {params}")
+        # TODO: 实现 calculator 技能逻辑
+        logger.info(f"Executing calculator with params: {params}")
 
         result = {
-            "query": params.get("query", "")  # The search query
+            "expression": params.get("expression", "")  # Math expression
         }
 
         # 返回 JSON 结果
@@ -76,14 +76,14 @@ class WebSearchSkill:
             (is_valid, error_message)
         """
         errors = []
-        if "query" not in params:
-            errors.append(f"Missing required parameter: query")
+        if "expression" not in params:
+            errors.append(f"Missing required parameter: expression")
         if errors:
             return False, "; ".join(errors)
         return True, ""
 
 
 # 快捷函数
-async def create_skill() -> WebSearchSkill:
+async def create_skill() -> CalculatorSkill:
     """创建技能实例"""
-    return WebSearchSkill()
+    return CalculatorSkill()

@@ -211,8 +211,9 @@ class ClaudeSkillAdapter:
     def generate_skill_code(self, draft: SkillDraft) -> str:
         """生成完整的技能代码"""
         class_name = self._to_class_name(draft.tool_name)
+        skill_id = draft.tool_name.lower().replace("-", "_")
 
-        code = f'''# skills/{draft.tool_name}.py
+        code = f'''# skill.py
 # 由 Claude Skill Adapter 自动生成
 # 源: {draft.source}
 # 生成时间: {datetime.now().isoformat()}
@@ -370,19 +371,62 @@ async def create_skill() -> {class_name}Skill:
                 success=False, error="技能包含危险代码模式", warnings=warning_msgs
             )
 
-        skill_code = self.generate_skill_code(draft)
-        skill_path = self.skills_dir / f"{draft.tool_name}.py"
+        skill_id = draft.tool_name.lower().replace("-", "_")
+        skill_dir = self.skills_dir / skill_id
 
         try:
-            skill_path.write_text(skill_code, encoding="utf-8")
-            logger.info(f"Skill {draft.tool_name} installed to {skill_path}")
+            skill_dir.mkdir(parents=True, exist_ok=True)
 
-            skill_id = f"{draft.tool_name}"
+            skill_md_content = self._generate_skill_md(draft, skill_id)
+            (skill_dir / "SKILL.md").write_text(skill_md_content, encoding="utf-8")
+
+            skill_py_content = self.generate_skill_code(draft)
+            (skill_dir / "skill.py").write_text(skill_py_content, encoding="utf-8")
+
+            logger.info(f"Skill {skill_id} installed to {skill_dir}")
+
             del self.drafts[draft_id]
 
             return ImportResult(success=True, skill_id=skill_id, warnings=[])
         except Exception as e:
             return ImportResult(success=False, error=str(e))
+
+    def _generate_skill_md(self, draft: SkillDraft, skill_id: str = None) -> str:
+        """生成 SKILL.md 文件内容"""
+        if skill_id is None:
+            skill_id = draft.tool_name.lower().replace("-", "_")
+
+        params_md = []
+        for p in draft.parameters:
+            required = "必需" if p.get("required") else "可选"
+            params_md.append(
+                f"- `{p['name']}` ({p.get('type', 'any')}): {p.get('description', '')} [{required}]"
+            )
+
+        content = f"""# {draft.tool_name}
+
+## 描述
+{draft.description}
+
+## 参数
+{chr(10).join(params_md) if params_md else "（无参数）"}
+
+## 使用方式
+
+```python
+from skills.{skill_id}.skill import {self._to_class_name(draft.tool_name)}Skill
+
+skill = {self._to_class_name(draft.tool_name)}Skill()
+result = await skill.execute('{{"param1": "value1"}}')
+```
+
+## 来源
+{draft.source}
+
+## 版本
+1.0.0
+"""
+        return content
 
     def import_from_json(self, json_str: str) -> Tuple[str, SkillDraft]:
         """从 JSON 字符串导入"""
