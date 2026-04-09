@@ -26,3 +26,11 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 日志
+*.log
