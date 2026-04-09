@@ -246,6 +246,7 @@ class AgentSystemState:
 
     def _get_orchestrator(self):
         if self._orchestrator is None:
+            logger.info("🚀 [_get_orchestrator] 创建新 Orchestrator 实例")
             from core.orchestrator import Orchestrator
 
             self._orchestrator = Orchestrator(
@@ -324,23 +325,32 @@ class AgentSystemState:
 
     async def initialize_async(self):
         if self._initialized or self._initializing:
+            logger.info("initialize_async: 已初始化或正在初始化，跳过")
             return
         self._initializing = True
+        logger.info("🚀 [initialize_async] 开始初始化...")
         try:
             # 触发所有属性的初始化
+            logger.info("🚀 [initialize_async] 初始化 provider_registry...")
             _ = self.provider_registry
+            logger.info("🚀 [initialize_async] 初始化 skill_registry...")
             _ = self.skill_registry
+            logger.info("🚀 [initialize_async] 初始化 hook_registry...")
             _ = self.hook_registry
+            logger.info("🚀 [initialize_async] 初始化 session_manager...")
             _ = self.session_manager
+            logger.info("🚀 [initialize_async] 初始化 vector_store...")
             _ = self.vector_store
             kb = self._knowledge_base
             if kb:
+                logger.info("🚀 [initialize_async] 初始化 knowledge_base...")
                 await kb.init()
-            _ = self._init_agents()  # 初始化 Agents
+            logger.info("🚀 [initialize_async] 初始化 agents...")
+            _ = self._init_agents()
             self._initialized = True
             logger.info("✅ Multi-Agent 系统初始化完成")
         except Exception as e:
-            logger.error(f"初始化错误: {e}")
+            logger.error(f"初始化错误: {e}", exc_info=True)
         finally:
             self._initializing = False
 
@@ -422,25 +432,37 @@ async def health_check():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """发送消息并获取回复"""
+    trace_id = str(uuid.uuid4())
+    session_id = request.session_id or ""
+    logging.info(
+        f"🌐 [/chat] 请求开始 | trace_id={trace_id} | session_id={session_id[:8] if session_id else 'new'} | message_len={len(request.message)}"
+    )
     try:
         orch = state._get_orchestrator()
         if not orch:
+            logging.error(f"🌐 [/chat] 系统未初始化")
             raise HTTPException(status_code=503, detail="System not initialized")
 
+        logging.info(f"🌐 [/chat] 调用 orchestrator.run() | trace_id={trace_id}")
         result = await orch.run(
             user_input=request.message,
             session_id=request.session_id,
         )
         session_id = state.session_manager.current_session_id or ""
-        logging.info(f"🎯 任务完成, session_id={session_id[:8]}...")
-        logging.info(f"📤 响应长度: {len(result) if result else 0} 字符")
+        logging.info(
+            f"🌐 [/chat] ✅ 完成 | trace_id={trace_id} | session_id={session_id[:8]} | response_len={len(result) if result else 0}"
+        )
         return ChatResponse(
             response=result,
             session_id=session_id,
             provider=state.provider_registry.active_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        logging.error(
+            f"🌐 [/chat] ❌ 错误 | trace_id={trace_id} | {type(e).__name__}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -453,6 +475,11 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
     - 心跳事件（每 15 秒）避免代理断流
     - 支持 Last-Event-ID 断线续传
     """
+    trace_id = str(uuid.uuid4())
+    session_desc = request.session_id or "new"
+    logger.info(
+        f"🌐 [/chat/stream] 请求开始 | trace_id={trace_id} | session_id={session_desc[:8]} | message='{request.message[:50]}...'"
+    )
 
     HEARTBEAT_INTERVAL = 15
 
@@ -460,6 +487,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
         try:
             orch = state._get_orchestrator()
             if not orch:
+                logger.error(f"🌐 [/chat/stream:{trace_id}] 系统未初始化")
                 yield {"event": "error", "data": "System not initialized"}
                 return
 
@@ -468,16 +496,27 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                 session_id = state.session_manager.new_session(
                     title=request.message[:40]
                 )
-                logger.info(f"🔧 创建新会话: {session_id}")
+                logger.info(f"🌐 [/chat/stream:{trace_id}] 🆕 创建新会话: {session_id}")
+            else:
+                logger.info(
+                    f"🌐 [/chat/stream:{trace_id}] ▶️ 恢复会话: {session_id[:8]}"
+                )
 
-            trace_id = str(uuid.uuid4())
             event_queue = asyncio.Queue()
             last_yielded_event_id = last_event_id or ""
+            events_received = 0
 
             async def emit_to_queue(event):
+                nonlocal events_received
+                event_type = getattr(event, "type", None) or (
+                    event.event_type.value
+                    if hasattr(event, "event_type")
+                    else "unknown"
+                )
                 event_id = getattr(event, "event_id", None) or str(uuid.uuid4())
-                logger.debug(
-                    f"📤 事件入队: {event.event_type if hasattr(event, 'event_type') else 'unknown'} [{event_id}]"
+                events_received += 1
+                logger.info(
+                    f"🌐 [SSE:{trace_id}] 📤 事件 [{events_received}] type={event_type} id={event_id[:8]}"
                 )
                 await event_queue.put((event_id, event))
 
@@ -492,9 +531,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
             orch._current_trace_id = trace_id
             orch.set_event_emitter(emit_to_queue)
 
-            logger.info(
-                f"🚀 开始执行任务, trace_id={trace_id}, session_id={session_id}"
-            )
+            logger.info(f"🌐 [/chat/stream:{trace_id}] 🚀 启动 orchestrator.run()")
 
             task = asyncio.create_task(
                 orch.run(
@@ -504,10 +541,13 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
             )
 
             last_heartbeat = time.time()
+            loop_count = 0
             while True:
+                loop_count += 1
                 try:
                     remaining = HEARTBEAT_INTERVAL - (time.time() - last_heartbeat)
                     if remaining <= 0:
+                        logger.debug(f"🌐 [SSE:{trace_id}] ❤️ 心跳")
                         yield {
                             "event": "heartbeat",
                             "data": "keepalive",
@@ -516,13 +556,16 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                         last_heartbeat = time.time()
                         remaining = HEARTBEAT_INTERVAL
 
+                    logger.debug(f"🌐 [SSE:{trace_id}] ⏳ 等待事件 (loop={loop_count})")
                     event_id, event = await asyncio.wait_for(
                         event_queue.get(), timeout=remaining
                     )
                     event_queue.task_done()
 
                     if last_event_id and event_id <= last_event_id:
-                        logger.debug(f"🔁 跳过已发送事件: {event_id}")
+                        logger.info(
+                            f"🌐 [SSE:{trace_id}] 🔁 跳过已发送: {event_id[:8]}"
+                        )
                         continue
 
                     event_data = event.to_dict() if hasattr(event, "to_dict") else {}
@@ -530,6 +573,9 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                         "type", "message"
                     )
 
+                    logger.info(
+                        f"🌐 [SSE:{trace_id}] 📤 yield event={event_type} id={event_id[:8]}"
+                    )
                     yield {
                         "event": event_type,
                         "data": str(event_data),
@@ -539,9 +585,13 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     last_yielded_event_id = event_id
 
                     if event_type in ("final_response", "task_failed", "task_timeout"):
+                        logger.info(
+                            f"🌐 [SSE:{trace_id}] 🛑 收到终止事件: {event_type}"
+                        )
                         break
 
                 except asyncio.TimeoutError:
+                    logger.debug(f"🌐 [SSE:{trace_id}] ⏰ 超时等待")
                     yield {
                         "event": "heartbeat",
                         "data": "keepalive",
@@ -550,7 +600,11 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     last_heartbeat = time.time()
                     continue
 
+            logger.info(f"🌐 [/chat/stream:{trace_id}] ⏳ 等待 orchestrator.run() 完成")
             result = await task
+            logger.info(
+                f"🌐 [/chat/stream:{trace_id}] ✅ 完成 | response_len={len(result) if result else 0}"
+            )
             yield {
                 "event": "done",
                 "data": f"Final response: {result[:500]}" if result else "No response",
@@ -560,7 +614,10 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
         except Exception as e:
             import traceback
 
-            logger.error(f"Chat stream error: {e}\n{traceback.format_exc()}")
+            tb = traceback.format_exc()
+            logger.error(
+                f"🌐 [/chat/stream:{trace_id}] ❌ 异常: {type(e).__name__}: {e}\n{tb}"
+            )
             yield {"event": "error", "data": str(e)}
 
     return EventSourceResponse(

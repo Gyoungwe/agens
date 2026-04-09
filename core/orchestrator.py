@@ -119,24 +119,43 @@ class Orchestrator(BaseAgent):
         trace_id = (
             getattr(event, "trace_id", None) or getattr(event, "task_id", None) or ""
         )
+        event_type = getattr(event, "type", None) or (
+            event.event_type.value if hasattr(event, "event_type") else "unknown"
+        )
+        logger.info(
+            f"📤 [_emit_event] type={event_type} trace_id={trace_id[:8] if trace_id else 'none'} -> queue={trace_id in self._event_queues}"
+        )
         if trace_id in self._event_queues:
             await self._event_queues[trace_id].put(event)
         asyncio.create_task(self._safe_emit_callback(event, trace_id))
 
     async def _safe_emit_callback(self, event, trace_id: str):
         """安全地调用回调，保证可观测性"""
+        event_type = getattr(event, "type", None) or (
+            event.event_type.value if hasattr(event, "event_type") else "unknown"
+        )
         try:
             if trace_id in self._event_callbacks:
+                logger.info(
+                    f"📤 [_safe_emit] trace_id={trace_id[:8]} type={event_type} -> event_callbacks"
+                )
                 callback = self._event_callbacks[trace_id]
                 if asyncio.iscoroutinefunction(callback):
                     await callback(event)
                 else:
                     callback(event)
             elif self._event_emitter:
+                logger.info(
+                    f"📤 [_safe_emit] trace_id={trace_id[:8]} type={event_type} -> _event_emitter"
+                )
                 if asyncio.iscoroutinefunction(self._event_emitter):
                     await self._event_emitter(event)
                 else:
                     self._event_emitter(event)
+            else:
+                logger.warning(
+                    f"📤 [_safe_emit] trace_id={trace_id[:8]} type={event_type} -> 无回调（丢弃）"
+                )
         except Exception as e:
             logger.warning(f"Event emit failed (degraded): {type(e).__name__}: {e}")
 
@@ -192,6 +211,7 @@ class Orchestrator(BaseAgent):
         trace_id = (
             self._current_trace_id if self._current_trace_id else str(uuid.uuid4())
         )
+        logger.info(f"🚀 [run] trace_id={trace_id} 开始执行")
 
         # 3. 按计划分发子任务
         await self._dispatch(plan, user_input, context_messages, trace_id)
@@ -203,8 +223,9 @@ class Orchestrator(BaseAgent):
         final = await self._synthesize(
             user_input, results, context_messages=context_messages
         )
-        logger.info(f"✅ 任务完成")
+        logger.info(f"✅ 任务完成, trace_id={trace_id}")
 
+        logger.info(f"🚀 [run] 准备发射 final_response, trace_id={trace_id}")
         await self._emit_event(
             EventEnvelope.final_response(
                 agent_id=self.agent_id,
@@ -213,6 +234,7 @@ class Orchestrator(BaseAgent):
                 session_id=self._current_session_id,
             )
         )
+        logger.info(f"🚀 [run] final_response 已发射, trace_id={trace_id}")
 
         if sm:
             await sm.add_assistant_message(final)

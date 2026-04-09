@@ -104,11 +104,16 @@ class BaseAgent(ABC):
 
     def set_event_emitter(self, emit_fn):
         """设置事件发射回调，用于实时事件流"""
+        logger.info(f"🎯 [{self.agent_id}] set_event_emitter 设置了事件回调")
         self._event_emitter = emit_fn
 
     def _emit(self, event):
         """发射事件到回调"""
+        event_type = getattr(event, "type", None) or (
+            event.event_type.value if hasattr(event, "event_type") else "unknown"
+        )
         if self._event_emitter and callable(self._event_emitter):
+            logger.info(f"📤 [{self.agent_id}] _emit type={event_type}")
             try:
                 import asyncio
 
@@ -119,6 +124,10 @@ class BaseAgent(ABC):
                     cb(event)
             except Exception:
                 pass
+        else:
+            logger.warning(
+                f"📤 [{self.agent_id}] _emit type={event_type} 但无回调（丢弃）"
+            )
 
     def get_provider(self):
         """获取当前活跃的 Provider，优先从 provider_registry 取"""
