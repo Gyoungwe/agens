@@ -26,6 +26,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sse_starlette import EventSourceResponse
 
+from api.routers import skill_router, agent_router, soul_router, evolution_router
+
 load_dotenv()
 
 LOG_DIR = Path("./logs")
@@ -391,6 +393,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(skill_router)
+app.include_router(agent_router)
+app.include_router(soul_router)
+app.include_router(evolution_router)
 
 
 # ═══════════════════════════════════════════════════════════════════

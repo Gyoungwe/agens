@@ -498,3 +498,88 @@ class SkillRegistry:
             return conn.execute(
                 "SELECT * FROM skills WHERE skill_id=?", (skill_id,)
             ).fetchone()
+
+    # ══════════════════════════════════════════════
+    # 热重载功能
+    # ══════════════════════════════════════════════
+
+    def set_event_emitter(self, emitter):
+        """设置事件发射器（用于 SSE 推送）"""
+        self._event_emitter = emitter
+
+    def _emit_skill_event(self, event_type: str, skill_id: str, data: dict = None):
+        """发射技能事件到 SSE"""
+        if hasattr(self, "_event_emitter") and self._event_emitter:
+            event_data = {
+                "type": event_type,
+                "skill_id": skill_id,
+                "data": data or {},
+            }
+            try:
+                self._event_emitter(event_data)
+            except Exception as e:
+                logger.warning(f"Failed to emit skill event: {e}")
+
+    def reload_skill(self, skill_id: str) -> bool:
+        """热重载单个技能"""
+        old_skill = self._cache.get(skill_id)
+
+        self._cache.pop(skill_id, None)
+
+        skill_class = self._load_skill_class(skill_id)
+        if skill_class is None:
+            logger.error(f"Failed to reload skill {skill_id}: cannot load class")
+            if old_skill:
+                self._cache[skill_id] = old_skill
+            return False
+
+        new_instance = skill_class()
+        self._cache[skill_id] = new_instance
+
+        self._emit_skill_event(
+            "skill_reloaded",
+            skill_id,
+            {
+                "skill_id": skill_id,
+                "name": getattr(new_instance, "name", skill_id),
+            },
+        )
+
+        logger.info(f"🔄 技能 [{skill_id}] 已热重载")
+        return True
+
+    def reload_all(self):
+        """热重载所有技能"""
+        skill_ids = list(self._cache.keys())
+        for skill_id in skill_ids:
+            self.reload_skill(skill_id)
+        logger.info(f"🔄 已重载 {len(skill_ids)} 个技能")
+
+    def get_stats(self, skill_id: str) -> dict:
+        """获取技能调用统计"""
+        row = self._get_row(skill_id)
+        if not row:
+            return {}
+
+        return {
+            "skill_id": skill_id,
+            "name": row["name"],
+            "call_count": getattr(self._cache.get(skill_id), "call_count", 0)
+            if skill_id in self._cache
+            else 0,
+            "last_called": getattr(self._cache.get(skill_id), "last_called", None)
+            if skill_id in self._cache
+            else None,
+            "enabled": bool(row["enabled"]),
+            "source": row["source"],
+            "installed_at": row["installed_at"],
+        }
+
+    def track_call(self, skill_id: str):
+        """追踪技能调用"""
+        if skill_id in self._cache:
+            skill = self._cache[skill_id]
+            if hasattr(skill, "call_count"):
+                skill.call_count += 1
+            if hasattr(skill, "last_called"):
+                skill.last_called = datetime.now().isoformat()
