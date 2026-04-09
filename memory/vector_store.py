@@ -90,7 +90,23 @@ class VectorStore:
                     exist_ok=True,
                 )
             except Exception:
-                self._table = db.open_table(self.TABLE_NAME)
+                try:
+                    existing = db.open_table(self.TABLE_NAME)
+                    existing_schema = existing.schema()
+                    if "scope" not in str(existing_schema):
+                        logger.warning("表 schema 不兼容，删除旧表并重建...")
+                        db.drop_table(self.TABLE_NAME)
+                        self._table = db.create_table(
+                            self.TABLE_NAME,
+                            schema=schema,
+                        )
+                    else:
+                        self._table = existing
+                except Exception:
+                    self._table = db.create_table(
+                        self.TABLE_NAME,
+                        schema=schema,
+                    )
 
             logger.info(f"✅ LanceDB table '{self.TABLE_NAME}' ready at {self.db_path}")
         except Exception as e:
