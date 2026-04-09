@@ -7,6 +7,7 @@ FastAPI 后端 - Multi-Agent 系统 REST API
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -579,7 +580,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     )
                     yield {
                         "event": event_type,
-                        "data": str(event_data),
+                        "data": json.dumps(event_data),
                         "id": event_id[:8] if len(event_id) > 8 else event_id,
                     }
 

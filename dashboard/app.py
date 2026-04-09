@@ -14,7 +14,7 @@ import uuid
 import requests
 from datetime import datetime
 
-API_BASE = "http://localhost:18792"
+API_BASE = "http://localhost:8000"
 
 st.set_page_config(
     page_title="Multi-Agent Dashboard",
@@ -593,8 +593,13 @@ def render_chat():
 
                     final_response = ""
                     for evt in reversed(events):
-                        if evt.get("event") == "final_response":
-                            final_response = evt.get("response", "")
+                        if (
+                            evt.get("type") == "final_response"
+                            or evt.get("_event_type") == "final_response"
+                        ):
+                            final_response = evt.get("response", "") or evt.get(
+                                "data", {}
+                            ).get("response", "")
                             break
                         elif evt.get("_event_type") == "done":
                             text = evt.get("data", "")
