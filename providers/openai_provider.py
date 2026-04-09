@@ -3,7 +3,12 @@
 import os
 from typing import AsyncIterator, List
 from openai import AsyncOpenAI
-from providers.base_provider import BaseProvider, ChatMessage, ProviderResponse
+from providers.base_provider import (
+    BaseProvider,
+    ChatMessage,
+    ProviderResponse,
+    UsageInfo,
+)
 
 
 class OpenAIProvider(BaseProvider):
@@ -52,8 +57,12 @@ class OpenAIProvider(BaseProvider):
         return ProviderResponse(
             text=resp.choices[0].message.content,
             model=resp.model,
-            input_tokens=usage.prompt_tokens if usage else 0,
-            output_tokens=usage.completion_tokens if usage else 0,
+            finish_reason=resp.choices[0].finish_reason or "stop",
+            usage=UsageInfo(
+                input_tokens=usage.prompt_tokens if usage else 0,
+                output_tokens=usage.completion_tokens if usage else 0,
+                total_tokens=usage.total_tokens if usage else 0,
+            ),
             provider=self.provider_id,
         )
 

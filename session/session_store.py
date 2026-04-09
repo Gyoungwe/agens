@@ -79,6 +79,14 @@ class SessionStore:
                 CREATE INDEX IF NOT EXISTS idx_task_results_trace_id
                     ON task_results(trace_id);
             """)
+            try:
+                conn.execute(
+                    "ALTER TABLE messages ADD COLUMN token_count INTEGER DEFAULT 0"
+                )
+                logger.info("📝 已迁移 messages 表添加 token_count 列")
+            except Exception as e:
+                if "duplicate column" not in str(e).lower():
+                    logger.debug(f"messages 表迁移检查: {e}")
         logger.info("✅ Session 数据库已就绪 (with indexes)")
 
     def _conn(self) -> sqlite3.Connection:

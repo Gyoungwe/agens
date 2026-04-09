@@ -114,14 +114,16 @@ class Orchestrator(BaseAgent):
         """设置事件回调，用于实时事件流推送"""
         self._event_callbacks[trace_id] = callback
 
-    async def _emit_event(self, event: AgentEvent):
+    async def _emit_event(self, event):
         """发射事件到队列或回调（可观测化，异常不静默丢失）"""
-        trace_id = event.trace_id
+        trace_id = (
+            getattr(event, "trace_id", None) or getattr(event, "task_id", None) or ""
+        )
         if trace_id in self._event_queues:
             await self._event_queues[trace_id].put(event)
         asyncio.create_task(self._safe_emit_callback(event, trace_id))
 
-    async def _safe_emit_callback(self, event: AgentEvent, trace_id: str):
+    async def _safe_emit_callback(self, event, trace_id: str):
         """安全地调用回调，保证可观测性"""
         try:
             if trace_id in self._event_callbacks:
@@ -474,9 +476,14 @@ class Orchestrator(BaseAgent):
         """覆盖父类的监听循环，专门收集子 Agent 的返回"""
         while self._running:
             try:
-                message = await self.bus.receive(self.agent_id, timeout=1.0)
-                if message is None:
+                envelope = await self.bus.receive(self.agent_id, timeout=1.0)
+                if envelope is None:
                     continue
+
+                if hasattr(envelope, "message") and envelope.message:
+                    message = envelope.message
+                else:
+                    message = envelope
 
                 if message.type in ("result", "error"):
                     await self._collect_result(message)

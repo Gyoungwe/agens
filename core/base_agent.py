@@ -190,12 +190,17 @@ class BaseAgent(ABC):
         """持续监听消息队列"""
         while self._running:
             try:
-                message = await self.bus.receive(self.agent_id, timeout=1.0)
-                if message is None:
+                envelope = await self.bus.receive(self.agent_id, timeout=1.0)
+                if envelope is None:
                     continue
 
+                if hasattr(envelope, "message") and envelope.message:
+                    message = envelope.message
+                else:
+                    message = envelope
+
                 if message.type == "task":
-                    await self._handle_task(message)
+                    await self._handle_task(message, envelope)
                 elif message.type == "status":
                     await self._handle_status(message)
 
@@ -206,7 +211,7 @@ class BaseAgent(ABC):
                     f"Agent [{self.agent_id}] 消息循环异常: {e}", exc_info=True
                 )
 
-    async def _handle_task(self, message: Message):
+    async def _handle_task(self, message: Message, envelope=None):
         """处理 task 类型消息（带重试、自我进化机制）"""
         task = TaskPayload(**message.payload)
         logger.info(f"🎯 [{self.agent_id}] 收到任务: {task.instruction[:60]}...")
