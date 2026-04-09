@@ -81,7 +81,7 @@ async def retry_with_backoff(
         except Exception as e:
             last_error = e
             logger.error(f"❌ 不可重试的错误: {e}")
-            raise RetryError(attempt, e)
+            raise
 
     raise RetryError(max_retries, last_error)
 

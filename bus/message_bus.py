@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from core.message import Message
@@ -33,13 +33,13 @@ class MessageEnvelope:
 class DeduplicationCache:
     """
     短期去重缓存，防止重复消费
-    使用 LRU 策略清理过期条目
+    使用 O(1) LRU 策略: OrderedDict + move_to_end + popitem(last=False)
     """
 
     def __init__(
         self, max_size: int = MAX_DEDUP_CACHE_SIZE, ttl: int = DEDUP_TTL_SECONDS
     ):
-        self._cache: Dict[str, float] = {}
+        self._cache: OrderedDict[str, float] = OrderedDict()
         self._max_size = max_size
         self._ttl = ttl
         self._lock = asyncio.Lock()
@@ -50,17 +50,19 @@ class DeduplicationCache:
         async with self._lock:
             if event_id in self._cache:
                 if now - self._cache[event_id] < self._ttl:
+                    self._cache.move_to_end(event_id)
                     return True
                 del self._cache[event_id]
 
             self._cache[event_id] = now
+            self._cache.move_to_end(event_id)
 
             if len(self._cache) > self._max_size:
-                oldest_keys = sorted(self._cache.items(), key=lambda x: x[1])[
-                    : self._max_size // 2
-                ]
-                for k in oldest_keys:
-                    del self._cache[k[0]]
+                evicted = 0
+                evict_count = self._max_size // 2
+                while evicted < evict_count and self._cache:
+                    self._cache.popitem(last=False)
+                    evicted += 1
 
             return False
 
@@ -126,10 +128,28 @@ class MessageBus:
         envelope = self._wrap_message(message)
 
         if message.recipient == "*":
-            for agent_id, queue in self._queues.items():
-                if agent_id != message.sender:
-                    await queue.put(envelope)
-            logger.debug(f"📢 广播 [{message.type}] {message.sender} → ALL")
+
+            async def _deliver_with_timeout(agent_id: str, queue: asyncio.Queue):
+                try:
+                    await asyncio.wait_for(queue.put(envelope), timeout=0.5)
+                    return (agent_id, True, None)
+                except asyncio.TimeoutError:
+                    logger.warning(f"广播投递超时: {agent_id}")
+                    return (agent_id, False, "timeout")
+                except Exception as e:
+                    logger.warning(f"广播投递异常: {agent_id}, {e}")
+                    return (agent_id, False, str(e))
+
+            tasks = [
+                _deliver_with_timeout(agent_id, queue)
+                for agent_id, queue in self._queues.items()
+                if agent_id != message.sender
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            success_count = sum(1 for r in results if isinstance(r, tuple) and r[1])
+            logger.debug(
+                f"📢 广播 [{message.type}] {message.sender} → ALL ({success_count}/{len(tasks)} 成功)"
+            )
         else:
             queue = self._queues.get(message.recipient)
             if queue is None:

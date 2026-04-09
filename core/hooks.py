@@ -428,6 +428,7 @@ class HookRegistry:
         self._post_hooks: List[BaseHook] = []
         self._error_hooks: List[BaseHook] = []
         self._hook_names: set = set()
+        self._lock = asyncio.Lock()
 
     def register(self, hook: BaseHook) -> None:
         """注册 Hook"""
@@ -504,25 +505,56 @@ class HookRegistry:
     async def run_pre_hooks(self, event: ToolUseEvent) -> HookResult:
         """
         执行所有 pre_tool hooks
+        相同 priority 的 hooks 并发执行，不同 priority 按顺序执行
         如果关键 hook 返回 allowed=False，立即停止
         非关键 hook 失败会降级继续
         """
+        hook_groups: Dict[int, List[BaseHook]] = {}
         for hook in self._pre_hooks:
-            result = await self._run_hook_with_timeout(hook, hook.pre_tool, event)
+            hook_groups.setdefault(hook.priority, []).append(hook)
 
-            if hook.critical and not result.allowed:
-                logger.warning(
-                    f"[HookRegistry] 关键 Hook {hook.name} 阻止了 {event.tool_name} 执行: "
-                    f"{result.error_message}"
+        for priority in sorted(hook_groups.keys()):
+            hooks = hook_groups[priority]
+            if len(hooks) == 1:
+                hook = hooks[0]
+                result = await self._run_hook_with_timeout(hook, hook.pre_tool, event)
+                if hook.critical and not result.allowed:
+                    logger.warning(
+                        f"[HookRegistry] 关键 Hook {hook.name} 阻止了 {event.tool_name} 执行: "
+                        f"{result.error_message}"
+                    )
+                    return result
+                if not result.allowed:
+                    logger.warning(
+                        f"[HookRegistry] Hook {hook.name} 阻止了 {event.tool_name} 执行（降级）: "
+                        f"{result.error_message}"
+                    )
+                    return result
+            else:
+                results = await asyncio.gather(
+                    *[
+                        self._run_hook_with_timeout(hook, hook.pre_tool, event)
+                        for hook in hooks
+                    ],
+                    return_exceptions=True,
                 )
-                return result
-
-            if not result.allowed:
-                logger.warning(
-                    f"[HookRegistry] Hook {hook.name} 阻止了 {event.tool_name} 执行（降级）: "
-                    f"{result.error_message}"
-                )
-                return result
+                for i, r in enumerate(results):
+                    if isinstance(r, Exception):
+                        logger.warning(f"[HookRegistry] Hook {hooks[i].name} 异常: {r}")
+                        continue
+                    hook = hooks[i]
+                    if hook.critical and not r.allowed:
+                        logger.warning(
+                            f"[HookRegistry] 关键 Hook {hook.name} 阻止了 {event.tool_name} 执行: "
+                            f"{r.error_message}"
+                        )
+                        return r
+                    if not r.allowed:
+                        logger.warning(
+                            f"[HookRegistry] Hook {hook.name} 阻止了 {event.tool_name} 执行（降级）: "
+                            f"{r.error_message}"
+                        )
+                        return r
 
         return HookResult.allow()
 
@@ -531,26 +563,58 @@ class HookRegistry:
     ) -> HookResult:
         """
         执行所有 post_tool hooks
+        相同 priority 的 hooks 并发执行，不同 priority 按顺序执行
         后续 hook 可以看到前面 hook 修改后的输出
         非关键 hook 失败会降级继续
         """
+        hook_groups: Dict[int, List[BaseHook]] = {}
+        for hook in self._post_hooks:
+            hook_groups.setdefault(hook.priority, []).append(hook)
+
         final_result = HookResult.allow()
 
-        for hook in self._post_hooks:
-            hook_result = await self._run_hook_with_timeout(
-                hook, hook.post_tool, event, result
-            )
-
-            if hook_result.modified_output is not None:
-                result.tool_output = hook_result.modified_output
-                final_result = hook_result
-
-            if not hook_result.allowed and hook.critical:
-                logger.warning(
-                    f"[HookRegistry] 关键 Hook {hook.name} 返回失败: "
-                    f"{hook_result.error_message}"
+        for priority in sorted(hook_groups.keys()):
+            hooks = hook_groups[priority]
+            if len(hooks) == 1:
+                hook = hooks[0]
+                hook_result = await self._run_hook_with_timeout(
+                    hook, hook.post_tool, event, result
                 )
-                final_result = hook_result
+                if hook_result.modified_output is not None:
+                    result.tool_output = hook_result.modified_output
+                    final_result = hook_result
+                if not hook_result.allowed and hook.critical:
+                    logger.warning(
+                        f"[HookRegistry] 关键 Hook {hook.name} 返回失败: "
+                        f"{hook_result.error_message}"
+                    )
+                    final_result = hook_result
+            else:
+
+                async def run_hook_with_output_update(hook: BaseHook) -> HookResult:
+                    hr = await self._run_hook_with_timeout(
+                        hook, hook.post_tool, event, result
+                    )
+                    if hr.modified_output is not None:
+                        async with self._lock:
+                            result.tool_output = hr.modified_output
+                    return hr
+
+                results = await asyncio.gather(
+                    *[run_hook_with_output_update(hook) for hook in hooks],
+                    return_exceptions=True,
+                )
+                for i, r in enumerate(results):
+                    if isinstance(r, Exception):
+                        logger.warning(f"[HookRegistry] Hook {hooks[i].name} 异常: {r}")
+                        continue
+                    hook = hooks[i]
+                    if not r.allowed and hook.critical:
+                        logger.warning(
+                            f"[HookRegistry] 关键 Hook {hook.name} 返回失败: "
+                            f"{r.error_message}"
+                        )
+                        final_result = r
 
         return final_result
 
@@ -559,20 +623,44 @@ class HookRegistry:
     ) -> HookResult:
         """
         执行所有 on_error hooks
+        相同 priority 的 hooks 并发执行，不同 priority 按顺序执行
         即使出错也继续执行后续 hooks（降级继续）
         """
+        hook_groups: Dict[int, List[BaseHook]] = {}
+        for hook in self._error_hooks:
+            hook_groups.setdefault(hook.priority, []).append(hook)
+
         final_result = HookResult.allow()
 
-        for hook in self._error_hooks:
-            hook_result = await self._run_hook_with_timeout(
-                hook, hook.on_error, event, error
-            )
-
-            if not hook_result.allowed:
-                logger.warning(
-                    f"[HookRegistry] Hook {hook.name} on_error 返回失败（继续）: "
-                    f"{hook_result.error_message}"
+        for priority in sorted(hook_groups.keys()):
+            hooks = hook_groups[priority]
+            if len(hooks) == 1:
+                hook = hooks[0]
+                hook_result = await self._run_hook_with_timeout(
+                    hook, hook.on_error, event, error
                 )
+                if not hook_result.allowed:
+                    logger.warning(
+                        f"[HookRegistry] Hook {hook.name} on_error 返回失败（继续）: "
+                        f"{hook_result.error_message}"
+                    )
+            else:
+                results = await asyncio.gather(
+                    *[
+                        self._run_hook_with_timeout(hook, hook.on_error, event, error)
+                        for hook in hooks
+                    ],
+                    return_exceptions=True,
+                )
+                for i, r in enumerate(results):
+                    if isinstance(r, Exception):
+                        logger.warning(f"[HookRegistry] Hook {hooks[i].name} 异常: {r}")
+                        continue
+                    if not r.allowed:
+                        logger.warning(
+                            f"[HookRegistry] Hook {hooks[i].name} on_error 返回失败（继续）: "
+                            f"{r.error_message}"
+                        )
 
         return final_result
 

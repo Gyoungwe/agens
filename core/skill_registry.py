@@ -67,6 +67,7 @@ import logging
 import json
 import re
 import yaml
+import asyncio
 from pathlib import Path
 from typing import Type, Dict, List, Optional, Any
 
@@ -76,6 +77,8 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = Path("./data/skills.db")
 SKILLS_DIR = Path("./skills")
+
+_POOL_SIZE = 5
 
 
 class SkillMetadata:
@@ -164,47 +167,56 @@ class SkillRegistry:
     3. 按 agent_id 过滤返回可用技能
     4. 热重载（无需重启）
     5. 技能搜索和发现
+
+    可靠性优化：
+    - WAL 模式提升并发读性能
+    - 共享连接 + 锁减少连接竞争
     """
 
     def __init__(self, db_path: Path = DB_PATH):
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, BaseSkill] = {}
+        self._meta_cache: List[dict] = []
+        self._write_lock = asyncio.Lock()
         self._init_db()
         self._scan_and_register()
 
-    # ══════════════════════════════════════════════
-    # 数据库初始化
-    # ══════════════════════════════════════════════
-
     def _init_db(self):
-        with self._conn() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS skills (
-                    skill_id     TEXT PRIMARY KEY,
-                    name         TEXT NOT NULL,
-                    description  TEXT,
-                    version      TEXT,
-                    author       TEXT,
-                    tags         TEXT,
-                    model        TEXT,
-                    tools        TEXT,
-                    input_schema TEXT,
-                    output_schema TEXT,
-                    permissions  TEXT,
-                    agent_ids    TEXT,
-                    enabled      INTEGER DEFAULT 1,
-                    source       TEXT,
-                    install_path TEXT,
-                    installed_at  TEXT DEFAULT (datetime('now'))
-                )
-            """)
-        logger.info("✅ SQLite 技能数据库已就绪")
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS skills (
+                skill_id     TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                description  TEXT,
+                version      TEXT,
+                author       TEXT,
+                tags         TEXT,
+                model        TEXT,
+                tools        TEXT,
+                input_schema TEXT,
+                output_schema TEXT,
+                permissions  TEXT,
+                agent_ids    TEXT,
+                enabled      INTEGER DEFAULT 1,
+                source       TEXT,
+                install_path TEXT,
+                installed_at  TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.close()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        if not hasattr(self, "_shared_conn") or self._shared_conn is None:
+            self._shared_conn = sqlite3.connect(self.db_path, timeout=30.0)
+            self._shared_conn.row_factory = sqlite3.Row
+            self._shared_conn.execute("PRAGMA journal_mode=WAL")
+        return self._shared_conn
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._get_conn()
 
     # ══════════════════════════════════════════════
     # 扫描 & 注册

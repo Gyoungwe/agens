@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator, Dict, List, Set
 
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
-from core.events import AgentEvent, AgentEventType
+from core.events import EventEnvelope, AgentEventType
 from bus.message_bus import MessageBus, DeduplicationCache
 from utils.retry import retry_with_backoff, RetryError
 
@@ -61,6 +61,7 @@ class Orchestrator(BaseAgent):
         self.session_manager = session_manager
         self.context_compressor = context_compressor
         self._pending: Dict[str, dict] = {}
+        self._pending_timestamps: Dict[str, float] = {}
         self._events: Dict[str, asyncio.Event] = {}
         self._event_queues: Dict[str, asyncio.Queue] = {}
         self._event_callbacks: Dict[str, callable] = {}
@@ -68,6 +69,9 @@ class Orchestrator(BaseAgent):
         self._dedup_cache = DeduplicationCache(max_size=5000, ttl=600)
         self._processed_results: Set[str] = set()
         self._correlation_ids: Dict[str, str] = {}
+        self._PENDING_TTL = 600
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._start_cleanup_task()
 
     def create_event_queue(self, trace_id: str) -> asyncio.Queue:
         """为指定的 trace_id 创建事件队列"""
@@ -75,32 +79,64 @@ class Orchestrator(BaseAgent):
         self._event_queues[trace_id] = q
         return q
 
+    def _start_cleanup_task(self):
+        """启动 pending 条目 TTL 清理任务"""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._cleanup_pending_loop())
+            logger.debug("Pending cleanup task started")
+
+    async def _cleanup_pending_loop(self):
+        """定期清理超期 pending 条目"""
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await self._cleanup_stale_pending()
+            except Exception as e:
+                logger.warning(f"Pending cleanup error: {e}")
+
+    async def _cleanup_stale_pending(self):
+        """清理超期的 pending 条目"""
+        now = time.time()
+        stale_trace_ids = [
+            trace_id
+            for trace_id, timestamp in self._pending_timestamps.items()
+            if now - timestamp > self._PENDING_TTL
+        ]
+        for trace_id in stale_trace_ids:
+            logger.warning(f"清理超期 pending 条目: {trace_id[:8]}...")
+            self._pending.pop(trace_id, None)
+            self._pending_timestamps.pop(trace_id, None)
+            self._events.pop(trace_id, None)
+            self._event_queues.pop(trace_id, None)
+            self._event_callbacks.pop(trace_id, None)
+
     def set_event_callback(self, trace_id: str, callback: callable):
         """设置事件回调，用于实时事件流推送"""
         self._event_callbacks[trace_id] = callback
 
     async def _emit_event(self, event: AgentEvent):
-        """发射事件到队列或回调"""
+        """发射事件到队列或回调（可观测化，异常不静默丢失）"""
         trace_id = event.trace_id
         if trace_id in self._event_queues:
             await self._event_queues[trace_id].put(event)
-        if trace_id in self._event_callbacks:
-            callback = self._event_callbacks[trace_id]
-            try:
+        asyncio.create_task(self._safe_emit_callback(event, trace_id))
+
+    async def _safe_emit_callback(self, event: AgentEvent, trace_id: str):
+        """安全地调用回调，保证可观测性"""
+        try:
+            if trace_id in self._event_callbacks:
+                callback = self._event_callbacks[trace_id]
                 if asyncio.iscoroutinefunction(callback):
                     await callback(event)
                 else:
                     callback(event)
-            except Exception as e:
-                logger.error(f"Event callback error: {e}")
-        elif self._event_emitter:
-            try:
+            elif self._event_emitter:
                 if asyncio.iscoroutinefunction(self._event_emitter):
                     await self._event_emitter(event)
                 else:
                     self._event_emitter(event)
-            except Exception as e:
-                logger.error(f"Event emitter error: {e}")
+        except Exception as e:
+            logger.warning(f"Event emit failed (degraded): {type(e).__name__}: {e}")
 
     def get_event_queue(self, trace_id: str) -> asyncio.Queue:
         """获取指定 trace_id 的事件队列"""
@@ -168,7 +204,7 @@ class Orchestrator(BaseAgent):
         logger.info(f"✅ 任务完成")
 
         await self._emit_event(
-            AgentEvent.final_response(
+            EventEnvelope.final_response(
                 agent_id=self.agent_id,
                 trace_id=trace_id,
                 response=final,
@@ -363,7 +399,7 @@ class Orchestrator(BaseAgent):
                 "error_code": "RETRY_EXHAUSTED",
             }
             await self._emit_event(
-                AgentEvent.task_failed(
+                EventEnvelope.task_failed(
                     agent_id=recipient,
                     trace_id=trace_id,
                     error_message=str(e),
@@ -388,10 +424,11 @@ class Orchestrator(BaseAgent):
         trace_id = trace_id or str(uuid.uuid4())
         agent_ids = [step["agent"] for step in plan]
         self._pending[trace_id] = {aid: None for aid in agent_ids}
+        self._pending_timestamps[trace_id] = time.time()
         self._events[trace_id] = asyncio.Event()
 
         await self._emit_event(
-            AgentEvent.agent_start(
+            EventEnvelope.agent_start(
                 agent_id=self.agent_id,
                 trace_id=trace_id,
                 instruction=original_input,
@@ -506,7 +543,7 @@ class Orchestrator(BaseAgent):
         if elapsed >= timeout:
             logger.warning(f"⏰ 任务超时: {trace_id[:8]}... (耗时 {elapsed:.1f}s)")
             await self._emit_event(
-                AgentEvent.task_timeout(
+                EventEnvelope.task_timeout(
                     agent_id=self.agent_id,
                     trace_id=trace_id,
                     timeout_seconds=timeout,
@@ -522,6 +559,7 @@ class Orchestrator(BaseAgent):
                         }
 
         results = self._pending.pop(trace_id, {})
+        self._pending_timestamps.pop(trace_id, None)
         self._events.pop(trace_id, None)
         return results
 

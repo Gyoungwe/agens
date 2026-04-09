@@ -6,14 +6,61 @@ import yaml
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, AsyncIterator, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator
 
 from core.message import Message, TaskPayload, ResultPayload, ErrorPayload
 from core.hooks import ToolUseEvent, ToolUseResult
-from core.events import AgentEvent
+from core.events import EventEnvelope
 from bus.message_bus import MessageBus
 from utils.retry import retry_with_backoff, RetryError
 
 logger = logging.getLogger(__name__)
+
+
+class LLMConfig(BaseModel):
+    model: str = "claude-sonnet-4-5"
+    max_tokens: int = 2048
+    system_prompt: str = ""
+    temperature: float = 0.7
+
+
+class RulesConfig(BaseModel):
+    max_retries: int = 3
+    timeout_seconds: int = 60
+    output_format: str = "markdown"
+    can_delegate: bool = False
+    retry_base_delay: float = 1.0
+    retry_max_delay: float = 30.0
+
+
+class MetaConfig(BaseModel):
+    created_at: str = ""
+    tags: List[str] = []
+    enabled: bool = True
+
+
+class KnowledgeConfig(BaseModel):
+    topics: List[str] = []
+    max_results: int = 5
+
+
+class AgentConfig(BaseModel):
+    id: str
+    name: str = ""
+    version: str = "0.02"
+    description: str = ""
+    skills: List[str] = []
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    rules: RulesConfig = Field(default_factory=RulesConfig)
+    meta: MetaConfig = Field(default_factory=MetaConfig)
+
+    @field_validator("id")
+    @classmethod
+    def id_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Agent id cannot be empty")
+        return v.strip()
 
 
 class BaseAgent(ABC):
@@ -91,14 +138,19 @@ class BaseAgent(ABC):
         auto_installer=None,
         hook_registry=None,
     ):
-        """从 AGENT.yaml 加载身份文档并初始化 Agent"""
-        config = yaml.safe_load(Path(yaml_path).read_text(encoding="utf-8"))
+        """从 AGENT.yaml 加载身份文档并初始化 Agent（带 Schema 校验）"""
+        raw_config = yaml.safe_load(Path(yaml_path).read_text(encoding="utf-8"))
+        try:
+            config = AgentConfig(**raw_config)
+        except Exception as e:
+            raise ValueError(f"Agent config validation failed: {e}")
+
         instance = cls(
-            agent_id=config["id"],
+            agent_id=config.id,
             bus=bus,
-            skills=config.get("skills", []),
-            description=config.get("description", ""),
-            config=config,
+            skills=config.skills,
+            description=config.description,
+            config=raw_config,
             registry=registry,
             knowledge=knowledge,
             provider=provider,
@@ -162,7 +214,7 @@ class BaseAgent(ABC):
         self._current_trace_id = message.trace_id
 
         self._emit(
-            AgentEvent.agent_start(
+            EventEnvelope.agent_start(
                 agent_id=self.agent_id,
                 trace_id=message.trace_id,
                 instruction=task.instruction,
@@ -277,7 +329,7 @@ class BaseAgent(ABC):
             )
 
             self._emit(
-                AgentEvent.agent_done(
+                EventEnvelope.agent_done(
                     agent_id=self.agent_id,
                     trace_id=message.trace_id,
                     result=str(result)[:200],
@@ -413,7 +465,7 @@ class BaseAgent(ABC):
             import time
 
             self._emit(
-                AgentEvent.agent_tool_call(
+                EventEnvelope.agent_tool_call(
                     agent_id=self.agent_id,
                     trace_id=self._current_trace_id or "",
                     skill_id=skill_id,
@@ -423,7 +475,7 @@ class BaseAgent(ABC):
             )
 
             self._emit(
-                AgentEvent.agent_thinking(
+                EventEnvelope.agent_thinking(
                     agent_id=self.agent_id,
                     trace_id=self._current_trace_id or "",
                     message=f"Executing skill: {skill_id}",
@@ -441,7 +493,7 @@ class BaseAgent(ABC):
             elapsed_ms = int((time.time() - start_time) * 1000)
 
             self._emit(
-                AgentEvent.agent_output(
+                EventEnvelope.agent_output(
                     agent_id=self.agent_id,
                     trace_id=self._current_trace_id or "",
                     output=str(output)[:500],

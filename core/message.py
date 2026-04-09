@@ -1,7 +1,7 @@
 # core/message.py
 
 from pydantic import BaseModel, Field
-from typing import Any, Literal, Dict
+from typing import Any, Literal, Dict, Optional
 from datetime import datetime
 import uuid
 
