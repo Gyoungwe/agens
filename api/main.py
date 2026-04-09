@@ -968,7 +968,7 @@ async def list_hooks():
 # Debug / Status 接口
 # ═══════════════════════════════════════════════════════════════════
 
-DEBUG_DEV_MODE = os.getenv("DEBUG_DEV_MODE", "false").lower() == "true"
+DEBUG_DEV_MODE = os.getenv("DEBUG_DEV_MODE", "true").lower() == "true"
 
 
 def _check_dev_mode():
