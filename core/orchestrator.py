@@ -174,6 +174,7 @@ class Orchestrator(BaseAgent):
         self,
         user_input: str,
         session_id: str = None,
+        trace_id: str = None,
     ) -> str:
         """
         支持 Session Resume：
@@ -207,10 +208,12 @@ class Orchestrator(BaseAgent):
         logger.info(f"📋 任务计划: {plan}")
 
         # 2. 生成 trace_id（如果还没有的话）
-        # 注意：chat_stream 会先设置 _current_trace_id
-        trace_id = (
-            self._current_trace_id if self._current_trace_id else str(uuid.uuid4())
-        )
+        # 修复：trace_id 通过参数传递，不再依赖实例可变状态，防止并发请求互相覆盖
+        if trace_id:
+            self._current_trace_id = trace_id
+        elif not self._current_trace_id:
+            self._current_trace_id = str(uuid.uuid4())
+        trace_id = self._current_trace_id
         logger.info(f"🚀 [run] trace_id={trace_id} 开始执行")
 
         # 3. 按计划分发子任务

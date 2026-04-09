@@ -537,6 +537,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                 orch.run(
                     user_input=request.message,
                     session_id=session_id,
+                    trace_id=trace_id,
                 )
             )
 
