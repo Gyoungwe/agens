@@ -7,6 +7,12 @@ Hook 生命周期:
 1. pre_tool  - 工具执行前调用，可修改参数或阻止执行
 2. post_tool - 工具执行后调用，可修改输出
 3. on_error  - 工具执行出错时调用
+
+可靠性特性:
+- priority: Hook 执行优先级（数字越小越先执行）
+- timeout_ms: Hook 超时时间（毫秒）
+- critical: 是否为关键 Hook（失败时阻止执行）
+- graceful degradation: Hook 失败默认降级继续
 """
 
 import asyncio
@@ -67,6 +73,8 @@ class HookResult:
     modified_output: Any = None  # 修改后的输出（post_hook 可用）
     error_message: str = ""  # 错误信息
     metadata: Dict[str, Any] = field(default_factory=dict)
+    hook_name: str = ""  # Hook 名称（用于 TimingHook）
+    elapsed_ms: int = 0  # Hook 执行耗时
 
     @classmethod
     def allow(cls, metadata: Dict[str, Any] = None) -> "HookResult":
@@ -80,11 +88,24 @@ class HookResult:
     def modify(cls, output: Any, metadata: Dict[str, Any] = None) -> "HookResult":
         return cls(allowed=True, modified_output=output, metadata=metadata or {})
 
+    @classmethod
+    def timeout(cls, hook_name: str, timeout_ms: int) -> "HookResult":
+        return cls(
+            allowed=True,
+            error_message=f"Hook {hook_name} timed out after {timeout_ms}ms",
+            metadata={"timeout": True, "timeout_ms": timeout_ms},
+        )
+
 
 class BaseHook(ABC):
     """
     Hook 基类
     所有 Hook 必须继承此类并实现对应的方法
+
+    可靠性属性:
+    - priority: 执行优先级（默认 100，数字越小越先执行）
+    - timeout_ms: 超时时间（默认 5000ms）
+    - critical: 是否为关键 Hook（默认 False，失败时降级继续）
     """
 
     @property
@@ -97,6 +118,21 @@ class BaseHook(ABC):
     def description(self) -> str:
         """Hook 描述"""
         return ""
+
+    @property
+    def priority(self) -> int:
+        """执行优先级（数字越小越先执行）"""
+        return 100
+
+    @property
+    def timeout_ms(self) -> int:
+        """超时时间（毫秒）"""
+        return 5000
+
+    @property
+    def critical(self) -> bool:
+        """是否为关键 Hook（失败时阻止执行）"""
+        return False
 
     async def pre_tool(self, event: ToolUseEvent) -> HookResult:
         """
@@ -136,27 +172,52 @@ class LoggingHook(BaseHook):
     def description(self) -> str:
         return "记录所有工具调用"
 
+    @property
+    def priority(self) -> int:
+        return 50
+
     async def pre_tool(self, event: ToolUseEvent) -> HookResult:
+        start = time.time()
         logger.info(
             f"[Hook:logging] PRE  tool={event.tool_name} "
             f"agent={event.agent_id} input_keys={list(event.tool_input.keys())}"
         )
-        return HookResult.allow()
+        elapsed = int((time.time() - start) * 1000)
+        return HookResult(
+            allowed=True,
+            metadata={"elapsed_ms": elapsed},
+            hook_name=self.name,
+            elapsed_ms=elapsed,
+        )
 
     async def post_tool(self, event: ToolUseEvent, result: ToolUseResult) -> HookResult:
+        start = time.time()
         status = "✅" if result.success else "❌"
         logger.info(
             f"[Hook:logging] POST tool={event.tool_name} "
             f"{status} elapsed={result.elapsed_ms}ms"
         )
-        return HookResult.allow()
+        elapsed = int((time.time() - start) * 1000)
+        return HookResult(
+            allowed=True,
+            metadata={"elapsed_ms": elapsed},
+            hook_name=self.name,
+            elapsed_ms=elapsed,
+        )
 
     async def on_error(self, event: ToolUseEvent, error: Exception) -> HookResult:
+        start = time.time()
         logger.error(
             f"[Hook:logging] ERROR tool={event.tool_name} "
             f"agent={event.agent_id} error={type(error).__name__}: {error}"
         )
-        return HookResult.allow()
+        elapsed = int((time.time() - start) * 1000)
+        return HookResult(
+            allowed=True,
+            metadata={"elapsed_ms": elapsed},
+            hook_name=self.name,
+            elapsed_ms=elapsed,
+        )
 
 
 class RateLimitHook(BaseHook):
@@ -167,7 +228,7 @@ class RateLimitHook(BaseHook):
 
     def __init__(self, max_calls_per_minute: int = 60):
         self.max_calls_per_minute = max_calls_per_minute
-        self._call_history: Dict[str, List[float]] = {}  # key: "agent_id:tool_name"
+        self._call_history: Dict[str, List[float]] = {}
         self._lock = asyncio.Lock()
 
     @property
@@ -177,6 +238,10 @@ class RateLimitHook(BaseHook):
     @property
     def description(self) -> str:
         return f"限流: {self.max_calls_per_minute}次/分钟"
+
+    @property
+    def priority(self) -> int:
+        return 10
 
     def _make_key(self, agent_id: str, tool_name: str) -> str:
         return f"{agent_id}:{tool_name}"
@@ -204,14 +269,17 @@ class RateLimitHook(BaseHook):
                     f"[Hook:rate_limit] {event.agent_id}:{event.tool_name} "
                     f"rate limited, wait {wait_time:.1f}s"
                 )
-                return HookResult.deny(
-                    f"Rate limit exceeded, wait {wait_time:.1f}s",
-                    metadata={"wait_seconds": wait_time},
+                return HookResult(
+                    allowed=False,
+                    error_message=f"Rate limit exceeded, wait {wait_time:.1f}s",
+                    metadata={"wait_seconds": wait_time, "hook_name": self.name},
                 )
 
             self._call_history[key].append(now)
 
-        return HookResult.allow()
+        return HookResult(
+            allowed=True, hook_name=self.name, metadata={"hook_name": self.name}
+        )
 
 
 class ApprovalHook(BaseHook):
@@ -243,22 +311,23 @@ class ApprovalHook(BaseHook):
 
     async def pre_tool(self, event: ToolUseEvent) -> HookResult:
         if not self._is_high_risk(event.tool_name, event.tool_input):
-            return HookResult.allow()
+            return HookResult(allowed=True, hook_name=self.name)
 
         cache_key = f"{event.agent_id}:{event.tool_name}:{hash(str(event.tool_input))}"
 
         if cache_key in self._approved_cache:
-            return HookResult.allow()
+            return HookResult(allowed=True, hook_name=self.name)
 
         if self._queue:
             has_pending = await self._queue.has_pending(event.agent_id, event.tool_name)
             if has_pending:
-                return HookResult.deny(
-                    f"Pending approval for {event.tool_name}",
-                    metadata={"pending": True},
+                return HookResult(
+                    allowed=False,
+                    error_message=f"Pending approval for {event.tool_name}",
+                    metadata={"pending": True, "hook_name": self.name},
                 )
 
-        return HookResult.allow()
+        return HookResult(allowed=True, hook_name=self.name)
 
 
 class TokenUsageHook(BaseHook):
@@ -268,9 +337,7 @@ class TokenUsageHook(BaseHook):
     """
 
     def __init__(self):
-        self._usage: Dict[
-            str, Dict[str, int]
-        ] = {}  # agent_id -> {input, output, total}
+        self._usage: Dict[str, Dict[str, int]] = {}
         self._lock = asyncio.Lock()
 
     @property
@@ -288,7 +355,7 @@ class TokenUsageHook(BaseHook):
 
     async def post_tool(self, event: ToolUseEvent, result: ToolUseResult) -> HookResult:
         if not result.success:
-            return HookResult.allow()
+            return HookResult(allowed=True, hook_name=self.name)
 
         metadata = result.tool_output if isinstance(result.tool_output, dict) else {}
         input_tokens = metadata.get("usage", {}).get("input_tokens", 0)
@@ -302,7 +369,15 @@ class TokenUsageHook(BaseHook):
             self._usage[event.agent_id]["output"] += output_tokens
             self._usage[event.agent_id]["total"] += input_tokens + output_tokens
 
-        return HookResult.allow()
+        return HookResult(
+            allowed=True,
+            hook_name=self.name,
+            metadata={
+                "hook_name": self.name,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        )
 
 
 class ExecutionTimeHook(BaseHook):
@@ -329,13 +404,23 @@ class ExecutionTimeHook(BaseHook):
                 f"[Hook:exec_time] {event.agent_id}:{event.tool_name} "
                 f"慢于阈值: {result.elapsed_ms}ms > {self.warn_threshold_ms}ms"
             )
-        return HookResult.allow()
+        return HookResult(
+            allowed=True,
+            hook_name=self.name,
+            elapsed_ms=result.elapsed_ms,
+            metadata={"hook_name": self.name, "elapsed_ms": result.elapsed_ms},
+        )
 
 
 class HookRegistry:
     """
     Hook 注册中心
     管理所有 Hook 的注册和执行
+
+    可靠性特性:
+    - 按 priority 排序执行
+    - 超时控制
+    - 降级继续（非 critical hook 失败不影响后续）
     """
 
     def __init__(self):
@@ -354,7 +439,15 @@ class HookRegistry:
         self._post_hooks.append(hook)
         self._error_hooks.append(hook)
         self._hook_names.add(hook.name)
-        logger.info(f"🔗 Hook [{hook.name}] 已注册: {hook.description}")
+
+        self._pre_hooks.sort(key=lambda h: h.priority)
+        self._post_hooks.sort(key=lambda h: h.priority)
+        self._error_hooks.sort(key=lambda h: h.priority)
+
+        logger.info(
+            f"🔗 Hook [{hook.name}] 已注册: {hook.description} "
+            f"(priority={hook.priority}, timeout={hook.timeout_ms}ms, critical={hook.critical})"
+        )
 
     def unregister(self, hook_name: str) -> bool:
         """注销 Hook"""
@@ -370,25 +463,66 @@ class HookRegistry:
 
     def list_hooks(self) -> List[Dict[str, str]]:
         """列出所有已注册的 Hook"""
-        return [{"name": h.name, "description": h.description} for h in self._pre_hooks]
+        return [
+            {
+                "name": h.name,
+                "description": h.description,
+                "priority": h.priority,
+                "timeout_ms": h.timeout_ms,
+                "critical": h.critical,
+            }
+            for h in self._pre_hooks
+        ]
+
+    async def _run_hook_with_timeout(
+        self, hook: BaseHook, func: Callable, *args, **kwargs
+    ) -> HookResult:
+        """带超时的 Hook 执行"""
+        hook_name = hook.name
+        timeout = hook.timeout_ms / 1000.0
+
+        try:
+            result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+            if hasattr(result, "hook_name"):
+                result.hook_name = hook_name
+            elif isinstance(result, HookResult):
+                result.hook_name = hook_name
+            return result
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[HookRegistry] Hook {hook_name} 执行超时 ({hook.timeout_ms}ms)"
+            )
+            return HookResult.timeout(hook_name, hook.timeout_ms)
+        except Exception as e:
+            logger.error(f"[HookRegistry] Hook {hook_name} 执行异常: {e}")
+            return HookResult(
+                allowed=not hook.critical,
+                error_message=f"Hook {hook_name} 执行失败: {e}",
+                metadata={"hook_name": hook_name, "error": str(e)},
+            )
 
     async def run_pre_hooks(self, event: ToolUseEvent) -> HookResult:
         """
         执行所有 pre_tool hooks
-        如果任何 hook 返回 allowed=False，立即停止
+        如果关键 hook 返回 allowed=False，立即停止
+        非关键 hook 失败会降级继续
         """
         for hook in self._pre_hooks:
-            try:
-                result = await hook.pre_tool(event)
-                if not result.allowed:
-                    logger.warning(
-                        f"[HookRegistry] {hook.name} 阻止了 {event.tool_name} 执行: "
-                        f"{result.error_message}"
-                    )
-                    return result
-            except Exception as e:
-                logger.error(f"[HookRegistry] {hook.name}.pre_tool 异常: {e}")
-                return HookResult.deny(f"Hook {hook.name} 执行失败: {e}")
+            result = await self._run_hook_with_timeout(hook, hook.pre_tool, event)
+
+            if hook.critical and not result.allowed:
+                logger.warning(
+                    f"[HookRegistry] 关键 Hook {hook.name} 阻止了 {event.tool_name} 执行: "
+                    f"{result.error_message}"
+                )
+                return result
+
+            if not result.allowed:
+                logger.warning(
+                    f"[HookRegistry] Hook {hook.name} 阻止了 {event.tool_name} 执行（降级）: "
+                    f"{result.error_message}"
+                )
+                return result
 
         return HookResult.allow()
 
@@ -398,19 +532,25 @@ class HookRegistry:
         """
         执行所有 post_tool hooks
         后续 hook 可以看到前面 hook 修改后的输出
+        非关键 hook 失败会降级继续
         """
         final_result = HookResult.allow()
 
         for hook in self._post_hooks:
-            try:
-                hook_result = await hook.post_tool(event, result)
-                if hook_result.modified_output is not None:
-                    result.tool_output = hook_result.modified_output
-                    final_result = hook_result
-                if not hook_result.allowed:
-                    final_result = hook_result
-            except Exception as e:
-                logger.error(f"[HookRegistry] {hook.name}.post_tool 异常: {e}")
+            hook_result = await self._run_hook_with_timeout(
+                hook, hook.post_tool, event, result
+            )
+
+            if hook_result.modified_output is not None:
+                result.tool_output = hook_result.modified_output
+                final_result = hook_result
+
+            if not hook_result.allowed and hook.critical:
+                logger.warning(
+                    f"[HookRegistry] 关键 Hook {hook.name} 返回失败: "
+                    f"{hook_result.error_message}"
+                )
+                final_result = hook_result
 
         return final_result
 
@@ -419,15 +559,22 @@ class HookRegistry:
     ) -> HookResult:
         """
         执行所有 on_error hooks
-        即使出错也继续执行后续 hooks
+        即使出错也继续执行后续 hooks（降级继续）
         """
-        for hook in self._error_hooks:
-            try:
-                await hook.on_error(event, error)
-            except Exception as e:
-                logger.error(f"[HookRegistry] {hook.name}.on_error 异常: {e}")
+        final_result = HookResult.allow()
 
-        return HookResult.allow()
+        for hook in self._error_hooks:
+            hook_result = await self._run_hook_with_timeout(
+                hook, hook.on_error, event, error
+            )
+
+            if not hook_result.allowed:
+                logger.warning(
+                    f"[HookRegistry] Hook {hook.name} on_error 返回失败（继续）: "
+                    f"{hook_result.error_message}"
+                )
+
+        return final_result
 
 
 async def execute_with_hooks(
@@ -452,6 +599,7 @@ async def execute_with_hooks(
         result.success = False
         result.error = pre_result.error_message
         result.elapsed_ms = int((time.time() - start_time) * 1000)
+        await registry.run_error_hooks(event, Exception(pre_result.error_message))
         return result
 
     try:

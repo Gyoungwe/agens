@@ -7,11 +7,12 @@ Provider 注册中心
 默认 Provider: minimax_m2
 """
 
+import asyncio
 import yaml
 import logging
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Dict as TypingDict
 from providers.base_provider import BaseProvider
 
 logger = logging.getLogger(__name__)
@@ -213,12 +214,34 @@ class ProviderRegistry:
         logger.info(f"✅ 动态添加 Provider: {profile_id}")
 
     def remove(self, profile_id: str):
-        """动态删除 Provider"""
-        if profile_id in self._providers:
-            del self._providers[profile_id]
+        """动态删除 Provider（删除前检查引用）"""
+        if profile_id == self._active:
+            raise ValueError(f"Cannot remove active Provider [{profile_id}]")
+
+        if profile_id not in self._providers and profile_id not in self._profiles:
+            logger.warning(f"Provider [{profile_id}] not found, skip removal")
+            return
+
+        del self._providers[profile_id]
         if profile_id in self._profiles:
             del self._profiles[profile_id]
         logger.info(f"🗑️ 删除 Provider: {profile_id}")
+
+    async def health_check_all(self) -> Dict[str, bool]:
+        """启动时检查所有 Provider 健康状态"""
+        results = {}
+        for pid, provider in self._providers.items():
+            try:
+                results[pid] = await asyncio.wait_for(
+                    provider.health_check(), timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"Provider [{pid}] health check timeout")
+                results[pid] = False
+            except Exception as e:
+                logger.warning(f"Provider [{pid}] health check failed: {e}")
+                results[pid] = False
+        return results
 
     @property
     def active_id(self) -> str:

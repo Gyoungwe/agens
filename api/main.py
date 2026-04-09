@@ -9,6 +9,7 @@ FastAPI 后端 - Multi-Agent 系统 REST API
 import asyncio
 import logging
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -403,8 +404,16 @@ async def chat(request: ChatRequest):
 
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
-    """SSE 流式事件端点 - 实时推送 Agent 执行事件"""
+async def chat_stream(request: ChatRequest, last_event_id: str = None):
+    """
+    SSE 流式事件端点 - 实时推送 Agent 执行事件
+
+    可靠性特性:
+    - 心跳事件（每 15 秒）避免代理断流
+    - 支持 Last-Event-ID 断线续传
+    """
+
+    HEARTBEAT_INTERVAL = 15
 
     async def event_generator():
         try:
@@ -422,14 +431,15 @@ async def chat_stream(request: ChatRequest):
 
             trace_id = str(uuid.uuid4())
             event_queue = asyncio.Queue()
+            last_yielded_event_id = last_event_id or ""
 
             async def emit_to_queue(event):
+                event_id = getattr(event, "event_id", None) or str(uuid.uuid4())
                 logger.debug(
-                    f"📤 事件入队: {event.event_type if hasattr(event, 'event_type') else 'unknown'}"
+                    f"📤 事件入队: {event.event_type if hasattr(event, 'event_type') else 'unknown'} [{event_id}]"
                 )
-                await event_queue.put(event)
+                await event_queue.put((event_id, event))
 
-            # 设置所有 Agent 的事件发射器
             for agent in state._all_agents:
                 if hasattr(agent, "set_event_emitter"):
                     agent.set_event_emitter(emit_to_queue)
@@ -452,24 +462,57 @@ async def chat_stream(request: ChatRequest):
                 )
             )
 
+            last_heartbeat = time.time()
             while True:
                 try:
-                    event = await asyncio.wait_for(event_queue.get(), timeout=60.0)
+                    remaining = HEARTBEAT_INTERVAL - (time.time() - last_heartbeat)
+                    if remaining <= 0:
+                        yield {
+                            "event": "heartbeat",
+                            "data": "keepalive",
+                            "id": str(uuid.uuid4())[:8],
+                        }
+                        last_heartbeat = time.time()
+                        remaining = HEARTBEAT_INTERVAL
+
+                    event_id, event = await asyncio.wait_for(
+                        event_queue.get(), timeout=remaining
+                    )
                     event_queue.task_done()
 
+                    if last_event_id and event_id <= last_event_id:
+                        logger.debug(f"🔁 跳过已发送事件: {event_id}")
+                        continue
+
                     event_data = event.to_dict() if hasattr(event, "to_dict") else {}
+                    event_type = event_data.get("event", "message")
+
                     yield {
-                        "event": event_data.get("event", "message"),
+                        "event": event_type,
                         "data": str(event_data),
+                        "id": event_id[:8] if len(event_id) > 8 else event_id,
                     }
 
-                    if event_data.get("event") == "final_response":
+                    last_yielded_event_id = event_id
+
+                    if event_type in ("final_response", "task_failed", "task_timeout"):
                         break
+
                 except asyncio.TimeoutError:
-                    yield {"event": "ping", "data": "keepalive"}
+                    yield {
+                        "event": "heartbeat",
+                        "data": "keepalive",
+                        "id": str(uuid.uuid4())[:8],
+                    }
+                    last_heartbeat = time.time()
+                    continue
 
             result = await task
-            yield {"event": "done", "data": f"Final response: {result[:500]}"}
+            yield {
+                "event": "done",
+                "data": f"Final response: {result[:500]}" if result else "No response",
+                "id": str(uuid.uuid4())[:8],
+            }
 
         except Exception as e:
             import traceback
@@ -477,7 +520,15 @@ async def chat_stream(request: ChatRequest):
             logger.error(f"Chat stream error: {e}\n{traceback.format_exc()}")
             yield {"event": "error", "data": str(e)}
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/chat/history/{session_id}")
@@ -815,10 +866,22 @@ async def list_hooks():
 # Debug / Status 接口
 # ═══════════════════════════════════════════════════════════════════
 
+DEBUG_DEV_MODE = os.getenv("DEBUG_DEV_MODE", "false").lower() == "true"
+
+
+def _check_dev_mode():
+    """检查是否为开发模式，非开发模式拒绝访问 debug 接口"""
+    if not DEBUG_DEV_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail="Debug endpoints disabled. Set DEBUG_DEV_MODE=true to enable.",
+        )
+
 
 @app.get("/debug/status")
 async def debug_status():
     """获取完整系统状态（用于调试）"""
+    _check_dev_mode()
     try:
         return {
             "initialized": state._initialized,
@@ -837,6 +900,8 @@ async def debug_status():
             else [],
             "skills": state.skill_registry.list_all() if state.skill_registry else [],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Debug status error: {e}")
         return {"error": str(e)}
@@ -845,6 +910,7 @@ async def debug_status():
 @app.get("/debug/agents")
 async def debug_agents():
     """获取所有 Agent 详细信息"""
+    _check_dev_mode()
     try:
         return {
             "agents": [
@@ -858,6 +924,8 @@ async def debug_agents():
             ],
             "bus_agents": list(state.bus.registered_agents) if state.bus else [],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Debug agents error: {e}")
         return {"error": str(e)}
@@ -866,12 +934,15 @@ async def debug_agents():
 @app.post("/debug/reload")
 async def debug_reload():
     """重新加载系统"""
+    _check_dev_mode()
     try:
         state._initialized = False
         state._initializing = False
         state._all_agents = []
         await state.initialize_async()
         return {"success": True, "message": "System reloaded"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Reload error: {e}")
         return {"success": False, "error": str(e)}
@@ -880,6 +951,7 @@ async def debug_reload():
 @app.get("/debug/trace/{trace_id}")
 async def get_trace(trace_id: str):
     """获取指定 trace 的详细信息"""
+    _check_dev_mode()
     try:
         if not state.bus:
             return {"error": "MessageBus not available"}
@@ -901,6 +973,8 @@ async def get_trace(trace_id: str):
                 for m in history
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Get trace error: {e}")
         return {"error": str(e)}
@@ -909,6 +983,7 @@ async def get_trace(trace_id: str):
 @app.get("/debug/results/{session_id}")
 async def get_session_results(session_id: str):
     """获取会话的所有任务结果"""
+    _check_dev_mode()
     try:
         results = state.session_manager.store.get_results(session_id)
         return {
@@ -916,6 +991,8 @@ async def get_session_results(session_id: str):
             "results_count": len(results),
             "results": results,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Get results error: {e}")
         return {"error": str(e)}

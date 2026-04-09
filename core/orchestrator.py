@@ -3,15 +3,16 @@
 import asyncio
 import logging
 import json
+import time
 import uuid
 import yaml
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Set
 
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
 from core.events import AgentEvent, AgentEventType
-from bus.message_bus import MessageBus
+from bus.message_bus import MessageBus, DeduplicationCache
 from utils.retry import retry_with_backoff, RetryError
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ class Orchestrator(BaseAgent):
         self._event_queues: Dict[str, asyncio.Queue] = {}
         self._event_callbacks: Dict[str, callable] = {}
         self._current_session_id = None
+        self._dedup_cache = DeduplicationCache(max_size=5000, ttl=600)
+        self._processed_results: Set[str] = set()
+        self._correlation_ids: Dict[str, str] = {}
 
     def create_event_queue(self, trace_id: str) -> asyncio.Queue:
         """为指定的 trace_id 创建事件队列"""
@@ -309,10 +313,13 @@ class Orchestrator(BaseAgent):
         trace_id: str,
         instruction: str,
         original_input: str,
+        correlation_id: str = None,
     ) -> dict:
         """发送任务带重试，只负责发送，不等待结果"""
         rules = self._get_agent_config(recipient)
         max_retries = rules.get("max_retries", 3)
+        base_delay = rules.get("retry_base_delay", 1.0)
+        max_delay = rules.get("retry_max_delay", 30.0)
 
         msg = Message(
             sender="orchestrator",
@@ -324,18 +331,26 @@ class Orchestrator(BaseAgent):
                 context={"original_task": original_input},
             ).model_dump(),
         )
+        if correlation_id:
+            msg.correlation_id = correlation_id
+        else:
+            msg.correlation_id = trace_id
 
         async def send_once():
             await self.bus.send(msg)
             return {"sent": True}
 
+        import random
+
+        actual_base_delay = base_delay * (0.5 + random.random() * 0.5)
+
         try:
             await retry_with_backoff(
                 send_once,
                 max_retries=max_retries,
-                base_delay=1.0,
+                base_delay=actual_base_delay,
                 exponential_base=2.0,
-                max_delay=30.0,
+                max_delay=max_delay,
                 on_retry=lambda attempt, err: logger.warning(
                     f"🔄 [{recipient}] 第 {attempt} 次重试: {err}"
                 ),
@@ -343,7 +358,19 @@ class Orchestrator(BaseAgent):
             return {"sent": True}
         except RetryError as e:
             logger.error(f"❌ [{recipient}] 重试耗尽: {e}")
-            self._pending[trace_id][recipient] = {"error": str(e)}
+            self._pending[trace_id][recipient] = {
+                "error": str(e),
+                "error_code": "RETRY_EXHAUSTED",
+            }
+            await self._emit_event(
+                AgentEvent.task_failed(
+                    agent_id=recipient,
+                    trace_id=trace_id,
+                    error_message=str(e),
+                    error_code="RETRY_EXHAUSTED",
+                    session_id=self._current_session_id,
+                )
+            )
             return {"error": str(e)}
 
     async def _dispatch(
@@ -423,15 +450,27 @@ class Orchestrator(BaseAgent):
                 logger.error(f"Orchestrator 异常: {e}", exc_info=True)
 
     async def _collect_result(self, message: Message):
-        """收集子 Agent 的结果"""
+        """收集子 Agent 的结果（带去重）"""
         trace_id = message.trace_id
         if trace_id not in self._pending:
             return
 
+        dedup_key = f"{trace_id}:{message.sender}:{message.type}"
+        if dedup_key in self._processed_results:
+            logger.debug(f"🔁 跳过重复结果: {dedup_key}")
+            return
+        self._processed_results.add(dedup_key)
+
+        if len(self._processed_results) > 10000:
+            self._processed_results = set(list(self._processed_results)[-5000:])
+
         result = (
             ResultPayload(**message.payload)
             if message.type == "result"
-            else {"error": message.payload.get("message")}
+            else {
+                "error": message.payload.get("message", "Unknown error"),
+                "error_code": "AGENT_ERROR",
+            }
         )
 
         self._pending[trace_id][message.sender] = result
@@ -443,16 +482,44 @@ class Orchestrator(BaseAgent):
     async def _wait_for_results(self, trace_id: str, timeout: float) -> dict:
         """等待所有子任务完成"""
         event = self._events.get(trace_id)
+        start_time = time.time()
         if event:
             try:
-                await asyncio.wait_for(event.wait(), timeout=timeout)
+                remaining = timeout
+                while remaining > 0 and not event.is_set():
+                    try:
+                        await asyncio.wait_for(event.wait(), timeout=remaining)
+                        break
+                    except asyncio.TimeoutError:
+                        remaining = timeout - (time.time() - start_time)
+                        if remaining <= 0:
+                            break
+                        elapsed = time.time() - start_time
+                        logger.warning(
+                            f"⏰ 任务执行中，已等待 {elapsed:.1f}s，继续等待..."
+                        )
+                        continue
             except asyncio.TimeoutError:
-                logger.warning(f"⏰ 任务超时: {trace_id[:8]}...")
-                # 标记未完成的任务为超时
-                if trace_id in self._pending:
-                    for agent_id, result in self._pending[trace_id].items():
-                        if result is None:
-                            self._pending[trace_id][agent_id] = {"error": "执行超时"}
+                pass
+
+        elapsed = time.time() - start_time
+        if elapsed >= timeout:
+            logger.warning(f"⏰ 任务超时: {trace_id[:8]}... (耗时 {elapsed:.1f}s)")
+            await self._emit_event(
+                AgentEvent.task_timeout(
+                    agent_id=self.agent_id,
+                    trace_id=trace_id,
+                    timeout_seconds=timeout,
+                    session_id=self._current_session_id,
+                )
+            )
+            if trace_id in self._pending:
+                for agent_id, result in self._pending[trace_id].items():
+                    if result is None:
+                        self._pending[trace_id][agent_id] = {
+                            "error": "执行超时",
+                            "error_code": "TIMEOUT",
+                        }
 
         results = self._pending.pop(trace_id, {})
         self._events.pop(trace_id, None)
