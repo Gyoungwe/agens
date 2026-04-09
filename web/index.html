@@ -1615,11 +1615,12 @@
                                     rawData = { data: raw };
                                 }
                                 const eventType = rawData.type || rawData.event || currentEvent;
-                                let eventData = rawData.data;
-                                // Only parse if data is a JSON string (starts with { or [)
-                                if (typeof eventData === 'string' && eventData.trim().startsWith('{')) {
+                                // event_data is the full EventEnvelope.to_dict() result
+                                // which has "agent" at top level and "data" as nested info
+                                let eventData = rawData;
+                                if (typeof rawData.data === 'string' && rawData.data.trim().startsWith('{')) {
                                     try {
-                                        eventData = JSON.parse(eventData);
+                                        eventData.data = JSON.parse(rawData.data);
                                     } catch {
                                         // keep as string if parse fails
                                     }
@@ -1660,7 +1661,7 @@
                                     if (reply) {
                                         // 清空协作过程中的事件
                                         const container = document.getElementById('chatContainer');
-                                        container.querySelectorAll('.message.agent-event').forEach(el => el.remove());
+                                        container.querySelectorAll('.collab-card').forEach(el => el.remove());
                                         // 显示最终回复
                                         const msgEl = appendStreamingMessage('assistant', reply);
                                         currentSessionId = eventData.session_id || currentSessionId;

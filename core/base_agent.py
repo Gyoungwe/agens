@@ -587,6 +587,15 @@ class BaseAgent(ABC):
         system: str = None,
     ) -> str:
         """通用的 LLM 调用逻辑，供子类组合使用"""
+        self._emit(
+            EventEnvelope.agent_thinking(
+                agent_id=self.agent_id,
+                trace_id=self._current_trace_id or "",
+                message="正在思考问题...",
+                session_id=self._current_session_id,
+            )
+        )
+
         knowledge_ctx = await self.retrieve_context(instruction, top_k=3)
 
         prompt_system = system or self.get_system_prompt()
@@ -602,11 +611,32 @@ class BaseAgent(ABC):
         cfg = self.config.get("llm", {})
         tokens = max_tokens or cfg.get("max_tokens", 2048)
 
+        self._emit(
+            EventEnvelope.agent_tool_call(
+                agent_id=self.agent_id,
+                trace_id=self._current_trace_id or "",
+                skill_id="llm",
+                instruction=instruction[:100],
+                session_id=self._current_session_id,
+            )
+        )
+
         resp = await prov.chat(
             messages=[ChatMessage(role="user", content=instruction)],
             system=prompt_system,
             max_tokens=tokens,
         )
+
+        self._emit(
+            EventEnvelope.agent_output(
+                agent_id=self.agent_id,
+                trace_id=self._current_trace_id or "",
+                output=resp.text[:200] if resp.text else "",
+                summary=resp.text[:100] if resp.text else "",
+                session_id=self._current_session_id,
+            )
+        )
+
         return resp.text
 
     async def _chat_stream(
