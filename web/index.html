@@ -601,6 +601,132 @@
             font-size: 10px;
             color: var(--text-secondary);
         }
+
+        /* 流程可视化 */
+        .flow-timeline {
+            padding: 10px;
+        }
+
+        .flow-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .flow-item.sender {
+            border-left-color: var(--accent);
+        }
+
+        .flow-item.receiver {
+            border-left-color: var(--success);
+        }
+
+        .flow-time {
+            font-size: 10px;
+            color: var(--text-secondary);
+            min-width: 60px;
+            margin-right: 10px;
+        }
+
+        .flow-content {
+            flex: 1;
+        }
+
+        .flow-arrow {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .flow-arrow::before {
+            content: "↓";
+            margin-right: 8px;
+            color: var(--accent);
+        }
+
+        .flow-agent {
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .flow-recipient {
+            font-size: 11px;
+            color: var(--success);
+            margin-bottom: 4px;
+        }
+
+        .flow-type {
+            display: inline-block;
+            padding: 2px 6px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 8px;
+        }
+
+        .flow-type.task { background: var(--accent); color: var(--bg-primary); }
+        .flow-type.result { background: var(--success); color: var(--bg-primary); }
+        .flow-type.error { background: var(--error); color: var(--bg-primary); }
+        .flow-type.status { background: var(--warning); color: var(--bg-primary); }
+
+        .flow-payload {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            padding: 6px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            word-break: break-all;
+        }
+
+        /* 任务结果面板 */
+        .task-result {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .task-result-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .task-agent {
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .task-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .task-status.success { background: var(--success); color: var(--bg-primary); }
+        .task-status.error { background: var(--error); color: var(--bg-primary); }
+
+        .task-result-content {
+            font-size: 11px;
+            color: var(--text-secondary);
+            max-height: 80px;
+            overflow-y: auto;
+        }
+
+        .empty-flow {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 <body>
@@ -617,6 +743,7 @@
                 <div class="nav-tab" onclick="switchTab('agents')">🤖</div>
                 <div class="nav-tab" onclick="switchTab('hooks')">🔗</div>
                 <div class="nav-tab" onclick="switchTab('skills')">🔧</div>
+                <div class="nav-tab" onclick="switchTab('flow')">🔀</div>
             </div>
 
             <!-- 会话列表 -->
@@ -654,6 +781,21 @@
                 <div class="panel">
                     <div class="panel-header">🔧 可用技能</div>
                     <div id="skillsPanel"></div>
+                </div>
+            </div>
+
+            <!-- 流程可视化面板 -->
+            <div class="nav-content" id="flowTab">
+                <div class="panel">
+                    <div class="panel-header">🔀 Agent 协作流程</div>
+                    <div style="padding: 10px;">
+                        <button class="header-btn" onclick="loadFlowData()" style="margin-bottom: 10px;">🔄 刷新</button>
+                    </div>
+                    <div id="flowTimeline"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">📊 任务结果</div>
+                    <div id="taskResults"></div>
                 </div>
             </div>
         </div>
@@ -710,6 +852,51 @@
                 <button class="modal-close" onclick="closeModelSelector()">×</button>
             </div>
             <div class="modal-body" id="providersList"></div>
+            <div style="padding:15px;border-top:1px solid var(--border);">
+                <button class="header-btn" onclick="showAddProviderModal()" style="width:100%;">+ 添加自定义模型</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加 Provider 弹窗 -->
+    <div class="modal-overlay" id="addProviderModal">
+        <div class="modal" style="width: 450px;">
+            <div class="modal-header">
+                <h2>➕ 添加自定义模型</h2>
+                <button class="modal-close" onclick="closeAddProviderModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">模型ID</label>
+                        <input type="text" id="providerId" placeholder="如: my-gpt4" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">显示名称</label>
+                        <input type="text" id="providerName" placeholder="如: 我的 GPT-4" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">类型</label>
+                        <select id="providerType" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                            <option value="openai">OpenAI 兼容</option>
+                            <option value="anthropic">Anthropic</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">模型名称</label>
+                        <input type="text" id="providerModel" placeholder="如: gpt-4" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">API 地址</label>
+                        <input type="text" id="providerBaseUrl" placeholder="如: https://api.openai.com/v1" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-secondary);">API Key</label>
+                        <input type="password" id="providerApiKey" placeholder="输入 API Key" style="width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;">
+                    </div>
+                </div>
+                <button onclick="addProvider()" style="margin-top:15px;width:100%;padding:10px;background:var(--accent);color:var(--bg-primary);border:none;border-radius:6px;cursor:pointer;font-weight:600;">添加模型</button>
+            </div>
         </div>
     </div>
 
@@ -749,6 +936,11 @@
             document.querySelectorAll('.nav-content').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
             document.getElementById(tab + 'Tab').classList.add('active');
+            
+            // 切换到流程面板时加载数据
+            if (tab === 'flow') {
+                loadFlowData();
+            }
         }
 
         // 健康检查
@@ -873,6 +1065,114 @@
             }
         }
 
+        // 加载流程可视化数据
+        async function loadFlowData() {
+            try {
+                const flowContainer = document.getElementById('flowTimeline');
+                const resultsContainer = document.getElementById('taskResults');
+                
+                // 获取最近会话
+                const sessionsRes = await fetch(`${API_BASE}/sessions`);
+                const sessions = await sessionsRes.json();
+                
+                if (sessions.length === 0) {
+                    flowContainer.innerHTML = '<div class="empty-flow">暂无会话数据</div>';
+                    return;
+                }
+                
+                const latestSession = sessions[0];
+                
+                // 获取任务结果
+                const resultsRes = await fetch(`${API_BASE}/debug/results/${latestSession.session_id}`);
+                const resultsData = await resultsRes.json();
+                
+                // 渲染任务结果
+                if (resultsData.results && resultsData.results.length > 0) {
+                    resultsContainer.innerHTML = resultsData.results.map(r => `
+                        <div class="task-result">
+                            <div class="task-result-header">
+                                <span class="task-agent">🤖 ${r.agent_id}</span>
+                                <span class="task-status ${r.status}">${r.status === 'success' ? '成功' : '失败'}</span>
+                            </div>
+                            <div class="task-result-content">
+                                ${truncateContent(r.result)}
+                            </div>
+                            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                                ${formatTime(r.created_at)}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    resultsContainer.innerHTML = '<div style="padding:10px;color:var(--text-secondary);font-size:11px;">暂无任务结果</div>';
+                }
+                
+                // 尝试获取消息总线历史
+                // 由于没有直接的trace_id，我们显示会话信息
+                flowContainer.innerHTML = `
+                    <div class="flow-item">
+                        <div class="flow-content">
+                            <div class="flow-agent">📋 会话信息</div>
+                            <div style="font-size:11px;color:var(--text-secondary);">
+                                <p>会话ID: ${latestSession.session_id.substring(0, 8)}...</p>
+                                <p>标题: ${latestSession.title}</p>
+                                <p>状态: ${latestSession.status}</p>
+                                <p>创建时间: ${formatTime(latestSession.created_at)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-item" style="border-left-color: var(--success);">
+                        <div class="flow-content">
+                            <div class="flow-agent">💬 对话消息</div>
+                            <div style="font-size:11px;color:var(--text-secondary);">
+                                <p>点击会话可查看历史消息</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 加载历史消息
+                try {
+                    const historyRes = await fetch(`${API_BASE}/chat/history/${latestSession.session_id}`);
+                    const history = await historyRes.json();
+                    
+                    if (history.messages && history.messages.length > 0) {
+                        const historyHtml = history.messages.map(m => `
+                            <div class="flow-item ${m.role === 'user' ? 'sender' : 'receiver'}">
+                                <div class="flow-time">${formatTime(m.created_at)}</div>
+                                <div class="flow-content">
+                                    <div class="flow-agent">${m.role === 'user' ? '👤 用户' : '🤖 助手'}</div>
+                                    <div class="flow-payload">${truncateContent(m.content)}</div>
+                                </div>
+                            </div>
+                        `).join('');
+                        
+                        flowContainer.innerHTML += `
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                                <div class="panel-header" style="margin-bottom: 10px;">💬 消息历史</div>
+                                ${historyHtml}
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    console.error('Failed to load history:', e);
+                }
+                
+            } catch (e) {
+                console.error('Failed to load flow data:', e);
+                document.getElementById('flowTimeline').innerHTML = '<div class="empty-flow">加载失败: ' + e.message + '</div>';
+            }
+        }
+
+        function truncateContent(content, maxLen = 200) {
+            if (!content) return '';
+            try {
+                const parsed = JSON.parse(content);
+                return JSON.stringify(parsed, null, 2).substring(0, maxLen);
+            } catch {
+                return content.substring(0, maxLen);
+            }
+        }
+
         // 加载 Provider 列表
         async function loadProviders() {
             try {
@@ -893,7 +1193,11 @@
                         <h3>${p.name}</h3>
                         <p>${p.model}</p>
                     </div>
-                    <div class="provider-check">✓</div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span class="provider-check">${p.id === currentProvider ? '✓' : ''}</span>
+                        <button onclick="event.stopPropagation();deleteProvider('${p.id}')" 
+                                style="background:transparent;border:none;color:var(--error);cursor:pointer;font-size:16px;">🗑️</button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -909,6 +1213,100 @@
                 renderProviders();
             } catch (e) {
                 console.error('Failed to select provider:', e);
+            }
+        }
+
+        // 添加自定义 Provider
+        function showAddProviderModal() {
+            document.getElementById('addProviderModal').classList.add('active');
+        }
+
+        function closeAddProviderModal() {
+            document.getElementById('addProviderModal').classList.remove('active');
+        }
+
+        async function addProvider() {
+            const id = document.getElementById('providerId').value.trim();
+            const name = document.getElementById('providerName').value.trim();
+            const type = document.getElementById('providerType').value;
+            const model = document.getElementById('providerModel').value.trim();
+            const base_url = document.getElementById('providerBaseUrl').value.trim();
+            const api_key = document.getElementById('providerApiKey').value.trim();
+
+            if (!id || !name || !model || !api_key) {
+                alert('请填写必要字段');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/providers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id, name, type, model, 
+                        base_url: base_url || 'https://api.openai.com/v1',
+                        api_key
+                    })
+                });
+                const data = await res.json();
+                console.log('添加模型响应:', data);
+                if (data.success) {
+                    // 清空表单
+                    document.getElementById('providerId').value = '';
+                    document.getElementById('providerName').value = '';
+                    document.getElementById('providerModel').value = '';
+                    document.getElementById('providerBaseUrl').value = '';
+                    document.getElementById('providerApiKey').value = '';
+                    
+                    closeAddProviderModal();
+                    await loadProviders();
+                    
+                    // 显示成功消息
+                    showToast(`✅ 模型 "${data.name}" 添加成功！模型: ${data.model}`, 'success');
+                } else {
+                    showToast('添加失败: ' + (data.detail || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showToast('添加失败: ' + e, 'error');
+            }
+        }
+
+        // Toast 通知
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 12px 24px;
+                background: ${type === 'success' ? 'var(--success)' : type === 'error' ? 'var(--error)' : 'var(--accent)'};
+                color: var(--bg-primary);
+                border-radius: 8px;
+                font-size: 13px;
+                z-index: 10000;
+                animation: fadeIn 0.3s;
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // 删除 Provider
+        async function deleteProvider(providerId) {
+            if (!confirm('确定要删除这个模型吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/providers/${providerId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    await loadProviders();
+                    showToast('✅ 模型已删除', 'success');
+                } else {
+                    showToast('删除失败: ' + (data.detail || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showToast('删除失败: ' + e, 'error');
             }
         }
 

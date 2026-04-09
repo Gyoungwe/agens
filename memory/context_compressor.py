@@ -224,8 +224,6 @@ class ContextCompressor:
 }}"""
 
         try:
-            from core.message import ChatMessage
-
             resp = await self.provider.chat(
                 messages=[ChatMessage(role="user", content=summary_prompt)],
                 system="你是一个对话分析助手，擅长提取关键信息。",

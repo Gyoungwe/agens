@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Dict, List, Optional
 from core.message import Message
 
@@ -19,7 +19,7 @@ class MessageBus:
 
     def __init__(self):
         self._queues: Dict[str, asyncio.Queue] = {}
-        self._history: List[Message] = []
+        self._history: deque = deque(maxlen=1000)
         self._lock = asyncio.Lock()
 
     # ── 注册 / 注销 ─────────────────────────────

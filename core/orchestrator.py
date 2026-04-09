@@ -137,7 +137,7 @@ class Orchestrator(BaseAgent):
                 sm.new_session(title=user_input[:40])
                 session_id = sm.current_session_id
                 self._current_session_id = session_id
-            sm.add_user_message(user_input)
+            await sm.add_user_message(user_input)
             if self.context_compressor:
                 context_messages = await sm.get_context() or []
 
@@ -173,7 +173,7 @@ class Orchestrator(BaseAgent):
         )
 
         if sm:
-            sm.add_assistant_message(final)
+            await sm.add_assistant_message(final)
             for agent_id, result in results.items():
                 sm.store.save_result(
                     session_id=sm.current_session_id,
@@ -200,7 +200,7 @@ class Orchestrator(BaseAgent):
                 logger.info(f"▶️ 恢复会话，历史 {len(history)} 条")
             else:
                 sm.new_session(title=user_input[:40])
-            sm.add_user_message(user_input)
+            await sm.add_user_message(user_input)
 
         plan = await self._plan(user_input)
         logger.info(f"📋 任务计划: {plan}")
@@ -217,7 +217,7 @@ class Orchestrator(BaseAgent):
                 final_result = v.output
                 break
         if sm:
-            sm.add_assistant_message(final_result)
+            await sm.add_assistant_message(final_result)
 
     # ── 任务规划 ─────────────────────────────────
 

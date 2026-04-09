@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from evolution.capability_sensor import CapabilitySensor
+from evolution.request_generator import RequestGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,8 @@ class AutoInstaller:
         self.registry = registry
         self.installer = installer
         self.queue = queue
-        self.sensor = __import__(
-            "evolution.capability_sensor", fromlist=["CapabilitySensor"]
-        ).CapabilitySensor(registry)
-        self.generator = __import__(
-            "evolution.request_generator", fromlist=["RequestGenerator"]
-        ).RequestGenerator(provider_registry=provider_registry)
+        self.sensor = CapabilitySensor(registry)
+        self.generator = RequestGenerator(provider_registry=provider_registry)
         self._running = False
 
     async def evolve(

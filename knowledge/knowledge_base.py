@@ -11,26 +11,10 @@ logger = logging.getLogger(__name__)
 VECTOR_SIZE = 1024
 COLLECTION_NAME = "agent_knowledge"
 
-HAS_QDRANT = False
-try:
-    from qdrant_client import AsyncQdrantClient
-    from qdrant_client.models import (
-        Distance,
-        VectorParams,
-        PointStruct,
-        Filter,
-        FieldCondition,
-        MatchValue,
-    )
-
-    HAS_QDRANT = True
-except ImportError:
-    pass
-
 
 class KnowledgeBase:
     """
-    向量知识库，支持 Qdrant 或 LanceDB 后端。
+    向量知识库，基于 LanceDB。
 
     核心能力：
     1. 按 agent_id + topic 过滤存储
@@ -40,26 +24,15 @@ class KnowledgeBase:
 
     def __init__(
         self,
-        qdrant_url: str = "http://localhost:6333",
         embed_provider=None,
         db_path: str = "./data/knowledge",
     ):
         self._embed_provider = embed_provider
-        self._qdrant_client = None
+        self._db_path = db_path
         self._lance_table = None
+        self._in_memory = []
         self._ready = False
-        self._use_qdrant = False
-
-        if HAS_QDRANT:
-            try:
-                self._qdrant_client = AsyncQdrantClient(url=qdrant_url)
-                self._use_qdrant = True
-            except Exception:
-                self._use_qdrant = False
-
-        if not self._use_qdrant:
-            self._db_path = db_path
-            self._init_lance()
+        self._init_lance()
 
     def _init_lance(self):
         try:
@@ -97,33 +70,8 @@ class KnowledgeBase:
             self._ready = True
 
     async def init(self):
-        """初始化后端，已存在则跳过；连接失败时静默降级"""
-        if self._use_qdrant and self._qdrant_client:
-            try:
-                collections = await self._qdrant_client.get_collections()
-                names = [c.name for c in collections.collections]
-
-                if COLLECTION_NAME not in names:
-                    await self._qdrant_client.create_collection(
-                        collection_name=COLLECTION_NAME,
-                        vectors_config=VectorParams(
-                            size=VECTOR_SIZE,
-                            distance=Distance.COSINE,
-                        ),
-                    )
-                    logger.info(f"✅ Qdrant collection [{COLLECTION_NAME}] created")
-                else:
-                    logger.info(f"✅ Qdrant collection [{COLLECTION_NAME}] ready")
-
-                self._ready = True
-            except Exception as e:
-                logger.warning(
-                    f"⚠️ Qdrant connection failed, falling back to LanceDB/in-memory: {e}"
-                )
-                self._use_qdrant = False
-                self._init_lance()
-        else:
-            self._ready = True
+        """初始化后端，LanceDB 同步初始化，无需额外操作"""
+        self._ready = True
 
     async def add(
         self,
@@ -142,24 +90,7 @@ class KnowledgeBase:
         point_id = str(uuid4())
         vector = await self._embed(text)
 
-        if self._use_qdrant and self._qdrant_client:
-            await self._qdrant_client.upsert(
-                collection_name=COLLECTION_NAME,
-                points=[
-                    PointStruct(
-                        id=point_id,
-                        vector=vector,
-                        payload={
-                            "text": text,
-                            "agent_ids": agent_ids,
-                            "topic": topic,
-                            "source": source,
-                            **metadata,
-                        },
-                    )
-                ],
-            )
-        elif self._lance_table is not None:
+        if self._lance_table is not None:
             import pyarrow as pa
             import json
 
@@ -231,55 +162,10 @@ class KnowledgeBase:
         except Exception:
             return []
 
-        if self._use_qdrant and self._qdrant_client:
-            return await self._search_qdrant(vector, agent_id, topic, top_k, min_score)
-        elif self._lance_table is not None:
+        if self._lance_table is not None:
             return await self._search_lance(vector, agent_id, topic, top_k, min_score)
         else:
             return self._search_in_memory(vector, agent_id, topic, top_k)
-
-    async def _search_qdrant(
-        self, vector, agent_id: str, topic: str, top_k: int, min_score: float
-    ) -> list:
-        filter_conditions = []
-        if topic:
-            filter_conditions.append(
-                FieldCondition(key="topic", match=MatchValue(value=topic))
-            )
-
-        try:
-            results = await self._qdrant_client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=vector,
-                query_filter=Filter(must=filter_conditions)
-                if filter_conditions
-                else None,
-                limit=top_k * 2,
-                with_payload=True,
-                score_threshold=min_score,
-            )
-        except Exception as e:
-            logger.warning(f"Qdrant search failed: {e}")
-            return []
-
-        filtered = []
-        for hit in results:
-            payload = hit.payload
-            agent_ids = payload.get("agent_ids", [])
-            if not agent_ids or agent_id in agent_ids:
-                filtered.append(
-                    {
-                        "id": hit.id,
-                        "score": round(hit.score, 4),
-                        "text": payload.get("text", ""),
-                        "topic": payload.get("topic", ""),
-                        "source": payload.get("source", ""),
-                    }
-                )
-            if len(filtered) >= top_k:
-                break
-
-        return filtered
 
     async def _search_lance(
         self, vector, agent_id: str, topic: str, top_k: int, min_score: float
@@ -355,17 +241,7 @@ class KnowledgeBase:
         return results[:top_k]
 
     async def delete(self, point_id: str):
-        if self._use_qdrant and self._qdrant_client:
-            try:
-                from qdrant_client.models import PointIdsList
-
-                await self._qdrant_client.delete(
-                    collection_name=COLLECTION_NAME,
-                    points_selector=PointIdsList(points=[point_id]),
-                )
-            except Exception as e:
-                logger.warning(f"Qdrant delete failed: {e}")
-        elif self._lance_table is not None:
+        if self._lance_table is not None:
             try:
                 self._lance_table.delete(f'id = "{point_id}"')
             except Exception as e:
@@ -374,13 +250,7 @@ class KnowledgeBase:
             self._in_memory = [x for x in self._in_memory if x["id"] != point_id]
 
     async def count(self) -> int:
-        if self._use_qdrant and self._qdrant_client:
-            try:
-                info = await self._qdrant_client.get_collection(COLLECTION_NAME)
-                return info.points_count
-            except Exception:
-                return 0
-        elif self._lance_table is not None:
+        if self._lance_table is not None:
             try:
                 return len(self._lance_table.to_arrow())
             except Exception:

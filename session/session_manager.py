@@ -63,41 +63,21 @@ class SessionManager:
             logger.info(f"🔒 会话已关闭: {self._current_session_id[:8]}...")
             self._current_session_id = None
 
-    def add_user_message(self, content: str):
+    async def add_user_message(self, content: str):
         self._ensure_session()
         self.store.append_message(self._current_session_id, "user", content)
         if self._memory:
-            import asyncio
+            await self._memory.add_message(self._current_session_id, "user", content)
+            await self._memory.compress_if_needed(self._current_session_id)
 
-            try:
-                asyncio.create_task(
-                    self._memory.add_message(self._current_session_id, "user", content)
-                )
-            except RuntimeError:
-                loop = asyncio.get_event_loop()
-                loop.create_task(
-                    self._memory.add_message(self._current_session_id, "user", content)
-                )
-
-    def add_assistant_message(self, content: str):
+    async def add_assistant_message(self, content: str):
         self._ensure_session()
         self.store.append_message(self._current_session_id, "assistant", content)
         if self._memory:
-            import asyncio
-
-            try:
-                asyncio.create_task(
-                    self._memory.add_message(
-                        self._current_session_id, "assistant", content
-                    )
-                )
-            except RuntimeError:
-                loop = asyncio.get_event_loop()
-                loop.create_task(
-                    self._memory.add_message(
-                        self._current_session_id, "assistant", content
-                    )
-                )
+            await self._memory.add_message(
+                self._current_session_id, "assistant", content
+            )
+            await self._memory.compress_if_needed(self._current_session_id)
 
     async def add_message_async(self, role: str, content: str):
         """异步添加消息（用于 chat 流程）"""

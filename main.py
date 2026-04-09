@@ -79,16 +79,16 @@ async def main():
         vector_store = None
         context_compressor = None
 
-    # ── 3. 知识库（可选，Qdrant 不可用时跳过）────────
+    # ── 3. 知识库（可选，LanceDB）────────
     kb = None
     loader = None
     try:
         kb = KnowledgeBase(
-            qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+            db_path="./data/knowledge",
         )
         await kb.init()
         loader = DocumentLoader(kb)
-        print("📚 知识库已就绪（Qdrant）")
+        print("📚 知识库已就绪（LanceDB）")
     except Exception as e:
         print(f"⚠️ 知识库不可用，跳过：{e}")
         kb = None

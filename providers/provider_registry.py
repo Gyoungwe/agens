@@ -18,24 +18,24 @@ logger = logging.getLogger(__name__)
 
 import sys
 
-# 内置 Provider 配置（API Key 已内置）
+# 内置 Provider 配置（使用环境变量）
 BUILTIN_PROFILES = """
-default: minimax_m2
+default: siliconflow
 
 profiles:
   - id: minimax_m2
     type: openai
-    name: MiniMax M2.7 (默认)
+    name: MiniMax M2.7
     model: MiniMax-M2.7
     base_url: https://api.minimaxi.com/v1
-    api_key: sk-cp-qjBXaAt2bmqLvwHwKKOLKGmNK1_rPr5nERXJ4RlLLwZC1Zx-zsCibrFoDayBD8G1_KqhLLPmyyTb6teTSYHod5q4e42ZVFPRSxbeUekUGsN0QVBJF-rhjjU
+    api_key: ${MINIMAX_API_KEY}
 
   - id: siliconflow
     type: openai
-    name: SiliconFlow
-    model: Qwen/Qwen2-72B-Instruct
+    name: SiliconFlow (Qwen)
+    model: Qwen/Qwen2.5-7B-Instruct
     base_url: https://api.siliconflow.cn/v1
-    api_key: sk-unvzxjvgymzfsgvjfywnkfcmsrgwqbmgdpqlpbnbqabvriqv
+    api_key: ${SILICONFLOW_API_KEY}
 
   - id: anthropic_claude3sonnet
     type: anthropic
@@ -55,6 +55,13 @@ profiles:
     model: deepseek-chat
     base_url: https://api.deepseek.com/v1
     api_key: ${DEEPSEEK_API_KEY}
+
+  - id: volcengine
+    type: openai
+    name: 火山引擎方舟 (Doubao)
+    model: ${VOLCENGINE_PLAN_ID:093c16f4-86d5-4cbb-833a-37bfb1d448bf}:doubao-pro-32k
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key: ${VOLCENGINE_API_KEY}
 """
 
 if getattr(sys, "frozen", False):
@@ -72,6 +79,7 @@ class ProviderRegistry:
 
     def __init__(self):
         self._providers: Dict[str, BaseProvider] = {}
+        self._profiles: Dict[str, dict] = {}
         self._active: str = ""
         self._load_profiles()
 
@@ -187,6 +195,30 @@ class ProviderRegistry:
             {"id": pid, "name": p.name, "active": pid == self._active}
             for pid, p in self._providers.items()
         ]
+
+    @property
+    def profiles(self) -> Dict[str, dict]:
+        """返回所有 profile 配置（用于动态添加/删除）"""
+        return self._profiles
+
+    @profiles.setter
+    def profiles(self, value: Dict[str, dict]):
+        """设置 profile 配置"""
+        self._profiles = value
+
+    def add(self, profile_id: str, provider: BaseProvider, profile: dict):
+        """动态添加 Provider"""
+        self._providers[profile_id] = provider
+        self._profiles[profile_id] = profile
+        logger.info(f"✅ 动态添加 Provider: {profile_id}")
+
+    def remove(self, profile_id: str):
+        """动态删除 Provider"""
+        if profile_id in self._providers:
+            del self._providers[profile_id]
+        if profile_id in self._profiles:
+            del self._profiles[profile_id]
+        logger.info(f"🗑️ 删除 Provider: {profile_id}")
 
     @property
     def active_id(self) -> str:

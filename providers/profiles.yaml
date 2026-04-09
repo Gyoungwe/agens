@@ -10,21 +10,14 @@ profiles:
     name:     MiniMax M2.7
     model:    MiniMax-M2.7
     base_url: https://api.minimaxi.com/v1
-    api_key:  sk-cp-qjBXaAt2bmqLvwHwKKOLKGmNK1_rPr5nERXJ4RlLLwZC1Zx-zsCibrFoDayBD8G1_KqhLLPmyyTb6teTSYHod5q4e42ZVFPRSxbeUekUGsN0QVBJF-rhjjU
+    api_key:  ${MINIMAX_API_KEY}
 
   - id:       siliconflow
     type:     openai
     name:     SiliconFlow (Qwen)
     model:    Qwen/Qwen2.5-7B-Instruct
     base_url: https://api.siliconflow.cn/v1
-    api_key:  sk-unvzxjvgymzfsgvjfywnkfcmsrgwqbmgdpqlpbnbqabvriqv
-
-  - id:       cursor2api
-    type:     openai
-    name:     Cursor2API (Gemini)
-    model:    google/gemini-3-flash
-    base_url: http://localhost:3010
-    api_key:  cursor-local
+    api_key:  ${SILICONFLOW_API_KEY}
 
   - id:       anthropic_claude3sonnet
     type:     anthropic

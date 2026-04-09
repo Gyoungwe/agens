@@ -20,9 +20,12 @@ from typing import Any, List
 logger = logging.getLogger(__name__)
 
 VECTOR_SIZE = 1024
-EMBEDDING_API_KEY = "sk-unvzxjvgymzfsgvjfywnkfcmsrgwqbmgdpqlpbnbqabvriqv"
 EMBEDDING_API_URL = "https://api.siliconflow.cn/v1/embeddings"
 EMBEDDING_MODEL = "BAAI/bge-m3"
+
+
+def _get_embedding_api_key():
+    return os.getenv("SILICONFLOW_API_KEY", "")
 
 
 class VectorStore:
@@ -88,6 +91,11 @@ class VectorStore:
                 logger.warning(f"Custom embed provider failed: {e}")
 
         try:
+            api_key = _get_embedding_api_key()
+            if not api_key:
+                logger.warning("⚠️ SILICONFLOW_API_KEY not set, using random vector")
+                return self._random_vector()
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     EMBEDDING_API_URL,
@@ -96,7 +104,7 @@ class VectorStore:
                         "input": text,
                     },
                     headers={
-                        "Authorization": f"Bearer {EMBEDDING_API_KEY}",
+                        "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     },
                 )

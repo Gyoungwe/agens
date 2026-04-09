@@ -8,10 +8,14 @@ FastAPI 后端 - Multi-Agent 系统 REST API
 
 import asyncio
 import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -597,6 +601,80 @@ async def get_current_provider():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from pydantic import BaseModel
+
+
+class AddProviderRequest(BaseModel):
+    id: str
+    name: str
+    type: str  # "openai" or "anthropic"
+    model: str
+    base_url: str = ""
+    api_key: str
+
+
+@app.post("/providers")
+async def add_provider(request: AddProviderRequest):
+    """添加新 Provider"""
+    try:
+        pr = state.provider_registry
+        from providers.openai_provider import OpenAIProvider
+        from providers.anthropic_provider import AnthropicProvider
+
+        if request.type == "anthropic":
+            provider = AnthropicProvider(
+                model=request.model,
+                api_key=request.api_key,
+            )
+            provider.name = request.name
+        else:
+            provider = OpenAIProvider(
+                model=request.model,
+                base_url=request.base_url or "https://api.openai.com/v1",
+                api_key=request.api_key,
+            )
+            provider.name = request.name
+
+        profile = {
+            "id": request.id,
+            "name": request.name,
+            "type": request.type,
+            "model": request.model,
+            "base_url": request.base_url or "https://api.openai.com/v1",
+            "api_key": request.api_key,
+            "active": False,
+        }
+
+        pr.add(request.id, provider, profile)
+
+        logger.info(f"✅ 添加 Provider: {request.id} ({request.name})")
+        return {
+            "success": True,
+            "provider_id": request.id,
+            "name": request.name,
+            "model": request.model,
+        }
+    except Exception as e:
+        logger.error(f"添加 Provider 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/providers/{provider_id}")
+async def delete_provider(provider_id: str):
+    """删除 Provider"""
+    try:
+        pr = state.provider_registry
+        if provider_id == pr.active_id:
+            raise HTTPException(status_code=400, detail="不能删除当前使用的 Provider")
+
+        pr.remove(provider_id)
+
+        logger.info(f"🗑️ 删除 Provider: {provider_id}")
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 技能管理
 # ═══════════════════════════════════════════════════════════════════
@@ -785,6 +863,50 @@ async def debug_reload():
     except Exception as e:
         logger.error(f"Reload error: {e}")
         return {"success": False, "error": str(e)}
+
+
+@app.get("/debug/trace/{trace_id}")
+async def get_trace(trace_id: str):
+    """获取指定 trace 的详细信息"""
+    try:
+        if not state.bus:
+            return {"error": "MessageBus not available"}
+
+        history = state.bus.get_history(trace_id=trace_id)
+
+        return {
+            "trace_id": trace_id,
+            "message_count": len(history),
+            "messages": [
+                {
+                    "id": m.id,
+                    "sender": m.sender,
+                    "recipient": m.recipient,
+                    "type": m.type,
+                    "created_at": m.created_at,
+                    "payload": m.payload,
+                }
+                for m in history
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Get trace error: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/debug/results/{session_id}")
+async def get_session_results(session_id: str):
+    """获取会话的所有任务结果"""
+    try:
+        results = state.session_manager.store.get_results(session_id)
+        return {
+            "session_id": session_id,
+            "results_count": len(results),
+            "results": results,
+        }
+    except Exception as e:
+        logger.error(f"Get results error: {e}")
+        return {"error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════════════════

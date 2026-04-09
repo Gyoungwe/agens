@@ -78,10 +78,10 @@ async def init_system():
     kb = None
     loader = None
     try:
-        kb = KnowledgeBase(qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+        kb = KnowledgeBase(db_path="./data/knowledge")
         await kb.init()
         loader = DocumentLoader(kb)
-        print("🧠 知识库已就绪（Qdrant）")
+        print("🧠 知识库已就绪（LanceDB）")
     except Exception as e:
         print(f"⚠️ 知识库不可用，跳过：{e}")
 
