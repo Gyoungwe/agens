@@ -37,6 +37,8 @@
         .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
         .json-viewer { background: #000; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
     </style>
 </head>
 <body class="min-h-screen p-6">
@@ -54,10 +56,10 @@
 
         <!-- Tabs -->
         <div class="flex border-b mb-6" style="border-color: var(--border)">
-            <button class="tab-btn active" onclick="switchTab('pending')">⏳ 待审批</button>
-            <button class="tab-btn" onclick="switchTab('approved')">✅ 已批准</button>
-            <button class="tab-btn" onclick="switchTab('rejected')">❌ 已拒绝</button>
-            <button class="tab-btn" onclick="switchTab('all')">📋 全部</button>
+            <button class="tab-btn active" onclick="switchTab('pending', this)">⏳ 待审批</button>
+            <button class="tab-btn" onclick="switchTab('approved', this)">✅ 已批准</button>
+            <button class="tab-btn" onclick="switchTab('rejected', this)">❌ 已拒绝</button>
+            <button class="tab-btn" onclick="switchTab('all', this)">📋 全部</button>
         </div>
 
         <div id="approvalsList"></div>
@@ -105,17 +107,22 @@
         let currentFilter = 'pending';
 
         async function init() {
+            console.log('[Evolution Page] Initializing...');
             await loadApprovals();
         }
 
         async function loadApprovals() {
+            console.log('[Evolution Page] Loading approvals...');
             try {
                 const res = await fetch(`${API_BASE}/evolution/approvals`);
+                console.log('[Evolution Page] /evolution/approvals status:', res.status);
                 const data = await res.json();
+                console.log('[Evolution Page] Approvals data:', data);
                 approvals = data.approvals || [];
                 renderApprovals();
             } catch (e) {
-                showToast('加载审批列表失败', 'error');
+                console.error('[Evolution Page] Failed to load approvals:', e);
+                showToast('加载审批列表失败: ' + e.message, 'error');
             }
         }
 
@@ -170,10 +177,12 @@
             }
         }
 
-        function switchTab(tab) {
+        function switchTab(tab, btnElement) {
             currentFilter = tab;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (btnElement) {
+                btnElement.classList.add('active');
+            }
             renderApprovals();
         }
 
@@ -264,10 +273,5 @@
 
         init();
     </script>
-
-    <style>
-        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
-    </style>
 </body>
 </html>

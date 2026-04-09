@@ -44,9 +44,10 @@
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
     </style>
 </head>
-<body class="min-h-screen p-6">
+<body class="min-h-screen p-6" onerror="console.error('Page error:', event)">
     <div class="max-w-7xl mx-auto">
         <header class="flex items-center justify-between mb-8">
             <div>
@@ -56,25 +57,33 @@
             <a href="/" class="btn btn-secondary">← 返回主页</a>
         </header>
 
+        <div id="errorBanner" class="hidden card mb-4" style="background: rgba(233,69,96,0.2); border-color: var(--accent);">
+            <div class="flex items-center justify-between">
+                <div>
+                    <strong>❌ 错误:</strong>
+                    <span id="errorMessage"></span>
+                </div>
+                <button onclick="document.getElementById('errorBanner').classList.add('hidden')" class="btn btn-secondary">关闭</button>
+            </div>
+        </div>
+
         <div class="grid grid-cols-12 gap-6">
-            <!-- Agent List -->
             <div class="col-span-3">
                 <div class="card">
                     <h2 class="text-lg font-semibold mb-4">Agent 列表</h2>
+                    <div id="loadingAgents" class="loading">加载中...</div>
                     <div id="agentList" class="space-y-2"></div>
+                    <div id="noAgents" class="hidden text-center py-4" style="color: var(--text-secondary)">暂无 Agent</div>
                 </div>
             </div>
 
-            <!-- Agent Details -->
             <div class="col-span-9">
-                <!-- Tabs -->
                 <div class="flex border-b mb-4" style="border-color: var(--border)">
                     <button class="tab-btn active" onclick="switchTab('profile')">📋 身份配置</button>
                     <button class="tab-btn" onclick="switchTab('skills')">🛠️ 技能管理</button>
                     <button class="tab-btn" onclick="switchTab('backups')">💾 备份记录</button>
                 </div>
 
-                <!-- Profile Tab -->
                 <div id="tab-profile" class="tab-content">
                     <div class="card">
                         <div class="flex items-center justify-between mb-4">
@@ -113,9 +122,6 @@
                                         <option value="low">低 (low)</option>
                                     </select>
                                 </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-4 mb-4">
                                 <div>
                                     <label class="block text-sm mb-1" style="color: var(--text-secondary)">Model</label>
                                     <input type="text" id="input-model" class="input">
@@ -136,7 +142,6 @@
                                 <textarea id="soulBody"></textarea>
                             </div>
 
-                            <!-- Diff Preview -->
                             <div id="diffPreview" class="hidden mt-4 p-4 rounded-lg" style="background: var(--bg-tertiary)">
                                 <h3 class="font-semibold mb-2">📊 变更预览</h3>
                                 <div id="diffContent"></div>
@@ -145,20 +150,20 @@
                     </div>
                 </div>
 
-                <!-- Skills Tab -->
                 <div id="tab-skills" class="tab-content hidden">
                     <div class="card">
                         <h2 class="text-xl font-semibold mb-4">🛠️ 技能列表</h2>
+                        <div id="loadingSkills" class="loading">加载中...</div>
                         <div id="skillList" class="grid grid-cols-3 gap-4"></div>
                     </div>
                 </div>
 
-                <!-- Backups Tab -->
                 <div id="tab-backups" class="tab-content hidden">
                     <div class="card">
                         <h2 class="text-xl font-semibold mb-4">💾 备份记录</h2>
+                        <div id="loadingBackups" class="loading">加载中...</div>
                         <div id="backupList" class="space-y-2"></div>
-                        <div id="noBackups" class="text-center py-8" style="color: var(--text-secondary)">暂无备份记录</div>
+                        <div id="noBackups" class="hidden text-center py-8" style="color: var(--text-secondary)">暂无备份记录</div>
                     </div>
                 </div>
             </div>
@@ -168,64 +173,105 @@
     <div id="toast" class="toast hidden"></div>
 
     <script>
+        console.log('[Agent Page] Initializing...');
         const API_BASE = 'http://localhost:8000';
         let agents = [];
         let currentAgent = null;
         let soulEditor = null;
         let originalSoul = null;
 
-        async function init() {
-            await loadAgents();
+        function showError(msg) {
+            console.error('[Agent Page] Error:', msg);
+            document.getElementById('errorMessage').textContent = msg;
+            document.getElementById('errorBanner').classList.remove('hidden');
         }
 
-        async function loadAgents() {
+        async function init() {
+            console.log('[Agent Page] Loading agents...');
             try {
                 const res = await fetch(`${API_BASE}/agents/`);
+                console.log('[Agent Page] /agents/ response status:', res.status);
                 const data = await res.json();
+                console.log('[Agent Page] /agents/ data:', data);
                 agents = data.agents || [];
+                console.log('[Agent Page] Loaded', agents.length, 'agents');
                 renderAgentList();
             } catch (e) {
-                showToast('加载 Agent 列表失败: ' + e, 'error');
+                console.error('[Agent Page] Failed to load agents:', e);
+                showError('加载 Agent 列表失败: ' + e.message);
             }
         }
 
         function renderAgentList() {
+            console.log('[Agent Page] Rendering agent list, count:', agents.length);
+            document.getElementById('loadingAgents').classList.add('hidden');
+
+            if (agents.length === 0) {
+                document.getElementById('noAgents').classList.remove('hidden');
+                document.getElementById('agentList').innerHTML = '';
+                return;
+            }
+
+            document.getElementById('noAgents').classList.add('hidden');
             const list = document.getElementById('agentList');
             list.innerHTML = agents.map(agent => `
-                <div class="agent-card p-3 rounded-lg border" style="border-color: var(--border); ${currentAgent?.agent_id === agent.agent_id ? 'border-color: var(--success); background: rgba(78, 204, 163, 0.1);' : ''}" onclick="selectAgent('${agent.agent_id}')">
+                <div class="agent-card p-3 rounded-lg border" style="border-color: var(--border)" 
+                     onclick="selectAgent('${agent.agent_id}')" id="agent-card-${agent.agent_id}">
                     <div class="font-semibold">${agent.agent_id}</div>
                     <div class="text-xs mt-1" style="color: var(--text-secondary)">
-                        ${agent.skill_count} 个技能
-                    </div>
-                    <div class="flex flex-wrap gap-1 mt-2">
-                        ${(agent.skills || []).slice(0, 3).map(s => `<span class="skill-tag">${s}</span>`).join('')}
+                        ${agent.skill_count || 0} 个技能
                     </div>
                 </div>
             `).join('');
+            console.log('[Agent Page] Agent list rendered');
         }
 
         async function selectAgent(agentId) {
+            console.log('[Agent Page] Selecting agent:', agentId);
             try {
                 const res = await fetch(`${API_BASE}/agents/${agentId}`);
+                console.log('[Agent Page] /agents/${agentId} status:', res.status);
+
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+
                 const data = await res.json();
+                console.log('[Agent Page] Agent data:', data);
+
                 if (!data.success) {
-                    showToast('加载 Agent 失败', 'error');
-                    return;
+                    throw new Error(data.detail || '加载失败');
                 }
 
                 currentAgent = data.agent;
-                renderAgentList();
+                console.log('[Agent Page] Current agent set:', currentAgent.agent_id);
+
+                updateAgentListHighlight(agentId);
                 renderAgentForm();
-                loadBackups();
                 switchTab('profile');
             } catch (e) {
-                showToast('加载 Agent 失败: ' + e, 'error');
+                console.error('[Agent Page] selectAgent error:', e);
+                showError('加载 Agent 失败: ' + e.message);
+            }
+        }
+
+        function updateAgentListHighlight(selectedAgentId) {
+            document.querySelectorAll('.agent-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            const selectedCard = document.getElementById('agent-card-' + selectedAgentId);
+            if (selectedCard) {
+                selectedCard.classList.add('active');
             }
         }
 
         function renderAgentForm() {
+            console.log('[Agent Page] Rendering agent form');
             const agent = currentAgent;
-            if (!agent) return;
+            if (!agent) {
+                console.log('[Agent Page] No current agent, skipping form render');
+                return;
+            }
 
             document.getElementById('noAgent').classList.add('hidden');
             document.getElementById('agentForm').classList.remove('hidden');
@@ -246,10 +292,15 @@
             const body = agent.body || '';
             originalSoul = { meta, body };
 
-            if (soulEditor) {
-                soulEditor.setValue(body);
-            } else {
-                const textarea = document.getElementById('soulBody');
+            console.log('[Agent Page] Initializing CodeMirror...');
+            const textarea = document.getElementById('soulBody');
+            textarea.value = body;
+
+            if (typeof CodeMirror !== 'undefined') {
+                if (soulEditor) {
+                    soulEditor.toTextArea();
+                    soulEditor = null;
+                }
                 soulEditor = CodeMirror.fromTextArea(textarea, {
                     mode: 'markdown',
                     theme: 'monokai',
@@ -257,10 +308,14 @@
                     lineWrapping: true
                 });
                 soulEditor.setValue(body);
-                soulEditor.on('change', () => checkForChanges());
+                soulEditor.on('change', checkForChanges);
+                console.log('[Agent Page] CodeMirror initialized');
+            } else {
+                console.warn('[Agent Page] CodeMirror not loaded, using textarea');
             }
 
             document.getElementById('diffPreview').classList.add('hidden');
+            console.log('[Agent Page] Form rendered');
         }
 
         function checkForChanges() {
@@ -275,7 +330,7 @@
                 max_tokens: parseInt(document.getElementById('input-max_tokens').value) || 2048,
                 skills: originalSoul.meta.skills || []
             };
-            const body = soulEditor ? soulEditor.getValue() : '';
+            const body = soulEditor ? soulEditor.getValue() : document.getElementById('soulBody').value;
 
             const diff = computeDiff(originalSoul, { meta, body });
 
@@ -287,23 +342,23 @@
             }
         }
 
-        function computeDiff(old, ne_) {
+        function computeDiff(old, new_) {
             const result = { hasChanges: false, summary: '' };
             const parts = [];
 
-            for (const key of Object.keys(ne_.meta)) {
-                if (JSON.stringify(old.meta[key]) !== JSON.stringify(ne_.meta[key])) {
+            for (const key of Object.keys(new_.meta)) {
+                if (JSON.stringify(old.meta[key]) !== JSON.stringify(new_.meta[key])) {
                     result.hasChanges = true;
                     parts.push(`<span class="diff-modified">修改 ${key}</span>`);
                 }
             }
             for (const key of Object.keys(old.meta)) {
-                if (!(key in ne_.meta)) {
+                if (!(key in new_.meta)) {
                     result.hasChanges = true;
                     parts.push(`<span class="diff-removed">删除 ${key}</span>`);
                 }
             }
-            if (old.body !== ne_.body) {
+            if (old.body !== new_.body) {
                 result.hasChanges = true;
                 parts.push('<span class="diff-modified">正文有变更</span>');
             }
@@ -314,6 +369,7 @@
 
         async function saveSoul() {
             if (!currentAgent) return;
+            console.log('[Agent Page] Saving soul for:', currentAgent.agent_id);
 
             const meta = {
                 name: document.getElementById('input-name').value,
@@ -324,7 +380,7 @@
                 max_tokens: parseInt(document.getElementById('input-max_tokens').value) || 2048,
                 skills: originalSoul.meta.skills || []
             };
-            const body = soulEditor ? soulEditor.getValue() : '';
+            const body = soulEditor ? soulEditor.getValue() : document.getElementById('soulBody').value;
 
             try {
                 const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/soul`, {
@@ -337,21 +393,28 @@
                     showToast('保存成功! ' + (data.diff?.summary || ''), 'success');
                     originalSoul = { meta, body };
                     checkForChanges();
-                    await loadAgents();
+                    await init();
                 } else {
                     showToast('保存失败', 'error');
                 }
             } catch (e) {
-                showToast('保存失败: ' + e, 'error');
+                console.error('[Agent Page] saveSoul error:', e);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
 
         async function loadBackups() {
             if (!currentAgent) return;
+            console.log('[Agent Page] Loading backups for:', currentAgent.agent_id);
+            document.getElementById('loadingBackups').classList.remove('hidden');
+
             try {
                 const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/backups`);
                 const data = await res.json();
                 const backups = data.backups || [];
+                console.log('[Agent Page] Backups:', backups.length);
+
+                document.getElementById('loadingBackups').classList.add('hidden');
                 const list = document.getElementById('backupList');
                 const noBackups = document.getElementById('noBackups');
 
@@ -371,12 +434,15 @@
                     `).join('');
                 }
             } catch (e) {
-                console.error('Failed to load backups:', e);
+                console.error('[Agent Page] loadBackups error:', e);
+                document.getElementById('loadingBackups').classList.add('hidden');
             }
         }
 
         async function restoreBackup(backupName) {
-            if (!confirm('确定要恢复这个备份吗？')) return;
+            if (!currentAgent || !confirm('确定要恢复这个备份吗？')) return;
+            console.log('[Agent Page] Restoring backup:', backupName);
+
             try {
                 const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/backups/${backupName}/restore`, {
                     method: 'POST'
@@ -389,27 +455,38 @@
                     showToast('恢复失败', 'error');
                 }
             } catch (e) {
-                showToast('恢复失败: ' + e, 'error');
+                console.error('[Agent Page] restoreBackup error:', e);
+                showToast('恢复失败: ' + e.message, 'error');
             }
         }
 
         function switchTab(tab) {
+            console.log('[Agent Page] Switching to tab:', tab);
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(div => div.classList.add('hidden'));
+
             event.target.classList.add('active');
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
 
             if (tab === 'skills' && currentAgent) {
                 loadAgentSkills();
+            } else if (tab === 'backups' && currentAgent) {
+                loadBackups();
             }
         }
 
         async function loadAgentSkills() {
             if (!currentAgent) return;
+            console.log('[Agent Page] Loading skills for:', currentAgent.agent_id);
+            document.getElementById('loadingSkills').classList.remove('hidden');
+
             try {
                 const res = await fetch(`${API_BASE}/agents/${currentAgent.agent_id}/skills`);
                 const data = await res.json();
                 const skills = data.skills || [];
+                console.log('[Agent Page] Skills:', skills.length);
+
+                document.getElementById('loadingSkills').classList.add('hidden');
                 const list = document.getElementById('skillList');
                 list.innerHTML = skills.length === 0
                     ? '<p style="color: var(--text-secondary)">暂无技能</p>'
@@ -417,14 +494,11 @@
                         <div class="p-4 rounded-lg" style="background: var(--bg-tertiary)">
                             <div class="font-semibold">${s.name || s.skill_id}</div>
                             <div class="text-sm mt-1" style="color: var(--text-secondary)">${s.description || ''}</div>
-                            <div class="flex gap-2 mt-2">
-                                <span class="skill-tag">v${s.version || '1.0'}</span>
-                                <span class="skill-tag">${s.source || 'local'}</span>
-                            </div>
                         </div>
                     `).join('');
             } catch (e) {
-                console.error('Failed to load skills:', e);
+                console.error('[Agent Page] loadAgentSkills error:', e);
+                document.getElementById('loadingSkills').classList.add('hidden');
             }
         }
 
@@ -436,11 +510,11 @@
             setTimeout(() => toast.classList.add('hidden'), 3000);
         }
 
-        // Listen for changes
         document.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('change', checkForChanges);
         });
 
+        console.log('[Agent Page] Starting init...');
         init();
     </script>
 </body>
