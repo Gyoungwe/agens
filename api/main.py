@@ -519,7 +519,9 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                         continue
 
                     event_data = event.to_dict() if hasattr(event, "to_dict") else {}
-                    event_type = event_data.get("event", "message")
+                    event_type = event_data.get("event") or event_data.get(
+                        "type", "message"
+                    )
 
                     yield {
                         "event": event_type,
