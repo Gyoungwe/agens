@@ -1,7 +1,7 @@
 # providers/profiles.yaml
 # Provider 配置（API Key 已内置，可通过环境变量覆盖）
 
-default: siliconflow
+default: deepseek
 
 profiles:
 

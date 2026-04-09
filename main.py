@@ -3,8 +3,10 @@
 import asyncio
 import logging
 import os
+import sys
 import yaml
 from pathlib import Path
+from datetime import datetime
 from dotenv import load_dotenv
 
 from bus.message_bus import MessageBus
@@ -26,11 +28,41 @@ from installer.skill_installer import SkillInstaller
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
+LOG_DIR = Path("./logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+
+def setup_logging():
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = LOG_DIR / f"agens_{today}.log"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    logging.info(f"📝 日志文件: {log_file.absolute()}")
+    return log_file
+
+
+logger = logging.getLogger(__name__)
 
 AGENTS_CONFIG_PATH = Path("config/agents.yaml")
 AGENT_CLASSES = {
@@ -49,6 +81,11 @@ def _import_agent_class(class_path: str):
 
 
 async def main():
+    log_file = setup_logging()
+    logger.info("🚀 Agens Multi-Agent 系统启动")
+    logger.info(f"Python: {sys.version}")
+    logger.info(f"工作目录: {Path.cwd().absolute()}")
+
     # ── 1. 基础设施 ───────────────────────────────
     bus = MessageBus()
     skill_registry = SkillRegistry()
@@ -224,4 +261,13 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 被用户中断")
+    except Exception as e:
+        print(f"\n❌ 系统错误: {e}")
+        import traceback
+
+        traceback.print_exc()
+        input("按 Enter 退出...")

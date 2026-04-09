@@ -5,8 +5,9 @@
 基于 LanceDB 的向量存储，用于存储和检索对话记忆
 
 Embedding 配置:
-- API: SiliconFlow
+- API: SiliconFlow (仅用于 embeddings)
 - Model: BAAI/bge-m3 (1024 维)
+- 注意: SiliconFlow 的 chat 模型效果一般，主 chat 应使用 deepseek
 
 可靠性特性:
 - 强制 metadata 字段: scope, owner, source, version
