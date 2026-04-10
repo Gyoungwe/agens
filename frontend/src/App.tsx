@@ -9,26 +9,32 @@ import {
   KnowledgePage,
   ApprovalsPage,
   SessionsPage,
+  AgentChatPage,
+  AgentSettingsPage,
+  ProvidersPage,
   LoginPage,
 } from '@/pages'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, _hasHydrated } = useAuthStore()
 
   useEffect(() => {
+    if (!_hasHydrated) return
     if (!isAuthenticated) {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        window.location.href = '/login'
-      }
+      window.location.href = '/login'
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, _hasHydrated])
+
+  if (!_hasHydrated) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      return <Navigate to="/login" replace />
-    }
+    return <Navigate to="/login" replace />
   }
 
   return <>{children}</>
@@ -52,6 +58,9 @@ function App() {
         <Route path="knowledge" element={<KnowledgePage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="sessions" element={<SessionsPage />} />
+        <Route path="agent-chat" element={<AgentChatPage />} />
+        <Route path="agent-settings" element={<AgentSettingsPage />} />
+        <Route path="providers" element={<ProvidersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

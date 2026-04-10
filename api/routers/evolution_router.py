@@ -2,13 +2,18 @@
 # Agent 进化审批 API 路由
 
 import logging
+import sqlite3
+import json
+from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/evolution", tags=["evolution"])
+
+DB_PATH = Path("./data/evolution.db")
 
 
 @dataclass
@@ -41,24 +46,148 @@ class EvolutionApproval:
     comment: Optional[str] = None
 
 
-_evolution_store: List[EvolutionApproval] = []
+class EvolutionStore:
+    """SQLite 进化审批持久化存储"""
+
+    def __init__(self, db_path: Path = DB_PATH):
+        self.db_path = db_path
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._init_db()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self):
+        with self._conn() as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS evolution_approvals (
+                    request_id  TEXT PRIMARY KEY,
+                    agent_id    TEXT NOT NULL,
+                    changes     TEXT NOT NULL DEFAULT '{}',
+                    reason      TEXT NOT NULL DEFAULT '',
+                    status      TEXT NOT NULL DEFAULT 'pending',
+                    created_at  TEXT NOT NULL,
+                    reviewed_at TEXT,
+                    reviewer    TEXT,
+                    comment     TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_evolution_agent_id
+                    ON evolution_approvals(agent_id);
+                CREATE INDEX IF NOT EXISTS idx_evolution_status
+                    ON evolution_approvals(status);
+                CREATE INDEX IF NOT EXISTS idx_evolution_created_at
+                    ON evolution_approvals(created_at DESC);
+            """)
+        logger.info("✅ Evolution 数据库已就绪")
+
+    def append(self, approval: EvolutionApproval):
+        now = datetime.now().isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO evolution_approvals
+                (request_id, agent_id, changes, reason, status, created_at, reviewed_at, reviewer, comment)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    approval.request_id,
+                    approval.agent_id,
+                    json.dumps(approval.changes, ensure_ascii=False),
+                    approval.reason,
+                    approval.status,
+                    approval.created_at,
+                    approval.reviewed_at,
+                    approval.reviewer,
+                    approval.comment,
+                ),
+            )
+
+    def list_all(self) -> List[EvolutionApproval]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM evolution_approvals ORDER BY created_at DESC"
+            ).fetchall()
+        return [self._row_to_approval(row) for row in rows]
+
+    def list_by_status(self, status: str) -> List[EvolutionApproval]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM evolution_approvals WHERE status=? ORDER BY created_at DESC",
+                (status,),
+            ).fetchall()
+        return [self._row_to_approval(row) for row in rows]
+
+    def get(self, request_id: str) -> Optional[EvolutionApproval]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM evolution_approvals WHERE request_id=?", (request_id,)
+            ).fetchone()
+        return self._row_to_approval(row) if row else None
+
+    def update_status(
+        self,
+        request_id: str,
+        status: str,
+        reviewer: str = "admin",
+        comment: Optional[str] = None,
+    ):
+        now = datetime.now().isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE evolution_approvals
+                SET status=?, reviewed_at=?, reviewer=?, comment=?
+                WHERE request_id=?
+            """,
+                (status, now, reviewer, comment, request_id),
+            )
+
+    def delete(self, request_id: str):
+        with self._conn() as conn:
+            conn.execute(
+                "DELETE FROM evolution_approvals WHERE request_id=?", (request_id,)
+            )
+
+    def _row_to_approval(self, row: sqlite3.Row) -> EvolutionApproval:
+        return EvolutionApproval(
+            request_id=row["request_id"],
+            agent_id=row["agent_id"],
+            changes=json.loads(row["changes"]),
+            reason=row["reason"],
+            status=row["status"],
+            created_at=row["created_at"],
+            reviewed_at=row["reviewed_at"],
+            reviewer=row["reviewer"],
+            comment=row["comment"],
+        )
+
+
+_store: Optional[EvolutionStore] = None
+
+
+def get_store() -> EvolutionStore:
+    global _store
+    if _store is None:
+        _store = EvolutionStore()
+    return _store
 
 
 @router.get("/approvals")
 async def list_approvals(status: Optional[str] = None):
     """获取进化审批列表"""
     try:
+        store = get_store()
         if status:
-            filtered = [a for a in _evolution_store if a.status == status]
-            return {
-                "success": True,
-                "approvals": [_approval_to_dict(a) for a in filtered],
-                "total": len(filtered),
-            }
+            approvals = store.list_by_status(status)
+        else:
+            approvals = store.list_all()
         return {
             "success": True,
-            "approvals": [_approval_to_dict(a) for a in _evolution_store],
-            "total": len(_evolution_store),
+            "approvals": [_approval_to_dict(a) for a in approvals],
+            "total": len(approvals),
         }
     except Exception as e:
         logger.error(f"Failed to list approvals: {e}")
@@ -69,10 +198,13 @@ async def list_approvals(status: Optional[str] = None):
 async def create_evolution_request(request: dict):
     """创建进化请求"""
     try:
+        store = get_store()
+        import uuid
+
         approval = EvolutionApproval(
             request_id=request.get(
                 "request_id",
-                f"req_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(_evolution_store)}",
+                f"req_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
             ),
             agent_id=request["agent_id"],
             changes=request.get("proposed_changes", {}),
@@ -80,7 +212,7 @@ async def create_evolution_request(request: dict):
             status="pending",
             created_at=datetime.now().isoformat(),
         )
-        _evolution_store.append(approval)
+        store.append(approval)
 
         return {
             "success": True,
@@ -97,7 +229,8 @@ async def create_evolution_request(request: dict):
 async def get_approval(request_id: str):
     """获取审批详情"""
     try:
-        approval = _find_approval(request_id)
+        store = get_store()
+        approval = store.get(request_id)
         if not approval:
             raise HTTPException(
                 status_code=404, detail=f"Approval {request_id} not found"
@@ -118,7 +251,8 @@ async def get_approval(request_id: str):
 async def approve_evolution(request_id: str, comment: Optional[str] = None):
     """批准进化请求"""
     try:
-        approval = _find_approval(request_id)
+        store = get_store()
+        approval = store.get(request_id)
         if not approval:
             raise HTTPException(
                 status_code=404, detail=f"Approval {request_id} not found"
@@ -129,16 +263,14 @@ async def approve_evolution(request_id: str, comment: Optional[str] = None):
                 status_code=400, detail=f"Approval {request_id} is not pending"
             )
 
-        approval.status = "approved"
-        approval.reviewed_at = datetime.now().isoformat()
-        approval.reviewer = "admin"
-        approval.comment = comment
+        store.update_status(request_id, "approved", "admin", comment)
+        updated = store.get(request_id)
 
         return {
             "success": True,
             "request_id": request_id,
             "status": "approved",
-            "reviewed_at": approval.reviewed_at,
+            "reviewed_at": updated.reviewed_at,
         }
     except HTTPException:
         raise
@@ -151,7 +283,8 @@ async def approve_evolution(request_id: str, comment: Optional[str] = None):
 async def reject_evolution(request_id: str, comment: Optional[str] = None):
     """拒绝进化请求"""
     try:
-        approval = _find_approval(request_id)
+        store = get_store()
+        approval = store.get(request_id)
         if not approval:
             raise HTTPException(
                 status_code=404, detail=f"Approval {request_id} not found"
@@ -162,16 +295,14 @@ async def reject_evolution(request_id: str, comment: Optional[str] = None):
                 status_code=400, detail=f"Approval {request_id} is not pending"
             )
 
-        approval.status = "rejected"
-        approval.reviewed_at = datetime.now().isoformat()
-        approval.reviewer = "admin"
-        approval.comment = comment
+        store.update_status(request_id, "rejected", "admin", comment)
+        updated = store.get(request_id)
 
         return {
             "success": True,
             "request_id": request_id,
             "status": "rejected",
-            "reviewed_at": approval.reviewed_at,
+            "reviewed_at": updated.reviewed_at,
         }
     except HTTPException:
         raise
@@ -184,29 +315,20 @@ async def reject_evolution(request_id: str, comment: Optional[str] = None):
 async def delete_approval(request_id: str):
     """删除审批记录"""
     try:
-        global _evolution_store
-        original_len = len(_evolution_store)
-        _evolution_store = [a for a in _evolution_store if a.request_id != request_id]
-
-        if len(_evolution_store) == original_len:
+        store = get_store()
+        approval = store.get(request_id)
+        if not approval:
             raise HTTPException(
                 status_code=404, detail=f"Approval {request_id} not found"
             )
 
+        store.delete(request_id)
         return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to delete approval {request_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def _find_approval(request_id: str) -> Optional[EvolutionApproval]:
-    """查找审批记录"""
-    for approval in _evolution_store:
-        if approval.request_id == request_id:
-            return approval
-    return None
 
 
 def _approval_to_dict(approval: EvolutionApproval) -> dict:

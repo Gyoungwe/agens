@@ -123,9 +123,14 @@ def test_dev_server():
 
                 r = requests.get("http://localhost:5173", timeout=2)
                 if r.status_code == 200:
-                    print(f"    Server started after {i + 1} seconds")
-                    started = True
-                    break
+                    proxy_r = requests.get(
+                        "http://localhost:5173/api/health", timeout=3
+                    )
+                    if proxy_r.status_code == 200:
+                        print(f"    Server started after {i + 1} seconds")
+                        started = True
+                        break
+                    errors.append("API proxy check failed: /api/health not reachable")
             except:
                 pass
 

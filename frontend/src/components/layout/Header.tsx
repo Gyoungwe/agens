@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, ChevronDown } from 'lucide-react'
 import { useAuthStore } from '@/store'
+import { useEffect, useState } from 'react'
+import { client } from '@/api'
 
 interface HeaderProps {
   title?: string
@@ -8,8 +10,10 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const { username, logout } = useAuthStore()
+  const [selectedProvider, setSelectedProvider] = useState<string>('')
+  const [switching, setSwitching] = useState(false)
 
-  const { data: providers } = useQuery({
+  const { data: providersData } = useQuery({
     queryKey: ['providers'],
     queryFn: async () => {
       const res = await fetch('/api/providers')
@@ -17,25 +21,75 @@ export function Header({ title }: HeaderProps) {
     },
   })
 
+  const providers = Array.isArray(providersData) ? providersData : (providersData?.providers || [])
+
+  useEffect(() => {
+    const active = providers.find((p: { active?: boolean }) => p.active)
+    if (active?.id && !selectedProvider) {
+      setSelectedProvider(active.id)
+    }
+  }, [providers, selectedProvider])
+
+  const handleProviderChange = async (providerId: string) => {
+    setSelectedProvider(providerId)
+    if (!providerId) return
+
+    setSwitching(true)
+    try {
+      await client.post(`/providers/${providerId}/use`)
+    } catch (error) {
+      console.error('[provider-switch] failed', error)
+      alert('Model switch failed. Check logs/features/providers_*.log')
+    } finally {
+      setSwitching(false)
+    }
+  }
+
   return (
-    <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+    <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
-        {title && <h2 className="text-sm font-medium">{title}</h2>}
+        {title && (
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+            <div className="h-6 w-px bg-border" />
+            <span className="text-xs text-muted-foreground font-mono">v1.0.0</span>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <select className="text-sm bg-secondary border border-border rounded-lg px-3 py-1.5">
-          <option value="deepseek">{providers?.[0]?.model || 'Select Model'}</option>
-        </select>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="relative">
+          <select
+            value={selectedProvider}
+            onChange={(e) => handleProviderChange(e.target.value)}
+            disabled={switching}
+            className="appearance-none w-[150px] sm:w-[210px] bg-secondary/50 border border-border rounded-lg px-3 py-1.5 pr-8 text-xs sm:text-sm font-medium text-foreground cursor-pointer hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-60"
+          >
+            <option value="">Select Model</option>
+            {providers?.map((p: { id: string; name: string; model: string }) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        </div>
 
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <User className="w-4 h-4" />
-          <span className="hidden sm:inline">{username || 'User'}</span>
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-3 pl-4 border-l border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-cta flex items-center justify-center">
+              <User className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-medium hidden sm:inline">{username || 'User'}</span>
+          </div>
+          <button
+            onClick={logout}
+            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </header>
   )

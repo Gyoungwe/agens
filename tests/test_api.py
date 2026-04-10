@@ -189,14 +189,38 @@ class AgensTester:
         passed = r.status_code == 200 and isinstance(data, list)
         return log_test("List hooks", passed)
 
+    def test_api_namespace_aliases(self) -> bool:
+        """Test /api namespace aliases for frontend integration"""
+        checks = [
+            requests.get(f"{BASE_URL}/api/health"),
+            requests.get(f"{BASE_URL}/api/sessions"),
+            requests.get(f"{BASE_URL}/api/providers"),
+            requests.get(f"{BASE_URL}/api/skills/"),
+            requests.get(f"{BASE_URL}/api/memory/stats"),
+            requests.get(f"{BASE_URL}/api/evolution/approvals"),
+        ]
+        passed = all(r.status_code == 200 for r in checks)
+        return log_test("/api namespace aliases", passed)
+
     def test_memory_stats(self) -> bool:
         """Test memory stats endpoint"""
         r = requests.get(f"{BASE_URL}/memory/stats")
         data = r.json()
-        passed = r.status_code == 200 and "total" in data
+        passed = r.status_code == 200 and "stats" in data
         if passed:
-            print(f"\n    Memory: {data.get('total')} items stored")
-        return log_test(f"Memory stats ({data.get('total')} items)", passed)
+            print(f"\n    Memory: {data.get('stats', {}).get('total', 0)} items stored")
+        return log_test(
+            f"Memory stats ({data.get('stats', {}).get('total', 0)} items)", passed
+        )
+
+    def test_traces(self) -> bool:
+        """Test traces endpoint"""
+        r = requests.get(f"{BASE_URL}/api/traces?limit=5")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, dict) and "traces" in data
+        if passed:
+            print(f"\n    Traces: {len(data.get('traces', []))} recent runs")
+        return log_test("List traces", passed)
 
     # ===== Sessions Tests =====
 
@@ -317,7 +341,9 @@ class AgensTester:
         """Test skill search"""
         r = requests.get(f"{BASE_URL}/skills/search?q=web")
         data = r.json()
-        passed = r.status_code == 200 and isinstance(data, list)
+        passed = r.status_code == 200 and (
+            isinstance(data, list) or (isinstance(data, dict) and "skills" in data)
+        )
         return log_test("Search skills", passed)
 
     # ===== Memory Tests =====
@@ -354,7 +380,7 @@ class AgensTester:
 
     def test_approvals_list(self) -> bool:
         """Test list approvals"""
-        r = requests.get(f"{BASE_URL}/approvals")
+        r = requests.get(f"{BASE_URL}/evolution/approvals")
         data = r.json()
         passed = r.status_code == 200 and "approvals" in data
         if passed:
@@ -399,7 +425,9 @@ class AgensTester:
                     self.test_agents,
                     self.test_skills,
                     self.test_hooks,
+                    self.test_api_namespace_aliases,
                     self.test_memory_stats,
+                    self.test_traces,
                 ],
             ),
             (

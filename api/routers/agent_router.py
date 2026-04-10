@@ -173,6 +173,71 @@ async def get_agent_skills(agent_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{agent_id}/skills/all")
+async def get_agent_all_skills(agent_id: str):
+    """获取 Agent 可配置的所有技能（含是否已绑定）"""
+    try:
+        registry = SkillRegistry()
+        skills = registry.list_all()
+        result = []
+        for skill in skills:
+            agent_ids = []
+            try:
+                import json
+
+                agent_ids = json.loads(skill.get("agent_ids") or "[]")
+            except Exception:
+                agent_ids = []
+
+            result.append(
+                {
+                    "skill_id": skill.get("skill_id"),
+                    "name": skill.get("name", skill.get("skill_id")),
+                    "description": skill.get("description", ""),
+                    "enabled": bool(skill.get("enabled", 0)),
+                    "assigned": (not agent_ids) or (agent_id in agent_ids),
+                    "agent_ids": agent_ids,
+                }
+            )
+
+        return {"success": True, "skills": result, "total": len(result)}
+    except Exception as e:
+        logger.error(f"Failed to get all skills for {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{agent_id}/skills/{skill_id}/assign")
+async def assign_skill_to_agent(agent_id: str, skill_id: str):
+    """将技能绑定给指定 Agent"""
+    try:
+        registry = SkillRegistry()
+        if not registry.get_metadata(skill_id):
+            raise HTTPException(status_code=404, detail=f"Skill {skill_id} not found")
+        registry.assign_to_agent(skill_id, agent_id)
+        return {"success": True, "agent_id": agent_id, "skill_id": skill_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to assign skill {skill_id} to {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{agent_id}/skills/{skill_id}/unassign")
+async def unassign_skill_from_agent(agent_id: str, skill_id: str):
+    """将技能从指定 Agent 解绑"""
+    try:
+        registry = SkillRegistry()
+        if not registry.get_metadata(skill_id):
+            raise HTTPException(status_code=404, detail=f"Skill {skill_id} not found")
+        registry.unassign_from_agent(skill_id, agent_id)
+        return {"success": True, "agent_id": agent_id, "skill_id": skill_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to unassign skill {skill_id} from {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{agent_id}/backups")
 async def list_agent_backups(agent_id: str):
     """获取 Agent Soul 的备份列表"""

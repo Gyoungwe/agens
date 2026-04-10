@@ -14,6 +14,7 @@ from core.orchestrator import Orchestrator
 from core.base_agent import BaseAgent
 from core.skill_registry import SkillRegistry
 from core.hooks import HookRegistry, ApprovalHook, LoggingHook, RateLimitHook
+from core.integration_hooks import SafetyGuardHook, MLflowHook
 from knowledge.knowledge_base import KnowledgeBase
 from knowledge.document_loader import DocumentLoader
 from providers.provider_registry import ProviderRegistry
@@ -155,6 +156,8 @@ async def main():
         hook_registry.register(RateLimitHook(max_calls_per_minute=60))
         if approval_queue:
             hook_registry.register(ApprovalHook(approval_queue))
+        hook_registry.register(SafetyGuardHook())
+        hook_registry.register(MLflowHook())
         print("🔗 Hook 系统已就绪")
     except Exception as e:
         print(f"⚠️ Hook 系统不可用，跳过：{e}")

@@ -457,6 +457,35 @@ class SkillRegistry:
         if skill_id in self._cache:
             self._cache[skill_id].disable()
 
+    def get_agent_ids(self, skill_id: str) -> List[str]:
+        """获取技能绑定的 agent 列表"""
+        row = self._get_row(skill_id)
+        if not row:
+            return []
+        return json.loads(row["agent_ids"] or "[]")
+
+    def set_agent_ids(self, skill_id: str, agent_ids: List[str]):
+        """设置技能绑定的 agent 列表"""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE skills SET agent_ids=? WHERE skill_id=?",
+                (json.dumps(sorted(set(agent_ids)), ensure_ascii=False), skill_id),
+            )
+
+    def assign_to_agent(self, skill_id: str, agent_id: str):
+        """给指定 agent 绑定技能"""
+        current = self.get_agent_ids(skill_id)
+        if agent_id not in current:
+            current.append(agent_id)
+            self.set_agent_ids(skill_id, current)
+
+    def unassign_from_agent(self, skill_id: str, agent_id: str):
+        """解绑指定 agent 的技能"""
+        current = self.get_agent_ids(skill_id)
+        if agent_id in current:
+            current = [a for a in current if a != agent_id]
+            self.set_agent_ids(skill_id, current)
+
     def reload(self, skill_id: str):
         """热重载：清除缓存，下次 get() 时重新加载"""
         self._cache.pop(skill_id, None)

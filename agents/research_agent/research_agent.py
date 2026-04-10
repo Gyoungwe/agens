@@ -1,6 +1,11 @@
 # agents/research_agent/research_agent.py
 
+import logging
+import os
+
 from core.base_agent import BaseAgent
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchAgent(BaseAgent):
@@ -26,4 +31,18 @@ class ResearchAgent(BaseAgent):
         )
 
     async def execute(self, instruction: str, context: dict) -> str:
-        return await self._execute_with_llm(instruction, context)
+        merged_context = dict(context or {})
+
+        if os.getenv("ENABLE_LANGCHAIN_TOOL_BRIDGE", "false").lower() == "true":
+            try:
+                skill_output = await self.use_skill(
+                    "langchain_search",
+                    instruction=instruction,
+                    context={"query": instruction, "max_results": 5},
+                )
+                if getattr(skill_output, "success", False):
+                    merged_context["langchain_search"] = skill_output.result
+            except Exception as e:
+                logger.warning(f"[research_agent] langchain_search degraded: {e}")
+
+        return await self._execute_with_llm(instruction, merged_context)

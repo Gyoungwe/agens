@@ -19,11 +19,14 @@ cp .env.example .env
 # 3A. 前台交互模式
 python main.py
 
-# 3B. API 服务模式
+# 3B. 启动后端 API（8000）
 python -m uvicorn api.main:app --reload --port 8000
 
-# 4. 打开浏览器
-open http://localhost:8000
+# 4. 启动前端 UI（5173）
+cd frontend && npm install && npm run dev
+
+# 5. 打开浏览器
+open http://localhost:5173
 ```
 
 ## 目录结构
@@ -77,6 +80,53 @@ Dev1/
 ```
 
 ## 核心功能
+
+## 可选生产增强（已集成入口）
+
+项目已预留以下第三方能力的集成入口（默认可降级，不会阻塞主流程）：
+
+- Guardrails 安全防护（`core/integration_hooks.py` -> `SafetyGuardHook`）
+- MLflow 可观测性（`core/integration_hooks.py` -> `MLflowHook`）
+- LangChain Tools 搜索桥接（`skills/langchain_search/` + `integrations/langchain_bridge.py`）
+
+启用方式（环境变量）：
+
+```bash
+ENABLE_GUARDRAILS=true
+GUARDRAILS_STRICT=false
+
+ENABLE_MLFLOW=true
+MLFLOW_EXPERIMENT=agens-agent-system
+# MLFLOW_TRACKING_URI=http://localhost:5000
+ENABLE_MLFLOW_TRACE=true
+
+ENABLE_LANGCHAIN_TOOL_BRIDGE=true
+```
+
+可选依赖安装：
+
+```bash
+pip install -r requirements-agent-stack.txt
+```
+
+## 功能日志文件
+
+后端现在会按功能写入独立日志文件，便于排查“任务无响应”问题：
+
+- 总日志：`logs/agens_YYYYMMDD.log`
+- 功能日志目录：`logs/features/`
+  - `auth_YYYYMMDD.log`
+  - `chat_YYYYMMDD.log`
+  - `sessions_YYYYMMDD.log`
+  - `providers_YYYYMMDD.log`
+  - `agents_YYYYMMDD.log`
+  - `skills_YYYYMMDD.log`
+  - `memory_YYYYMMDD.log`
+  - `evolution_YYYYMMDD.log`
+  - `hooks_YYYYMMDD.log`
+  - `traces_YYYYMMDD.log`
+  - `ws_YYYYMMDD.log`
+  - `system_YYYYMMDD.log`
 
 ### 1. 多 Agent 协作
 

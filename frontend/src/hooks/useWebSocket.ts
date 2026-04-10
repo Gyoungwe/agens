@@ -5,6 +5,7 @@ import type { WebSocketEvent, Approval } from '@/types/event'
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectAttemptRef = useRef(0)
   const { updateAgentStatus, addEvent } = useAgentStore()
   const { addApproval } = useApprovalStore()
 
@@ -17,6 +18,7 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       console.log('[WebSocket] Connected')
+      reconnectAttemptRef.current = 0
     }
 
     ws.onmessage = (event) => {
@@ -47,7 +49,14 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       console.log('[WebSocket] Disconnected, reconnecting...')
-      reconnectTimeoutRef.current = setTimeout(connect, 3000)
+      const attempt = reconnectAttemptRef.current
+      const baseDelay = 1000
+      const maxDelay = 30000
+      const exponentialDelay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay)
+      const jitter = Math.random() * 500
+      const delay = Math.floor(exponentialDelay + jitter)
+      reconnectAttemptRef.current = attempt + 1
+      reconnectTimeoutRef.current = setTimeout(connect, delay)
     }
 
     ws.onerror = (error) => {

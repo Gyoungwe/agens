@@ -4,6 +4,7 @@ JWT Authentication for Agens Multi-Agent System
 """
 
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -11,8 +12,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from pydantic import BaseModel
+from utils.feature_logs import get_feature_logger
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+logger = logging.getLogger(__name__)
+auth_log = get_feature_logger("auth")
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -39,6 +43,7 @@ class TokenPayload(BaseModel):
 async def login(request: LoginRequest):
     """Authenticate user and return JWT token"""
     if request.username != ADMIN_USERNAME or request.password != ADMIN_PASSWORD:
+        auth_log.warning(f"login_failed username={request.username}")
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
@@ -49,6 +54,9 @@ async def login(request: LoginRequest):
     }
 
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    auth_log.info(
+        f"login_success username={request.username} expire_hours={JWT_EXPIRE_HOURS}"
+    )
 
     return LoginResponse(access_token=token)
 
@@ -56,6 +64,7 @@ async def login(request: LoginRequest):
 @router.post("/logout")
 async def logout():
     """Logout endpoint (client should discard token)"""
+    auth_log.info("logout")
     return {"success": True, "message": "Logged out successfully"}
 
 
@@ -66,8 +75,10 @@ async def get_current_user(
     """Get current authenticated user"""
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        auth_log.info(f"me_success username={payload.get('sub', '')}")
         return {"username": payload["sub"]}
     except JWTError:
+        auth_log.warning("me_failed invalid_or_expired_token")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 

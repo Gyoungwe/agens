@@ -1,9 +1,10 @@
 import { useCallback, useRef, useEffect } from 'react'
 import { useChatStore } from '@/store'
+import { parseSSEStream } from '@/utils/sse'
 
 export function useSSE() {
   const eventSourceRef = useRef<EventSource | null>(null)
-  const { setStreaming, addMessage } = useChatStore()
+  const { setStreaming, addMessage, updateMessage } = useChatStore()
 
   const sendMessage = useCallback(
     async (message: string, sessionId?: string) => {
@@ -21,39 +22,29 @@ export function useSSE() {
       const reader = response.body?.getReader()
       if (!reader) return
 
-      let buffer = ''
+      const decoder = new TextDecoder()
+      let currentMessageId: string | null = null
 
       try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += new TextDecoder().decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6))
-
-                if (data.type === 'start') {
-                  addMessage({
-                    id: data.message_id,
-                    role: 'assistant',
-                    content: '',
-                    created_at: new Date().toISOString(),
-                    session_id: sessionId,
-                  })
-                } else if (data.type === 'chunk') {
-                  // Content is streamed incrementally
-                } else if (data.type === 'done') {
-                  setStreaming(false)
-                }
-              } catch {
-                // Ignore parse errors for incomplete JSON
-              }
+        for await (const sseEvent of parseSSEStream(reader, decoder)) {
+          if (sseEvent.eventType === 'start') {
+            const msgId = sseEvent.data.message_id as string
+            currentMessageId = msgId
+            addMessage({
+              id: msgId,
+              role: 'assistant',
+              content: '',
+              created_at: new Date().toISOString(),
+              session_id: sessionId,
+            })
+          } else if (sseEvent.eventType === 'chunk') {
+            const content = (sseEvent.data.content as string) || ''
+            if (currentMessageId && content) {
+              updateMessage(currentMessageId, { content } as Partial<import('@/types').Message>)
             }
+          } else if (sseEvent.eventType === 'done') {
+            setStreaming(false)
+            break
           }
         }
       } finally {
@@ -61,7 +52,7 @@ export function useSSE() {
         setStreaming(false)
       }
     },
-    [setStreaming, addMessage]
+    [setStreaming, addMessage, updateMessage]
   )
 
   const disconnect = useCallback(() => {

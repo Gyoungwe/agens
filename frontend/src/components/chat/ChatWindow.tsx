@@ -29,7 +29,7 @@ export function ChatWindow({ messages, isStreaming, onSendMessage }: ChatWindowP
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
+    <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/20">
       <MessageList messages={messages} isStreaming={isStreaming} />
       <div ref={messagesEndRef} />
       <InputBar

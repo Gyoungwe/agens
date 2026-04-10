@@ -48,6 +48,22 @@ async def list_skills(agent_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/search")
+async def search_skills(q: str = ""):
+    """搜索技能"""
+    try:
+        registry = SkillRegistry()
+        skills = registry.search(query=q) if q else registry.list_all()
+        return {
+            "success": True,
+            "skills": skills,
+            "total": len(skills),
+        }
+    except Exception as e:
+        logger.error(f"Failed to search skills: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{skill_id}")
 async def get_skill(skill_id: str):
     """获取技能详情"""
@@ -233,5 +249,5 @@ async def disable_skill(skill_id: str):
         registry.disable(skill_id)
         return {"success": True, "skill_id": skill_id}
     except Exception as e:
-        logger.error(f"Failed to disable skill {skill_id}: {e}")
+        logger.error(f"Failed to disable skill: {e}")
         raise HTTPException(status_code=500, detail=str(e))

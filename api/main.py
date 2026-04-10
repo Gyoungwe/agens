@@ -20,10 +20,11 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from fastapi import FastAPI, HTTPException
+load_dotenv()
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sse_starlette import EventSourceResponse
 
 from api.routers import (
@@ -35,8 +36,7 @@ from api.routers import (
 )
 from api.auth import router as auth_router
 from api.ws.events import websocket_endpoint
-
-load_dotenv()
+from utils.feature_logs import setup_feature_loggers, get_feature_logger
 
 LOG_DIR = Path("./logs")
 LOG_DIR.mkdir(exist_ok=True)
@@ -69,10 +69,37 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     logging.info(f"📝 日志文件: {log_file.absolute()}")
+    feature_loggers = setup_feature_loggers(LOG_DIR)
+    for feature in feature_loggers:
+        logging.info(f"🧩 功能日志: {feature} -> {(LOG_DIR / 'features').absolute()}")
     return log_file
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_feature_from_path(path: str) -> str:
+    p = (path or "").strip("/")
+    if not p:
+        return "system"
+    first = p.split("/")[0]
+    if first == "api" and len(p.split("/")) > 1:
+        first = p.split("/")[1]
+
+    mapping = {
+        "auth": "auth",
+        "chat": "chat",
+        "sessions": "sessions",
+        "providers": "providers",
+        "agents": "agents",
+        "skills": "skills",
+        "memory": "memory",
+        "evolution": "evolution",
+        "hooks": "hooks",
+        "traces": "traces",
+        "ws": "ws",
+    }
+    return mapping.get(first, "system")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -206,11 +233,14 @@ class AgentSystemState:
                 RateLimitHook,
                 ApprovalHook,
             )
+            from core.integration_hooks import SafetyGuardHook, MLflowHook
 
             self._hook_registry = HookRegistry()
             self._hook_registry.register(LoggingHook())
             self._hook_registry.register(RateLimitHook(max_calls_per_minute=60))
             self._hook_registry.register(ApprovalHook())
+            self._hook_registry.register(SafetyGuardHook())
+            self._hook_registry.register(MLflowHook())
         return self._hook_registry
 
     def _get_session_manager(self):
@@ -277,7 +307,7 @@ class AgentSystemState:
             self._bus = MessageBus()
         return self._bus
 
-    def _init_agents(self):
+    async def _init_agents(self):
         """初始化并注册所有工作 Agent"""
         if self._all_agents:
             return  # 已初始化
@@ -318,13 +348,7 @@ class AgentSystemState:
                 logger.error(f"创建 Agent [{agent_id}] 失败: {e}")
 
         # 启动所有 Agent
-        import asyncio
-
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(self._start_agents())
-        else:
-            loop.run_until_complete(self._start_agents())
+        await self._start_agents()
 
     async def _start_agents(self):
         """启动所有 Agent"""
@@ -357,7 +381,7 @@ class AgentSystemState:
                 logger.info("🚀 [initialize_async] 初始化 knowledge_base...")
                 await kb.init()
             logger.info("🚀 [initialize_async] 初始化 agents...")
-            _ = self._init_agents()
+            await self._init_agents()
             self._initialized = True
             logger.info("✅ Multi-Agent 系统初始化完成")
         except Exception as e:
@@ -394,24 +418,58 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
+)
+_cors_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def feature_request_logger(request: Request, call_next):
+    started = time.time()
+    feature = _resolve_feature_from_path(request.url.path)
+    flog = get_feature_logger(feature)
+    request_id = str(uuid.uuid4())[:8]
+
+    flog.info(
+        f"[{request_id}] -> {request.method} {request.url.path} query={dict(request.query_params)}"
+    )
+    try:
+        response = await call_next(request)
+        elapsed_ms = int((time.time() - started) * 1000)
+        flog.info(
+            f"[{request_id}] <- status={response.status_code} elapsed_ms={elapsed_ms}"
+        )
+        return response
+    except Exception as e:
+        elapsed_ms = int((time.time() - started) * 1000)
+        flog.error(
+            f"[{request_id}] !! error={type(e).__name__}: {e} elapsed_ms={elapsed_ms}"
+        )
+        raise
+
 
 app.include_router(skill_router)
 app.include_router(agent_router)
 app.include_router(soul_router)
 app.include_router(evolution_router)
 app.include_router(memory_router)
+
+# API namespace aliases for frontend proxy (/api/*)
+app.include_router(skill_router, prefix="/api")
+app.include_router(agent_router, prefix="/api")
+app.include_router(soul_router, prefix="/api")
+app.include_router(evolution_router, prefix="/api")
+app.include_router(memory_router, prefix="/api")
 app.include_router(auth_router)
 
 from fastapi import WebSocket
@@ -425,6 +483,7 @@ app.add_api_websocket_route("/ws/events", websocket_endpoint)
 
 
 @app.get("/health", response_model=HealthResponse)
+@app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """系统健康检查"""
     try:
@@ -457,12 +516,17 @@ async def health_check():
 
 
 @app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """发送消息并获取回复"""
+    chat_log = get_feature_logger("chat")
     trace_id = str(uuid.uuid4())
     session_id = request.session_id or ""
     logging.info(
         f"🌐 [/chat] 请求开始 | trace_id={trace_id} | session_id={session_id[:8] if session_id else 'new'} | message_len={len(request.message)}"
+    )
+    chat_log.info(
+        f"chat_start trace_id={trace_id} session_id={session_id or 'new'} message_len={len(request.message)}"
     )
     try:
         orch = state._get_orchestrator()
@@ -471,6 +535,7 @@ async def chat(request: ChatRequest):
             raise HTTPException(status_code=503, detail="System not initialized")
 
         logging.info(f"🌐 [/chat] 调用 orchestrator.run() | trace_id={trace_id}")
+        chat_log.info(f"chat_orchestrator_run trace_id={trace_id}")
         result = await orch.run(
             user_input=request.message,
             session_id=request.session_id,
@@ -478,6 +543,9 @@ async def chat(request: ChatRequest):
         session_id = state.session_manager.current_session_id or ""
         logging.info(
             f"🌐 [/chat] ✅ 完成 | trace_id={trace_id} | session_id={session_id[:8]} | response_len={len(result) if result else 0}"
+        )
+        chat_log.info(
+            f"chat_done trace_id={trace_id} session_id={session_id} response_len={len(result) if result else 0}"
         )
         return ChatResponse(
             response=result,
@@ -490,10 +558,12 @@ async def chat(request: ChatRequest):
         logging.error(
             f"🌐 [/chat] ❌ 错误 | trace_id={trace_id} | {type(e).__name__}: {e}"
         )
+        chat_log.error(f"chat_error trace_id={trace_id} error={type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/agents/{agent_id}/chat")
+@app.post("/api/agents/{agent_id}/chat")
 async def chat_with_agent(agent_id: str, request: ChatRequest):
     """
     直接与指定 Agent 聊天（不经过 Orchestrator 调度）
@@ -541,6 +611,7 @@ async def chat_with_agent(agent_id: str, request: ChatRequest):
 
 
 @app.post("/chat/stream")
+@app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest, last_event_id: str = None):
     """
     SSE 流式事件端点 - 实时推送 Agent 执行事件
@@ -550,9 +621,13 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
     - 支持 Last-Event-ID 断线续传
     """
     trace_id = str(uuid.uuid4())
+    chat_log = get_feature_logger("chat")
     session_desc = request.session_id or "new"
     logger.info(
         f"🌐 [/chat/stream] 请求开始 | trace_id={trace_id} | session_id={session_desc[:8]} | message='{request.message[:50]}...'"
+    )
+    chat_log.info(
+        f"chat_stream_start trace_id={trace_id} session_id={session_desc} message_len={len(request.message)}"
     )
 
     HEARTBEAT_INTERVAL = 15
@@ -571,9 +646,15 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     title=request.message[:40]
                 )
                 logger.info(f"🌐 [/chat/stream:{trace_id}] 🆕 创建新会话: {session_id}")
+                chat_log.info(
+                    f"chat_stream_new_session trace_id={trace_id} session_id={session_id}"
+                )
             else:
                 logger.info(
                     f"🌐 [/chat/stream:{trace_id}] ▶️ 恢复会话: {session_id[:8]}"
+                )
+                chat_log.info(
+                    f"chat_stream_resume_session trace_id={trace_id} session_id={session_id}"
                 )
 
             event_queue = asyncio.Queue()
@@ -591,6 +672,9 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                 events_received += 1
                 logger.info(
                     f"🌐 [SSE:{trace_id}] 📤 事件 [{events_received}] type={event_type} id={event_id[:8]}"
+                )
+                chat_log.info(
+                    f"chat_stream_event trace_id={trace_id} event_type={event_type} event_id={event_id[:8]} idx={events_received}"
                 )
                 await event_queue.put((event_id, event))
 
@@ -677,9 +761,18 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
 
             logger.info(f"🌐 [/chat/stream:{trace_id}] ⏳ 等待 orchestrator.run() 完成")
             result = await task
+            response_len = len(result) if result else 0
             logger.info(
-                f"🌐 [/chat/stream:{trace_id}] ✅ 完成 | response_len={len(result) if result else 0}"
+                f"🌐 [/chat/stream:{trace_id}] ✅ 完成 | response_len={response_len}"
             )
+            if response_len == 0:
+                chat_log.error(
+                    f"chat_stream_no_response trace_id={trace_id} provider={state.provider_registry.active_id}"
+                )
+            else:
+                chat_log.info(
+                    f"chat_stream_done trace_id={trace_id} response_len={response_len} provider={state.provider_registry.active_id}"
+                )
             yield {
                 "event": "done",
                 "data": f"Final response: {result[:500]}" if result else "No response",
@@ -692,6 +785,9 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
             tb = traceback.format_exc()
             logger.error(
                 f"🌐 [/chat/stream:{trace_id}] ❌ 异常: {type(e).__name__}: {e}\n{tb}"
+            )
+            chat_log.error(
+                f"chat_stream_error trace_id={trace_id} error={type(e).__name__}: {e} provider={state.provider_registry.active_id}"
             )
             yield {"event": "error", "data": str(e)}
 
@@ -707,6 +803,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
 
 
 @app.get("/chat/history/{session_id}")
+@app.get("/api/chat/history/{session_id}")
 async def get_chat_history(session_id: str):
     """获取会话历史"""
     try:
@@ -727,10 +824,13 @@ async def get_chat_history(session_id: str):
 
 
 @app.get("/sessions", response_model=List[SessionInfo])
+@app.get("/api/sessions", response_model=List[SessionInfo])
 async def list_sessions():
     """列出所有会话"""
+    session_log = get_feature_logger("sessions")
     try:
         sessions = state.session_manager.list_sessions()
+        session_log.info(f"list_sessions total={len(sessions)}")
         return [
             SessionInfo(
                 session_id=s.get("session_id", ""),
@@ -744,40 +844,60 @@ async def list_sessions():
         ]
     except Exception as e:
         logger.error(f"List sessions error: {e}")
+        session_log.error(f"list_sessions_error error={type(e).__name__}: {e}")
         return []
 
 
 @app.post("/sessions")
+@app.post("/api/sessions")
 async def create_session(title: str = "新会话"):
     """创建新会话"""
+    session_log = get_feature_logger("sessions")
     try:
         session_id = state.session_manager.new_session(title=title[:50])
+        session_log.info(f"create_session session_id={session_id} title={title[:50]}")
         return {"session_id": session_id, "title": title}
     except Exception as e:
+        session_log.error(
+            f"create_session_error title={title[:50]} error={type(e).__name__}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/sessions/{session_id}")
+@app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
     """获取会话详情"""
+    session_log = get_feature_logger("sessions")
     try:
         session = state.session_manager.get_session(session_id)
         if not session:
+            session_log.warning(f"get_session_not_found session_id={session_id}")
             raise HTTPException(status_code=404, detail="Session not found")
+        session_log.info(f"get_session session_id={session_id}")
         return session
     except HTTPException:
         raise
     except Exception as e:
+        session_log.error(
+            f"get_session_error session_id={session_id} error={type(e).__name__}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/sessions/{session_id}")
+@app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """删除会话"""
+    session_log = get_feature_logger("sessions")
     try:
         state.session_manager.delete_session(session_id)
+        session_log.info(f"delete_session session_id={session_id}")
         return {"success": True}
     except Exception as e:
+        session_log.error(
+            f"delete_session_error session_id={session_id} error={type(e).__name__}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -787,11 +907,16 @@ async def delete_session(session_id: str):
 
 
 @app.get("/providers", response_model=List[ProviderInfo])
+@app.get("/api/providers", response_model=List[ProviderInfo])
 async def list_providers():
     """列出所有 Provider"""
+    provider_log = get_feature_logger("providers")
     try:
         pr = state.provider_registry
         providers = pr.list_all()
+        provider_log.info(
+            f"list_providers total={len(providers)} active={pr.active_id}"
+        )
         result = []
         for p in providers:
             try:
@@ -811,10 +936,12 @@ async def list_providers():
         return result
     except Exception as e:
         logger.error(f"List providers error: {e}")
+        provider_log.error(f"list_providers_error error={type(e).__name__}: {e}")
         return []
 
 
 @app.post("/providers/{provider_id}/use")
+@app.post("/api/providers/{provider_id}/use")
 async def use_provider(provider_id: str):
     """切换 Provider"""
     try:
@@ -827,6 +954,7 @@ async def use_provider(provider_id: str):
 
 
 @app.get("/providers/current")
+@app.get("/api/providers/current")
 async def get_current_provider():
     """获取当前 Provider"""
     try:
@@ -853,6 +981,7 @@ class AddProviderRequest(BaseModel):
 
 
 @app.post("/providers")
+@app.post("/api/providers")
 async def add_provider(request: AddProviderRequest):
     """添加新 Provider"""
     try:
@@ -899,6 +1028,7 @@ async def add_provider(request: AddProviderRequest):
 
 
 @app.delete("/providers/{provider_id}")
+@app.delete("/api/providers/{provider_id}")
 async def delete_provider(provider_id: str):
     """删除 Provider"""
     try:
@@ -920,6 +1050,7 @@ async def delete_provider(provider_id: str):
 
 
 @app.get("/skills", response_model=List[SkillInfo])
+@app.get("/api/skills", response_model=List[SkillInfo])
 async def list_skills():
     """列出所有技能"""
     try:
@@ -941,6 +1072,7 @@ async def list_skills():
 
 
 @app.get("/skills/{skill_id}")
+@app.get("/api/skills/{skill_id}")
 async def get_skill(skill_id: str):
     """获取技能详情"""
     try:
@@ -955,6 +1087,7 @@ async def get_skill(skill_id: str):
 
 
 @app.post("/skills/{skill_id}/enable")
+@app.post("/api/skills/{skill_id}/enable")
 async def enable_skill(skill_id: str):
     """启用技能"""
     try:
@@ -965,6 +1098,7 @@ async def enable_skill(skill_id: str):
 
 
 @app.post("/skills/{skill_id}/disable")
+@app.post("/api/skills/{skill_id}/disable")
 async def disable_skill(skill_id: str):
     """禁用技能"""
     try:
@@ -974,33 +1108,13 @@ async def disable_skill(skill_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/skills/search")
-async def search_skills(q: str = ""):
-    """搜索技能"""
-    try:
-        skills = state.skill_registry.search(query=q)
-        return [
-            SkillInfo(
-                skill_id=s["skill_id"],
-                name=s["name"],
-                description=s.get("description", ""),
-                version=s.get("version", "0.02"),
-                tags=[],
-                enabled=bool(s.get("enabled", 1)),
-            )
-            for s in skills
-        ]
-    except Exception as e:
-        logger.error(f"Search skills error: {e}")
-        return []
-
-
 # ═══════════════════════════════════════════════════════════════════
 # 记忆管理
 # ═══════════════════════════════════════════════════════════════════
 
 
 @app.get("/memory/stats")
+@app.get("/api/memory/stats")
 async def get_memory_stats():
     """获取记忆统计"""
     try:
@@ -1014,6 +1128,7 @@ async def get_memory_stats():
 
 
 @app.delete("/memory/{memory_id}")
+@app.delete("/api/memory/{memory_id}")
 async def delete_memory(memory_id: str):
     """删除记忆"""
     try:
@@ -1029,6 +1144,7 @@ async def delete_memory(memory_id: str):
 
 
 @app.get("/hooks")
+@app.get("/api/hooks")
 async def list_hooks():
     """列出所有 Hook"""
     try:
@@ -1036,6 +1152,26 @@ async def list_hooks():
     except Exception as e:
         logger.error(f"List hooks error: {e}")
         return []
+
+
+@app.get("/traces")
+@app.get("/api/traces")
+async def list_traces(limit: int = 20):
+    """列出最近的 trace 运行记录（MLflow）"""
+    traces_log = get_feature_logger("traces")
+    try:
+        from integrations.mlflow_trace import get_trace_tracker
+
+        tracker = get_trace_tracker()
+        traces = tracker.list_recent_traces(limit=limit)
+        traces_log.info(f"list_traces limit={limit} returned={len(traces)}")
+        return {"success": True, "traces": traces, "total": len(traces)}
+    except Exception as e:
+        logger.error(f"List traces error: {e}")
+        traces_log.error(
+            f"list_traces_error limit={limit} error={type(e).__name__}: {e}"
+        )
+        return {"success": True, "traces": [], "total": 0}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1174,36 +1310,29 @@ async def get_session_results(session_id: str):
         return {"error": str(e)}
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 前端静态文件
-# ═══════════════════════════════════════════════════════════════════
-
-web_path = Path(__file__).parent.parent / "web"
-
-
 @app.get("/")
 async def root():
-    return FileResponse(str(web_path / "index.html"))
+    return RedirectResponse(url="http://localhost:5173/", status_code=307)
 
 
 @app.get("/agent.html")
 async def agent_page():
-    return FileResponse(str(web_path / "agent.html"))
+    return RedirectResponse(url="http://localhost:5173/", status_code=307)
 
 
 @app.get("/skills.html")
 async def skills_page():
-    return FileResponse(str(web_path / "skills.html"))
+    return RedirectResponse(url="http://localhost:5173/skills", status_code=307)
 
 
 @app.get("/evolution.html")
 async def evolution_page():
-    return FileResponse(str(web_path / "evolution.html"))
+    return RedirectResponse(url="http://localhost:5173/approvals", status_code=307)
 
 
 @app.get("/memory.html")
 async def memory_page():
-    return FileResponse(str(web_path / "memory.html"))
+    return RedirectResponse(url="http://localhost:5173/knowledge", status_code=307)
 
 
 if __name__ == "__main__":

@@ -11,8 +11,10 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.routing import Route
+from utils.feature_logs import get_feature_logger
 
 logger = logging.getLogger(__name__)
+ws_log = get_feature_logger("ws")
 
 
 class ConnectionManager:
@@ -28,6 +30,7 @@ class ConnectionManager:
         async with self._lock:
             self.active_connections.append(websocket)
         logger.info(f"[WS] Client connected. Total: {len(self.active_connections)}")
+        ws_log.info(f"client_connected total={len(self.active_connections)}")
 
     async def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection"""
@@ -35,6 +38,7 @@ class ConnectionManager:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
         logger.info(f"[WS] Client disconnected. Total: {len(self.active_connections)}")
+        ws_log.info(f"client_disconnected total={len(self.active_connections)}")
 
     async def broadcast(self, message: Dict[str, Any]):
         """Broadcast a message to all connected clients"""
@@ -45,6 +49,7 @@ class ConnectionManager:
                     await connection.send_json(message)
                 except Exception as e:
                     logger.warning(f"[WS] Failed to send to client: {e}")
+                    ws_log.warning(f"send_failed error={type(e).__name__}: {e}")
                     disconnected.append(connection)
 
             # Clean up disconnected clients
@@ -178,6 +183,7 @@ async def websocket_endpoint(websocket: WebSocket):
     Clients connect to /ws/events to receive system events.
     """
     await manager.connect(websocket)
+    ws_log.info("websocket_endpoint_opened")
     try:
         while True:
             # Keep connection alive, handle incoming messages
@@ -186,9 +192,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Handle ping/pong or other client messages
                 if data == "ping":
                     await websocket.send_text("pong")
+                    ws_log.info("ping_pong")
             except WebSocketDisconnect:
                 break
     except Exception as e:
         logger.error(f"[WS] Connection error: {e}")
+        ws_log.error(f"connection_error error={type(e).__name__}: {e}")
     finally:
         await manager.disconnect(websocket)
+        ws_log.info("websocket_endpoint_closed")

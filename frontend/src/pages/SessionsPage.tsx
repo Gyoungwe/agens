@@ -3,7 +3,7 @@ import { chatApi } from '@/api'
 import { Header } from '@/components/layout'
 import { ConfirmDialog } from '@/components/shared'
 import { useState } from 'react'
-import { MessageSquare, Trash2, Clock } from 'lucide-react'
+import { MessageSquare, Trash2, Clock, ScrollText } from 'lucide-react'
 
 export function SessionsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -31,15 +31,35 @@ export function SessionsPage() {
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center">
+                <ScrollText className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Chat history and conversations
+                </p>
+                <p className="text-xs text-muted-foreground/60 font-mono">
+                  {sessionsData?.length || 0} sessions
+                </p>
+              </div>
+            </div>
+          </div>
+
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="loading-spinner" />
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : sessionsData?.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <div className="text-4xl mb-4">💬</div>
-              <h3 className="text-lg font-medium mb-2">No sessions</h3>
-              <p className="text-sm">Start a new chat to create a session</p>
+            <div className="text-center py-20">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center">
+                <MessageSquare className="w-10 h-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No Sessions Yet</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Start a new conversation to create your first session
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -52,26 +72,26 @@ export function SessionsPage() {
               }) => (
                 <div
                   key={session.session_id}
-                  className="bg-card rounded-xl border border-border p-4 hover:border-primary/50 transition-colors"
+                  className="glass-card rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                      <MessageSquare className="w-5 h-5 text-muted-foreground" />
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center flex-shrink-0">
+                      <MessageSquare className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">
+                      <h3 className="font-semibold truncate text-foreground">
                         {session.title || 'New Conversation'}
                       </h3>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1 font-mono">
                           <Clock className="w-3 h-3" />
                           {new Date(session.created_at).toLocaleString()}
                         </span>
-                        <span>{session.message_count} messages</span>
+                        <span className="font-mono">{session.message_count} messages</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs ${
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             session.status === 'active'
-                              ? 'bg-green-500/10 text-green-600'
+                              ? 'bg-success/10 text-success'
                               : 'bg-muted text-muted-foreground'
                           }`}
                         >
@@ -81,7 +101,7 @@ export function SessionsPage() {
                     </div>
                     <button
                       onClick={() => setDeleteConfirm(session.session_id)}
-                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

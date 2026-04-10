@@ -7,13 +7,14 @@ import time
 import uuid
 import yaml
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Set
+from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
 from core.events import EventEnvelope, AgentEvent, AgentEventType
 from bus.message_bus import MessageBus, DeduplicationCache
 from utils.retry import retry_with_backoff, RetryError
+from integrations.mlflow_trace import get_trace_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class Orchestrator(BaseAgent):
         self._correlation_ids: Dict[str, str] = {}
         self._PENDING_TTL = 600
         self._cleanup_task: Optional[asyncio.Task] = None
+        self._trace_tracker = get_trace_tracker()
         self._start_cleanup_task()
 
     def create_event_queue(self, trace_id: str) -> asyncio.Queue:
@@ -216,42 +218,69 @@ class Orchestrator(BaseAgent):
         trace_id = self._current_trace_id
         logger.info(f"🚀 [run] trace_id={trace_id} 开始执行")
 
-        # 3. 按计划分发子任务
-        await self._dispatch(plan, user_input, context_messages, trace_id)
-
-        # 3. 等待所有结果（最多 120 秒）
-        results = await self._wait_for_results(trace_id, timeout=120)
-
-        # 4. 汇总结果（带上下文）
-        final = await self._synthesize(
-            user_input, results, context_messages=context_messages
+        trace_start = time.time()
+        self._trace_tracker.start_trace(
+            trace_id=trace_id,
+            user_input=user_input,
+            session_id=self._current_session_id,
+            plan=plan,
         )
-        logger.info(f"✅ 任务完成, trace_id={trace_id}")
 
-        logger.info(f"🚀 [run] 准备发射 final_response, trace_id={trace_id}")
-        await self._emit_event(
-            EventEnvelope.final_response(
-                agent_id=self.agent_id,
-                trace_id=trace_id,
-                response=final,
-                session_id=self._current_session_id,
+        try:
+            # 3. 按计划分发子任务
+            await self._dispatch(plan, user_input, context_messages, trace_id)
+
+            # 4. 等待所有结果（最多 120 秒）
+            results = await self._wait_for_results(trace_id, timeout=120)
+
+            # 5. 汇总结果（带上下文）
+            final = await self._synthesize(
+                user_input, results, context_messages=context_messages
             )
-        )
-        logger.info(f"🚀 [run] final_response 已发射, trace_id={trace_id}")
+            logger.info(f"✅ 任务完成, trace_id={trace_id}")
 
-        if sm:
-            await sm.add_assistant_message(final)
-            for agent_id, result in results.items():
-                sm.store.save_result(
-                    session_id=sm.current_session_id,
+            logger.info(f"🚀 [run] 准备发射 final_response, trace_id={trace_id}")
+            await self._emit_event(
+                EventEnvelope.final_response(
+                    agent_id=self.agent_id,
                     trace_id=trace_id,
-                    agent_id=agent_id,
-                    result=getattr(result, "output", result),
+                    response=final,
+                    session_id=self._current_session_id,
                 )
-            if self.context_compressor:
-                await sm.add_message_async("assistant", final)
+            )
+            logger.info(f"🚀 [run] final_response 已发射, trace_id={trace_id}")
 
-        return final
+            if sm:
+                await sm.add_assistant_message(final)
+                for agent_id, result in results.items():
+                    sm.store.save_result(
+                        session_id=sm.current_session_id,
+                        trace_id=trace_id,
+                        agent_id=agent_id,
+                        result=getattr(result, "output", result),
+                    )
+                if self.context_compressor:
+                    await sm.add_message_async("assistant", final)
+
+            self._trace_tracker.finish_trace(
+                trace_id=trace_id,
+                status="success",
+                elapsed_ms=int((time.time() - trace_start) * 1000),
+                results_count=len(results),
+                final_length=len(final or ""),
+            )
+
+            return final
+        except Exception as e:
+            self._trace_tracker.finish_trace(
+                trace_id=trace_id,
+                status="failed",
+                elapsed_ms=int((time.time() - trace_start) * 1000),
+                results_count=0,
+                final_length=0,
+                error=f"{type(e).__name__}: {e}",
+            )
+            raise
 
     async def run_single_agent(
         self,
@@ -562,6 +591,7 @@ class Orchestrator(BaseAgent):
                 continue
 
             logger.info(f"📤 分发任务 → [{recipient}]: {step['instruction'][:50]}...")
+            self._trace_tracker.log_dispatch(trace_id=trace_id, agent_id=recipient)
             task = self._send_task_with_retry(
                 recipient=recipient,
                 trace_id=trace_id,
@@ -630,6 +660,12 @@ class Orchestrator(BaseAgent):
 
         self._pending[trace_id][message.sender] = result
         logger.info(f"📩 收到 [{message.sender}] 的结果 (trace: {trace_id[:8]}...)")
+        success = message.type == "result"
+        self._trace_tracker.log_agent_result(
+            trace_id=trace_id,
+            agent_id=message.sender,
+            success=success,
+        )
 
         if all(v is not None for v in self._pending[trace_id].values()):
             self._events[trace_id].set()

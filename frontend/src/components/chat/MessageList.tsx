@@ -1,4 +1,5 @@
 import { MessageItem } from './MessageItem'
+import { Sparkles } from 'lucide-react'
 import type { Message } from '@/types'
 
 interface MessageListProps {
@@ -9,29 +10,38 @@ interface MessageListProps {
 export function MessageList({ messages, isStreaming }: MessageListProps) {
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <div className="text-4xl mb-4">🤖</div>
-          <h3 className="text-lg font-medium mb-2">Start a conversation</h3>
-          <p className="text-sm">Send a message to begin chatting with the agents</p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center animate-float">
+            <Sparkles className="w-10 h-10 text-primary" />
+          </div>
+          <h3 className="text-xl font-semibold text-foreground mb-2">Start a Conversation</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Send a message to begin chatting with the multi-agent system. 
+            The agents will collaborate to help you accomplish your tasks.
+          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {messages.map((message) => (
         <MessageItem key={message.id} message={message} />
       ))}
       {isStreaming && (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <div className="loading-dots">
-            <div className="loading-dot" />
-            <div className="loading-dot" />
-            <div className="loading-dot" />
+        <div className="flex items-start gap-3 animate-slide-up">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-cta flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="text-sm">Agent is thinking...</span>
+          <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-lg border border-border/50">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-primary animate-typing" />
+              <div className="w-2 h-2 rounded-full bg-primary animate-typing [animation-delay:0.2s]" />
+              <div className="w-2 h-2 rounded-full bg-primary animate-typing [animation-delay:0.4s]" />
+            </div>
+          </div>
         </div>
       )}
     </div>

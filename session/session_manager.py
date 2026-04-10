@@ -104,6 +104,10 @@ class SessionManager:
     def get_session(self, session_id: str) -> Optional[dict]:
         return self.store.get_session(session_id)
 
+    def delete_session(self, session_id: str):
+        """删除会话"""
+        return self.store.delete_session(session_id)
+
     def _ensure_session(self):
         if not self._current_session_id:
             self.new_session()

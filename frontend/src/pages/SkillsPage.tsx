@@ -4,7 +4,7 @@ import { skillsApi } from '@/api'
 import { Header } from '@/components/layout'
 import { SkillCard } from '@/components/skills/SkillCard'
 import { InstallDialog } from '@/components/skills/InstallDialog'
-import { Plus, RefreshCw } from 'lucide-react'
+import { RefreshCw, Wrench, Sparkles } from 'lucide-react'
 import type { Skill } from '@/types'
 
 export function SkillsPage() {
@@ -32,37 +32,58 @@ export function SkillsPage() {
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <p className="text-muted-foreground">
-              Manage agent skills and capabilities
-            </p>
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center">
+                <Wrench className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Manage agent skills and capabilities
+                </p>
+                <p className="text-xs text-muted-foreground/60 font-mono">
+                  {skillsData?.length || 0} skills installed
+                </p>
+              </div>
+            </div>
             <div className="flex gap-3">
               <button
                 onClick={() => refetch()}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-secondary transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border border-border/50 bg-card hover:bg-secondary transition-all duration-200 cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </button>
               <button
                 onClick={() => setInstallDialogOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/25 hover:scale-105 transition-all duration-200 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <Sparkles className="w-4 h-4" />
                 Install Skill
               </button>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="loading-spinner" />
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : skillsData?.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <div className="text-4xl mb-4">🛠️</div>
-              <h3 className="text-lg font-medium mb-2">No skills installed</h3>
-              <p className="text-sm">Install a skill to get started</p>
+            <div className="text-center py-20">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary/20 to-cta/20 flex items-center justify-center">
+                <Wrench className="w-10 h-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No Skills Installed</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Install a skill to enhance your agents capabilities
+              </p>
+              <button
+                onClick={() => setInstallDialogOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/25 transition-all duration-200 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                Install Your First Skill
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
