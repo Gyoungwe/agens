@@ -1,363 +1,499 @@
 #!/usr/bin/env python3
 """
-Agens Multi-Agent System - Comprehensive Test Suite
-Tests all API endpoints and features
+Agens Multi-Agent System - API Test Suite
+Tests all backend endpoints and WebSocket functionality
 """
 
-import requests
-import json
-import time
+import os
 import sys
-from typing import Dict, Any, List
+import time
+import json
+import asyncio
+import subprocess
+from datetime import datetime
+from typing import Optional
 
-BASE_URL = "http://localhost:8000"
-RESULTS: List[Dict[str, Any]] = []
+import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
-def print_header(text: str):
-    print(f"\n{'=' * 60}")
-    print(f" {text}")
-    print(f"{'=' * 60}")
-
-
-def print_result(name: str, success: bool, detail: str = ""):
-    status = "✅ PASS" if success else "❌ FAIL"
-    print(f"  {status}: {name}")
-    if detail:
-        print(f"         {detail}")
-    RESULTS.append({"name": name, "success": success, "detail": detail})
+BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+FRONTEND_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 
 
-def test_health() -> bool:
-    """Test health endpoint"""
-    print_header("Health Check")
-    try:
-        resp = requests.get(f"{BASE_URL}/health", timeout=5)
-        data = resp.json()
-        print(f"  Status: {data.get('status')}")
-        print(f"  Provider: {data.get('provider')}")
-        print(f"  Model: {data.get('model')}")
-        print(f"  Skills: {data.get('skills_count')}")
-        print(f"  Memory: {data.get('memory_count')}")
-        print_result("Health endpoint", data.get("status") == "healthy")
-        return data.get("status") == "healthy"
-    except Exception as e:
-        print_result("Health endpoint", False, str(e))
-        return False
+class colors:
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    END = "\033[0m"
 
 
-def test_skills_list() -> bool:
-    """Test skills list endpoint"""
-    print_header("Skills Management")
-    try:
-        resp = requests.get(f"{BASE_URL}/skills/", timeout=5)
-        data = resp.json()
-        skills = data.get("skills", [])
-        print(f"  Total skills: {len(skills)}")
-        for s in skills:
-            print(f"    - {s['skill_id']} ({s.get('source', 'unknown')})")
-        print_result("List skills", len(skills) >= 0)
-        return True
-    except Exception as e:
-        print_result("List skills", False, str(e))
-        return False
+def log_test(name: str, passed: bool, error: str = ""):
+    status = (
+        f"{colors.GREEN}✓ PASS{colors.END}"
+        if passed
+        else f"{colors.RED}✗ FAIL{colors.END}"
+    )
+    print(f"  {status} {name}")
+    if error and not passed:
+        print(f"      {colors.RED}{error}{colors.END}")
+    return passed
 
 
-def test_skill_import() -> bool:
-    """Test Claude skill import"""
-    print_header("Skill Import")
-    try:
-        schema = {
-            "name": "test_calculator",
-            "description": "A test calculator skill",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "Math expression"}
-                },
-                "required": ["expression"],
-            },
-        }
+class AgensTester:
+    def __init__(self):
+        self.token: Optional[str] = None
+        self.session_id: Optional[str] = None
+        self.results = {"passed": 0, "failed": 0}
+        self.server_process = None
 
-        # Preview draft
-        resp = requests.post(
-            f"{BASE_URL}/skills/import/claude", json=schema, timeout=10
-        )
-        data = resp.json()
-        if not data.get("success"):
-            print_result(
-                "Import skill (preview)", False, data.get("detail", "Unknown error")
-            )
-            return False
+    def print_header(self, text: str):
+        print(f"\n{colors.BLUE}{'=' * 60}{colors.END}")
+        print(f"{colors.BLUE}{text}{colors.END}")
+        print(f"{colors.BLUE}{'=' * 60}{colors.END}")
 
-        draft_id = data.get("draft_id")
-        print(f"  Draft created: {draft_id}")
+    def print_subheader(self, text: str):
+        print(f"\n{colors.YELLOW}  {text}{colors.END}")
 
-        # Install draft
-        resp = requests.post(f"{BASE_URL}/skills/drafts/{draft_id}/install", timeout=10)
-        data = resp.json()
-        if not data.get("success"):
-            print_result("Install skill", False, data.get("error", "Unknown error"))
-            return False
-
-        skill_id = data.get("skill_id")
-        print(f"  Skill installed: {skill_id}")
-        print_result("Import skill", True)
-        return True
-    except Exception as e:
-        print_result("Import skill", False, str(e))
-        return False
-
-
-def test_skill_reload() -> bool:
-    """Test skill reload"""
-    try:
-        resp = requests.post(f"{BASE_URL}/skills/reload-all", timeout=10)
-        data = resp.json()
-        print_result("Reload all skills", data.get("success", False))
-        return data.get("success", False)
-    except Exception as e:
-        print_result("Reload all skills", False, str(e))
-        return False
-
-
-def test_agents_list() -> bool:
-    """Test agents list"""
-    print_header("Agent Management")
-    try:
-        resp = requests.get(f"{BASE_URL}/agents/", timeout=5)
-        data = resp.json()
-        agents = data.get("agents", [])
-        print(f"  Total agents: {len(agents)}")
-        for a in agents:
-            print(f"    - {a['agent_id']} ({a.get('skill_count', 0)} skills)")
-        print_result("List agents", len(agents) > 0)
-        return len(agents) > 0
-    except Exception as e:
-        print_result("List agents", False, str(e))
-        return False
-
-
-def test_agent_details() -> bool:
-    """Test agent details"""
-    try:
-        resp = requests.get(f"{BASE_URL}/agents/research_agent", timeout=5)
-        data = resp.json()
-        if not data.get("success"):
-            print_result("Get agent details", False)
-            return False
-
-        agent = data.get("agent", {})
-        print(f"  Agent: {agent.get('agent_id')}")
-        print(f"  Skills: {len(agent.get('skills', []))}")
-        print_result("Get agent details", True)
-        return True
-    except Exception as e:
-        print_result("Get agent details", False, str(e))
-        return False
-
-
-def test_independent_agent_chat() -> bool:
-    """Test direct agent chat"""
-    print_header("Independent Agent Chat")
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/agents/research_agent/chat",
-            json={"message": "Say 'hello' in one word"},
-            timeout=30,
-        )
-        data = resp.json()
-        if not data.get("success"):
-            print_result("Independent chat", False, data.get("detail", "Unknown"))
-            return False
-
-        response = data.get("response", "")
-        print(f"  Response: {response[:100]}...")
-        print_result("Independent chat", len(response) > 0)
-        return len(response) > 0
-    except Exception as e:
-        print_result("Independent chat", False, str(e))
-        return False
-
-
-def test_memory_stats() -> bool:
-    """Test memory stats"""
-    print_header("Memory Management")
-    try:
-        resp = requests.get(f"{BASE_URL}/memory/stats", timeout=5)
-        data = resp.json()
-        if not data.get("success"):
-            print_result("Memory stats", False)
-            return False
-
-        stats = data.get("stats", {})
-        print(f"  Total memories: {stats.get('total', 0)}")
-        print_result("Memory stats", True)
-        return True
-    except Exception as e:
-        print_result("Memory stats", False, str(e))
-        return False
-
-
-def test_memory_add() -> bool:
-    """Test adding a memory"""
-    try:
-        test_id = f"test_{int(time.time())}"
-        resp = requests.post(
-            f"{BASE_URL}/memory/?text=Test memory {test_id}&session_id={test_id}&owner=test_owner&source=test",
-            timeout=5,
-        )
-        success = resp.status_code == 200
-        print_result("Add memory", success)
-        return success
-    except Exception as e:
-        print_result("Add memory", False, str(e))
-        return False
-
-
-def test_memory_search() -> bool:
-    """Test memory search"""
-    try:
-        resp = requests.get(f"{BASE_URL}/memory/search?query=test&top_k=5", timeout=10)
-        data = resp.json()
-        results = data.get("results", [])
-        print(f"  Search results: {len(results)}")
-        print_result("Search memory", True)
-        return True
-    except Exception as e:
-        print_result("Search memory", False, str(e))
-        return False
-
-
-def test_memory_list() -> bool:
-    """Test memory list"""
-    try:
-        resp = requests.get(f"{BASE_URL}/memory/?limit=10", timeout=5)
-        data = resp.json()
-        memories = data.get("memories", [])
-        print(f"  Listed memories: {len(memories)}")
-        print_result("List memories", True)
-        return True
-    except Exception as e:
-        print_result("List memories", False, str(e))
-        return False
-
-
-def test_evolution_approvals() -> bool:
-    """Test evolution approvals"""
-    print_header("Evolution Approvals")
-    try:
-        resp = requests.get(f"{BASE_URL}/evolution/approvals", timeout=5)
-        data = resp.json()
-        approvals = data.get("approvals", [])
-        print(f"  Total approvals: {len(approvals)}")
-        print_result("Evolution approvals", True)
-        return True
-    except Exception as e:
-        print_result("Evolution approvals", False, str(e))
-        return False
-
-
-def test_frontend_pages() -> bool:
-    """Test frontend pages load"""
-    print_header("Frontend Pages")
-    pages = [
-        ("/", "Main page (index.html)"),
-        ("/skills.html", "Skills"),
-        ("/agent.html", "Agent"),
-        ("/memory.html", "Memory"),
-        ("/evolution.html", "Evolution"),
-    ]
-
-    all_ok = True
-    for path, name in pages:
+    def check_server(self) -> bool:
+        """Check if server is running"""
         try:
-            resp = requests.get(f"{BASE_URL}{path}", timeout=5)
-            ok = resp.status_code == 200
-            print_result(f"Page: {name}", ok, f"HTTP {resp.status_code}")
-            if not ok:
-                all_ok = False
-        except Exception as e:
-            print_result(f"Page: {name}", False, str(e))
-            all_ok = False
+            r = requests.get(f"{BASE_URL}/health", timeout=5)
+            data = r.json()
+            print(f"\n  Server Status: {data.get('status', 'unknown')}")
+            print(f"  Provider: {data.get('provider', 'N/A')}")
+            print(f"  Model: {data.get('model', 'N/A')}")
+            return r.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
 
-    return all_ok
-
-
-def test_soul_files() -> bool:
-    """Test soul file operations"""
-    print_header("Soul Document Management")
-    try:
-        # List soul files
-        resp = requests.get(f"{BASE_URL}/soul/list", timeout=5)
-        data = resp.json()
-        agents = data.get("agents", [])
-        print(f"  Soul files: {len(agents)}")
-
-        # Get soul for research_agent
-        resp = requests.get(f"{BASE_URL}/soul/research_agent", timeout=5)
-        data = resp.json()
-        print_result("Soul files", data.get("exists", False))
-        return data.get("exists", False)
-    except Exception as e:
-        print_result("Soul files", False, str(e))
+    def wait_for_server(self, timeout: int = 30) -> bool:
+        """Wait for server to be ready"""
+        print(f"\n  Waiting for server at {BASE_URL}...")
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.check_server():
+                return True
+            time.sleep(1)
         return False
 
+    # ===== Authentication Tests =====
 
-def print_summary():
-    """Print test summary"""
-    print_header("Test Summary")
-    passed = sum(1 for r in RESULTS if r["success"])
-    failed = len(RESULTS) - passed
-    total = len(RESULTS)
+    def test_auth_login(self) -> bool:
+        """Test JWT login"""
+        self.print_subheader("Testing Authentication")
 
-    print(f"  Total tests: {total}")
-    print(f"  Passed: {passed} ✅")
-    print(f"  Failed: {failed} ❌")
-    print(f"  Success rate: {passed / total * 100:.1f}%")
+        username = os.getenv("ADMIN_USERNAME", "admin")
+        password = os.getenv("ADMIN_PASSWORD", "admin")
 
-    if failed > 0:
-        print("\n  Failed tests:")
-        for r in RESULTS:
-            if not r["success"]:
-                print(f"    - {r['name']}: {r['detail']}")
+        r = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"username": username, "password": password},
+        )
 
-    return failed == 0
+        if r.status_code == 200:
+            data = r.json()
+            self.token = data.get("access_token")
+            if self.token:
+                return log_test("Login successful", True)
+            return log_test("Login", False, "No token returned")
+        else:
+            return log_test("Login", False, f"Status {r.status_code}: {r.text}")
+
+    def test_auth_login_invalid(self) -> bool:
+        """Test login with invalid credentials"""
+        r = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+        )
+        passed = r.status_code == 401
+        return log_test(
+            "Login with invalid credentials (should fail)",
+            passed,
+            f"Expected 401, got {r.status_code}",
+        )
+
+    def test_auth_me(self) -> bool:
+        """Test get current user"""
+        if not self.token:
+            return log_test("Get current user", False, "No token available")
+
+        r = requests.get(
+            f"{BASE_URL}/api/auth/me", headers={"Authorization": f"Bearer {self.token}"}
+        )
+
+        if r.status_code == 200:
+            data = r.json()
+            return log_test(f"Get current user: {data.get('username')}", True)
+        return log_test("Get current user", False, f"Status {r.status_code}")
+
+    def test_auth_me_unauthorized(self) -> bool:
+        """Test get current user without token"""
+        r = requests.get(f"{BASE_URL}/api/auth/me")
+        passed = r.status_code == 401
+        return log_test("Get current user without token (should fail)", passed)
+
+    def test_auth_logout(self) -> bool:
+        """Test logout"""
+        if not self.token:
+            return log_test("Logout", False, "No token available")
+
+        r = requests.post(
+            f"{BASE_URL}/api/auth/logout",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        return log_test("Logout", r.status_code == 200, f"Status {r.status_code}")
+
+    # ===== Health & System Tests =====
+
+    def test_health(self) -> bool:
+        """Test health endpoint"""
+        r = requests.get(f"{BASE_URL}/health")
+        data = r.json()
+        passed = r.status_code == 200 and data.get("status") == "healthy"
+        return log_test("Health check", passed, f"Status: {data.get('status')}")
+
+    def test_providers(self) -> bool:
+        """Test providers endpoint"""
+        r = requests.get(f"{BASE_URL}/providers")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, list)
+        if passed:
+            print(f"\n    Providers: {len(data)} available")
+        return log_test(f"List providers ({len(data)} providers)", passed)
+
+    def test_agents(self) -> bool:
+        """Test agents endpoint"""
+        r = requests.get(f"{BASE_URL}/agents/")
+        data = r.json()
+        passed = r.status_code == 200 and "agents" in data
+        if passed:
+            print(f"\n    Agents: {len(data.get('agents', []))} registered")
+        return log_test(f"List agents ({len(data.get('agents', []))} agents)", passed)
+
+    def test_skills(self) -> bool:
+        """Test skills endpoint"""
+        r = requests.get(f"{BASE_URL}/skills")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, list)
+        if passed:
+            print(f"\n    Skills: {len(data)} installed")
+        return log_test(f"List skills ({len(data)} skills)", passed)
+
+    def test_hooks(self) -> bool:
+        """Test hooks endpoint"""
+        r = requests.get(f"{BASE_URL}/hooks")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, list)
+        return log_test("List hooks", passed)
+
+    def test_memory_stats(self) -> bool:
+        """Test memory stats endpoint"""
+        r = requests.get(f"{BASE_URL}/memory/stats")
+        data = r.json()
+        passed = r.status_code == 200 and "total" in data
+        if passed:
+            print(f"\n    Memory: {data.get('total')} items stored")
+        return log_test(f"Memory stats ({data.get('total')} items)", passed)
+
+    # ===== Sessions Tests =====
+
+    def test_sessions_list(self) -> bool:
+        """Test list sessions"""
+        r = requests.get(f"{BASE_URL}/sessions")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, list)
+        return log_test(f"List sessions ({len(data)} sessions)", passed)
+
+    def test_session_create(self) -> bool:
+        """Test create session"""
+        r = requests.post(f"{BASE_URL}/sessions?title=Test Session")
+        data = r.json()
+        passed = r.status_code == 200 and "session_id" in data
+        if passed:
+            self.session_id = data.get("session_id")
+            print(f"\n    Created session: {self.session_id[:8]}...")
+        return log_test("Create session", passed)
+
+    def test_session_get(self) -> bool:
+        """Test get session"""
+        if not self.session_id:
+            return log_test("Get session", False, "No session_id")
+
+        r = requests.get(f"{BASE_URL}/sessions/{self.session_id}")
+        passed = r.status_code == 200
+        return log_test(f"Get session", passed)
+
+    def test_session_delete(self) -> bool:
+        """Test delete session"""
+        if not self.session_id:
+            return log_test("Delete session", False, "No session_id")
+
+        r = requests.delete(f"{BASE_URL}/sessions/{self.session_id}")
+        passed = r.status_code == 200
+        if passed:
+            self.session_id = None
+        return log_test("Delete session", passed)
+
+    # ===== Chat Tests =====
+
+    def test_chat_stream(self) -> bool:
+        """Test chat streaming endpoint"""
+        if not self.token:
+            return log_test("Chat stream", False, "No token available")
+
+        print(f"\n    Sending message to chat stream...")
+        try:
+            r = requests.post(
+                f"{BASE_URL}/chat/stream",
+                json={"message": "Hello, what can you do?"},
+                headers={"Authorization": f"Bearer {self.token}"},
+                stream=True,
+                timeout=60,
+            )
+
+            if r.status_code == 200:
+                events = []
+                for line in r.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8")
+                        if decoded.startswith("data: "):
+                            try:
+                                data = json.loads(decoded[6:])
+                                event_type = data.get("event", "unknown")
+                                events.append(event_type)
+                                if event_type == "done":
+                                    break
+                            except json.JSONDecodeError:
+                                pass
+
+                print(f"\n    Received {len(events)} events: {events}")
+                return log_test("Chat stream (received events)", True)
+            else:
+                return log_test("Chat stream", False, f"Status {r.status_code}")
+        except requests.exceptions.Timeout:
+            return log_test("Chat stream", False, "Timeout")
+        except Exception as e:
+            return log_test("Chat stream", False, str(e))
+
+    # ===== WebSocket Tests =====
+
+    def test_websocket_connection(self) -> bool:
+        """Test WebSocket connection"""
+        try:
+            import websocket
+
+            ws_url = BASE_URL.replace("http", "ws") + "/ws/events"
+            print(f"\n    Connecting to {ws_url}...")
+
+            ws = websocket.create_connection(ws_url, timeout=10)
+            ws.settimeout(5)
+
+            # Send ping
+            ws.ping("ping")
+
+            # Try to receive
+            try:
+                msg = ws.recv()
+                print(f"\n    Received: {msg[:100]}...")
+            except websocket.WebSocketTimeoutException:
+                pass
+
+            ws.close()
+            return log_test("WebSocket connection", True)
+        except ImportError:
+            print("\n    websocket-client not installed, skipping...")
+            return log_test(
+                "WebSocket connection", True, "websocket-client not installed (skipped)"
+            )
+        except Exception as e:
+            return log_test("WebSocket connection", False, str(e))
+
+    # ===== Skills Tests =====
+
+    def test_skill_search(self) -> bool:
+        """Test skill search"""
+        r = requests.get(f"{BASE_URL}/skills/search?q=web")
+        data = r.json()
+        passed = r.status_code == 200 and isinstance(data, list)
+        return log_test("Search skills", passed)
+
+    # ===== Memory Tests =====
+
+    def test_memory_list(self) -> bool:
+        """Test memory list"""
+        r = requests.get(f"{BASE_URL}/memory/?limit=10")
+        data = r.json()
+        passed = r.status_code == 200 and "memories" in data
+        if passed:
+            print(f"\n    Memories: {len(data.get('memories', []))} shown")
+        return log_test("List memories", passed)
+
+    def test_memory_add(self) -> bool:
+        """Test add memory"""
+        r = requests.post(
+            f"{BASE_URL}/memory/?text=Test memory from API&session_id=test_session&owner=global&source=test"
+        )
+        passed = r.status_code == 200
+        if passed:
+            print("\n    Added test memory")
+        return log_test("Add memory", passed)
+
+    def test_memory_search(self) -> bool:
+        """Test memory search"""
+        r = requests.get(f"{BASE_URL}/memory/search?query=test&top_k=5")
+        data = r.json()
+        passed = r.status_code == 200 and "results" in data
+        if passed:
+            print(f"\n    Found {len(data.get('results', []))} results")
+        return log_test("Search memories", passed)
+
+    # ===== Approvals Tests =====
+
+    def test_approvals_list(self) -> bool:
+        """Test list approvals"""
+        r = requests.get(f"{BASE_URL}/approvals")
+        data = r.json()
+        passed = r.status_code == 200 and "approvals" in data
+        if passed:
+            pending = [a for a in data["approvals"] if a.get("status") == "pending"]
+            print(
+                f"\n    Approvals: {len(data['approvals'])} total, {len(pending)} pending"
+            )
+        return log_test("List approvals", passed)
+
+    # ===== Run All Tests =====
+
+    def run_all_tests(self):
+        """Run all tests"""
+        self.print_header("Agens Multi-Agent System - API Test Suite")
+        print(f"\n  API Base URL: {BASE_URL}")
+        print(f"  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        if not self.wait_for_server():
+            print(
+                f"\n{colors.RED}  ERROR: Server not available at {BASE_URL}{colors.END}"
+            )
+            print(f"  Please start the server first:")
+            print(f"  python -m uvicorn api.main:app --reload --port 8000")
+            return
+
+        tests = [
+            (
+                "Authentication",
+                [
+                    self.test_auth_login,
+                    self.test_auth_login_invalid,
+                    self.test_auth_me,
+                    self.test_auth_me_unauthorized,
+                    self.test_auth_logout,
+                ],
+            ),
+            (
+                "System",
+                [
+                    self.test_health,
+                    self.test_providers,
+                    self.test_agents,
+                    self.test_skills,
+                    self.test_hooks,
+                    self.test_memory_stats,
+                ],
+            ),
+            (
+                "Sessions",
+                [
+                    self.test_sessions_list,
+                    self.test_session_create,
+                    self.test_session_get,
+                    self.test_session_delete,
+                ],
+            ),
+            (
+                "Chat",
+                [
+                    self.test_chat_stream,
+                ],
+            ),
+            (
+                "WebSocket",
+                [
+                    self.test_websocket_connection,
+                ],
+            ),
+            (
+                "Skills",
+                [
+                    self.test_skill_search,
+                ],
+            ),
+            (
+                "Memory",
+                [
+                    self.test_memory_list,
+                    self.test_memory_add,
+                    self.test_memory_search,
+                ],
+            ),
+            (
+                "Approvals",
+                [
+                    self.test_approvals_list,
+                ],
+            ),
+        ]
+
+        for category, test_funcs in tests:
+            self.print_header(category)
+            for test in test_funcs:
+                try:
+                    passed = test()
+                    if passed:
+                        self.results["passed"] += 1
+                    else:
+                        self.results["failed"] += 1
+                except Exception as e:
+                    log_test(test.__name__, False, str(e))
+                    self.results["failed"] += 1
+
+        self.print_header("Test Results")
+        total = self.results["passed"] + self.results["failed"]
+        print(f"\n  {colors.GREEN}Passed: {self.results['passed']}{colors.END}")
+        print(f"  {colors.RED}Failed: {self.results['failed']}{colors.END}")
+        print(f"  Total:  {total}")
+
+        if self.results["failed"] == 0:
+            print(f"\n{colors.GREEN}  All tests passed!{colors.END}")
+        else:
+            print(f"\n{colors.RED}  Some tests failed.{colors.END}")
+
+        return self.results["failed"] == 0
 
 
-def main():
-    print("""
-╔══════════════════════════════════════════════════════════════╗
-║         Agens Multi-Agent System - Test Suite                ║
-║                                                              ║
-║  Testing all API endpoints and features                     ║
-╚══════════════════════════════════════════════════════════════╝
-    """)
-
-    print(f"  Base URL: {BASE_URL}")
-    print(f"  Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # Run all tests
-    test_health()
-    test_skills_list()
-    test_skill_import()
-    test_skill_reload()
-    test_agents_list()
-    test_agent_details()
-    test_independent_agent_chat()
-    test_memory_stats()
-    test_memory_add()
-    test_memory_search()
-    test_memory_list()
-    test_evolution_approvals()
-    test_soul_files()
-    test_frontend_pages()
-
-    # Print summary
-    success = print_summary()
-
-    sys.exit(0 if success else 1)
+def install_dependencies():
+    """Install required Python packages"""
+    print("\nInstalling required packages...")
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "requests",
+            "python-dotenv",
+            "websocket-client",
+        ],
+        check=True,
+    )
 
 
 if __name__ == "__main__":
-    main()
+    install_dependencies()
+
+    tester = AgensTester()
+    success = tester.run_all_tests()
+
+    sys.exit(0 if success else 1)

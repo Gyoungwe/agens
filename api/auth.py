@@ -12,7 +12,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from pydantic import BaseModel
 
-router = APIRouter()
+router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -35,7 +35,7 @@ class TokenPayload(BaseModel):
     exp: datetime
 
 
-@router.post("/api/auth/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """Authenticate user and return JWT token"""
     if request.username != ADMIN_USERNAME or request.password != ADMIN_PASSWORD:
@@ -53,13 +53,13 @@ async def login(request: LoginRequest):
     return LoginResponse(access_token=token)
 
 
-@router.post("/api/auth/logout")
+@router.post("/logout")
 async def logout():
     """Logout endpoint (client should discard token)"""
     return {"success": True, "message": "Logged out successfully"}
 
 
-@router.get("/api/auth/me")
+@router.get("/me")
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
 ):
