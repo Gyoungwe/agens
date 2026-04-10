@@ -1,105 +1,113 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>进化审批 - Agens</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Evolution Approvals - Agens</title>
+    <link rel="stylesheet" href="/styles.css">
     <style>
-        :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-tertiary: #0f3460;
-            --text-primary: #eaeaea;
-            --text-secondary: #a0a0a0;
-            --accent: #e94560;
-            --success: #4ecca3;
-            --warning: #f0883e;
-            --border: #2a2a4a;
+        body { background: var(--bg-secondary); }
+        .approval-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            border-left: 4px solid var(--warning);
         }
-        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
-        .btn:hover { opacity: 0.85; }
-        .btn-secondary { background: var(--bg-tertiary); }
-        .btn-success { background: var(--success); }
-        .btn-warning { background: var(--warning); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
-        textarea.input { min-height: 100px; resize: vertical; }
-        .approval-card { border-left: 4px solid var(--warning); background: var(--bg-tertiary); padding: 16px; border-radius: 8px; margin-bottom: 12px; }
         .approval-card.approved { border-left-color: var(--success); }
-        .approval-card.rejected { border-left-color: var(--accent); opacity: 0.7; }
-        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
-        .toast-success { background: var(--success); }
-        .toast-error { background: var(--accent); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
-        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .json-viewer { background: #000; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
-        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
+        .approval-card.rejected { border-left-color: var(--error); opacity: 0.7; }
+        .approval-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; }
+        .approval-id { font-weight: 600; }
+        .approval-time { font-size: 0.75rem; color: var(--text-secondary); }
+        .approval-reason { font-size: 0.875rem; color: var(--text-secondary); margin: 12px 0; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; }
+        .approval-actions { display: flex; gap: 8px; margin-top: 16px; }
+        .json-viewer-small {
+            background: var(--bg-tertiary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            margin-top: 8px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
     </style>
 </head>
-<body class="min-h-screen p-6">
-    <div class="max-w-4xl mx-auto">
-        <header class="flex items-center justify-between mb-8">
+<body>
+    <div class="page-container">
+        <header class="header">
             <div>
-                <h1 class="text-2xl font-bold">🔄 进化审批</h1>
-                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理 Agent 技能进化请求</p>
+                <h1>🔄 Evolution Approvals</h1>
+                <p class="text-secondary text-sm mt-2">Review and manage agent evolution requests</p>
             </div>
-            <div class="flex gap-3">
-                <button class="btn btn-secondary" onclick="showCreateModal()">+ 新建请求</button>
-                <a href="/" class="btn btn-secondary">← 返回主页</a>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="loadApprovals()">↻ Refresh</button>
+                <button class="btn btn-primary" onclick="showCreateModal()">+ New Request</button>
             </div>
         </header>
 
-        <!-- Tabs -->
-        <div class="flex border-b mb-6" style="border-color: var(--border)">
-            <button class="tab-btn active" onclick="switchTab('pending', this)">⏳ 待审批</button>
-            <button class="tab-btn" onclick="switchTab('approved', this)">✅ 已批准</button>
-            <button class="tab-btn" onclick="switchTab('rejected', this)">❌ 已拒绝</button>
-            <button class="tab-btn" onclick="switchTab('all', this)">📋 全部</button>
+        <!-- Stats -->
+        <div class="stats-grid mb-4">
+            <div class="stat-card">
+                <div class="stat-value" id="pendingCount">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="approvedCount">0</div>
+                <div class="stat-label">Approved</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="rejectedCount">0</div>
+                <div class="stat-label">Rejected</div>
+            </div>
         </div>
 
-        <div id="approvalsList"></div>
-        <div id="emptyState" class="text-center py-12" style="color: var(--text-secondary)">
-            <p class="text-4xl mb-4">📭</p>
-            <p>暂无审批记录</p>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('pending', this)">⏳ Pending</button>
+            <button class="tab-btn" onclick="switchTab('approved', this)">✅ Approved</button>
+            <button class="tab-btn" onclick="switchTab('rejected', this)">❌ Rejected</button>
+            <button class="tab-btn" onclick="switchTab('all', this)">📋 All</button>
+        </div>
+
+        <!-- Approval List -->
+        <div class="card">
+            <div id="approvalsList"></div>
+            <div id="emptyState" class="empty-state hidden">
+                <div class="empty-state-icon">📭</div>
+                <div class="empty-state-title">No approvals</div>
+                <div class="empty-state-desc">No evolution requests match this filter</div>
+            </div>
         </div>
     </div>
 
-    <!-- Create Modal -->
-    <div id="createModal" class="modal hidden">
+    <!-- Create Request Modal -->
+    <div id="createModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">创建进化请求</h2>
-                <button onclick="hideCreateModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+            <div class="modal-header">
+                <h2 class="modal-title">Create Evolution Request</h2>
+                <button class="modal-close" onclick="hideCreateModal()">×</button>
             </div>
-
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">Agent ID</label>
+            <div class="form-group">
+                <label class="form-label">Agent ID</label>
                 <input type="text" id="input-agentId" class="input" placeholder="research_agent">
             </div>
-
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">请求原因</label>
-                <textarea id="input-reason" class="input" placeholder="为什么需要这个技能..."></textarea>
+            <div class="form-group">
+                <label class="form-label">Reason</label>
+                <textarea id="input-reason" class="input" rows="3" placeholder="Why does this agent need to evolve?"></textarea>
             </div>
-
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">Proposed Changes (JSON)</label>
-                <textarea id="input-changes" class="input" placeholder='{"add_skill": "web_search", "remove_skill": null}'></textarea>
+            <div class="form-group">
+                <label class="form-label">Changes (JSON)</label>
+                <textarea id="input-changes" class="input font-mono" rows="4" placeholder='{"skill": "new_skill", "priority": "high"}'></textarea>
             </div>
-
-            <div class="flex gap-3">
-                <button class="btn btn-success" onclick="createRequest()">提交请求</button>
-                <button class="btn btn-secondary" onclick="hideCreateModal()">取消</button>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="hideCreateModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="createRequest()">Create Request</button>
             </div>
         </div>
     </div>
 
-    <div id="toast" class="toast hidden"></div>
+    <div id="toast" class="toast"></div>
 
     <script>
         const API_BASE = 'http://localhost:8000';
@@ -107,94 +115,83 @@
         let currentFilter = 'pending';
 
         async function init() {
-            console.log('[Evolution Page] Initializing...');
+            console.log('[Evolution] Initializing...');
             await loadApprovals();
         }
 
         async function loadApprovals() {
-            console.log('[Evolution Page] Loading approvals...');
             try {
                 const res = await fetch(`${API_BASE}/evolution/approvals`);
-                console.log('[Evolution Page] /evolution/approvals status:', res.status);
                 const data = await res.json();
-                console.log('[Evolution Page] Approvals data:', data);
                 approvals = data.approvals || [];
+                renderStats();
                 renderApprovals();
             } catch (e) {
-                console.error('[Evolution Page] Failed to load approvals:', e);
-                showToast('加载审批列表失败: ' + e.message, 'error');
+                showToast('Failed to load approvals', 'error');
             }
         }
 
-        function renderApprovals() {
-            const filtered = currentFilter === 'all'
-                ? approvals
-                : approvals.filter(a => a.status === currentFilter);
+        function renderStats() {
+            const pending = approvals.filter(a => a.status === 'pending').length;
+            const approved = approvals.filter(a => a.status === 'approved').length;
+            const rejected = approvals.filter(a => a.status === 'rejected').length;
+            
+            document.getElementById('pendingCount').textContent = pending;
+            document.getElementById('approvedCount').textContent = approved;
+            document.getElementById('rejectedCount').textContent = rejected;
+        }
 
+        function renderApprovals() {
+            const filtered = currentFilter === 'all' ? approvals : approvals.filter(a => a.status === currentFilter);
             const list = document.getElementById('approvalsList');
             const empty = document.getElementById('emptyState');
 
             if (filtered.length === 0) {
                 list.innerHTML = '';
                 empty.classList.remove('hidden');
-            } else {
-                empty.classList.add('hidden');
-                list.innerHTML = filtered.map(a => `
-                    <div class="approval-card ${a.status}">
-                        <div class="flex justify-between items-start mb-3">
-                            <div>
-                                <div class="font-semibold">🤖 ${a.agent_id}</div>
-                                <div class="text-xs" style="color: var(--text-secondary)">请求ID: ${a.request_id}</div>
-                                <div class="text-xs" style="color: var(--text-secondary)">创建时间: ${a.created_at}</div>
-                            </div>
-                            <div class="flex gap-2">
-                                ${a.status === 'pending' ? `
-                                    <button class="btn btn-sm btn-success" onclick="approveRequest('${a.request_id}')">✅ 批准</button>
-                                    <button class="btn btn-sm btn-warning" onclick="rejectRequest('${a.request_id}')">❌ 拒绝</button>
-                                ` : `
-                                    <span class="tag">${a.status === 'approved' ? '已批准' : '已拒绝'}</span>
-                                `}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="text-sm font-semibold mb-1">请求原因:</div>
-                            <p class="text-sm" style="color: var(--text-secondary)">${a.reason || '无'}</p>
-                        </div>
-                        ${a.changes && Object.keys(a.changes).length > 0 ? `
-                            <div class="mb-3">
-                                <div class="text-sm font-semibold mb-1">变更内容:</div>
-                                <div class="json-viewer">${JSON.stringify(a.changes, null, 2)}</div>
-                            </div>
-                        ` : ''}
-                        ${a.reviewed_at ? `
-                            <div class="text-xs" style="color: var(--text-secondary)">
-                                ${a.status === 'approved' ? '✅' : '❌'} ${a.reviewer || 'admin'} 于 ${a.reviewed_at} 处理
-                                ${a.comment ? `- ${a.comment}` : ''}
-                            </div>
-                        ` : ''}
-                    </div>
-                `).join('');
+                return;
             }
+
+            empty.classList.add('hidden');
+            list.innerHTML = filtered.map(a => `
+                <div class="approval-card ${a.status}">
+                    <div class="approval-header">
+                        <div>
+                            <div class="approval-id">🤖 ${a.agent_id}</div>
+                            <div class="approval-time">ID: ${a.request_id}</div>
+                            <div class="approval-time">Created: ${a.created_at}</div>
+                        </div>
+                        <div>
+                            ${a.status === 'pending' ? `
+                                <button class="btn btn-sm btn-success" onclick="approveRequest('${a.request_id}')">✅ Approve</button>
+                                <button class="btn btn-sm btn-danger" onclick="rejectRequest('${a.request_id}')">❌ Reject</button>
+                            ` : `
+                                <span class="tag ${a.status === 'approved' ? 'tag-success' : 'tag-error'}">${a.status === 'approved' ? 'Approved' : 'Rejected'}</span>
+                            `}
+                        </div>
+                    </div>
+                    ${a.reason ? `<div class="approval-reason">${escapeHtml(a.reason)}</div>` : ''}
+                    ${a.changes ? `<div class="json-viewer-small">${escapeHtml(JSON.stringify(a.changes, null, 2))}</div>` : ''}
+                </div>
+            `).join('');
         }
 
         function switchTab(tab, btnElement) {
             currentFilter = tab;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            if (btnElement) {
-                btnElement.classList.add('active');
-            }
+            if (btnElement) btnElement.classList.add('active');
             renderApprovals();
         }
 
         function showCreateModal() {
-            document.getElementById('createModal').classList.remove('hidden');
+            document.getElementById('createModal').classList.add('active');
             document.getElementById('input-agentId').value = '';
             document.getElementById('input-reason').value = '';
             document.getElementById('input-changes').value = '';
         }
 
         function hideCreateModal() {
-            document.getElementById('createModal').classList.add('hidden');
+            document.getElementById('createModal').classList.remove('active');
         }
 
         async function createRequest() {
@@ -205,71 +202,78 @@
                 const changesText = document.getElementById('input-changes').value.trim();
                 if (changesText) changes = JSON.parse(changesText);
             } catch (e) {
-                showToast('Changes JSON 格式错误', 'error');
-                return;
-            }
-
-            if (!agentId) {
-                showToast('请输入 Agent ID', 'error');
+                showToast('Changes JSON is invalid', 'error');
                 return;
             }
 
             try {
-                const res = await fetch(`${API_BASE}/evolution/request`, {
+                const res = await fetch(`${API_BASE}/evolution/requests`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ agent_id: agentId, reason, proposed_changes: changes })
+                    body: JSON.stringify({ agent_id: agentId, reason, changes })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('请求创建成功', 'success');
+                    showToast('Request created', 'success');
                     hideCreateModal();
                     await loadApprovals();
                 } else {
-                    showToast('请求创建失败', 'error');
+                    showToast('Failed to create request', 'error');
                 }
             } catch (e) {
-                showToast('请求创建失败: ' + e, 'error');
+                showToast('Failed to create request', 'error');
             }
         }
 
         async function approveRequest(requestId) {
-            const comment = prompt('批准备注 (可选):');
             try {
-                await fetch(`${API_BASE}/evolution/approvals/${requestId}/approve`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comment })
-                });
-                showToast('已批准', 'success');
-                await loadApprovals();
+                const res = await fetch(`${API_BASE}/evolution/approve/${requestId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Request approved', 'success');
+                    await loadApprovals();
+                } else {
+                    showToast('Failed to approve', 'error');
+                }
             } catch (e) {
-                showToast('操作失败', 'error');
+                showToast('Failed to approve', 'error');
             }
         }
 
         async function rejectRequest(requestId) {
-            const comment = prompt('拒绝原因 (可选):');
             try {
-                await fetch(`${API_BASE}/evolution/approvals/${requestId}/reject`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comment })
-                });
-                showToast('已拒绝', 'success');
-                await loadApprovals();
+                const res = await fetch(`${API_BASE}/evolution/reject/${requestId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Request rejected', 'success');
+                    await loadApprovals();
+                } else {
+                    showToast('Failed to reject', 'error');
+                }
             } catch (e) {
-                showToast('操作失败', 'error');
+                showToast('Failed to reject', 'error');
             }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `toast toast-${type}`;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 3000);
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
         }
+
+        // Close modal on backdrop click
+        document.getElementById('createModal')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) hideCreateModal();
+        });
 
         init();
     </script>

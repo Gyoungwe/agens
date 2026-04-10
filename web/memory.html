@@ -1,173 +1,131 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>记忆管理 - Agens</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Memory Management - Agens</title>
+    <link rel="stylesheet" href="/styles.css">
     <style>
-        :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-tertiary: #0f3460;
-            --text-primary: #eaeaea;
-            --text-secondary: #a0a0a0;
-            --accent: #e94560;
-            --success: #4ecca3;
-            --warning: #f0883e;
-            --border: #2a2a4a;
-        }
-        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
-        .btn:hover { opacity: 0.85; }
-        .btn-secondary { background: var(--bg-tertiary); }
-        .btn-success { background: var(--success); }
-        .btn-warning { background: var(--warning); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
-        .input:focus { outline: none; border-color: var(--accent); }
-        textarea.input { min-height: 80px; resize: vertical; }
-        .memory-card { background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
-        .memory-card .owner { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); }
-        .memory-card .text { font-size: 13px; margin-top: 8px; line-height: 1.5; }
-        .memory-card .meta { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
-        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
-        .toast-success { background: var(--success); }
-        .toast-error { background: var(--accent); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .tab-btn { padding: 8px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
-        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .stats-card { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; text-align: center; }
-        .stats-card .value { font-size: 24px; font-weight: bold; color: var(--accent); }
-        .stats-card .label { font-size: 12px; color: var(--text-secondary); }
-        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+        body { background: var(--bg-secondary); }
     </style>
 </head>
-<body class="min-h-screen p-6">
-    <div class="max-w-6xl mx-auto">
-        <header class="flex items-center justify-between mb-8">
+<body>
+    <div class="page-container">
+        <header class="header">
             <div>
-                <h1 class="text-2xl font-bold">🧠 记忆管理</h1>
-                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理 Agent 记忆和共享知识库</p>
+                <h1>🧠 Memory Management</h1>
+                <p class="text-secondary text-sm mt-2">Manage agent memories and shared knowledge base</p>
             </div>
-            <div class="flex gap-3">
-                <button class="btn btn-secondary" onclick="refreshMemories()">🔄 刷新</button>
-                <a href="/" class="btn btn-secondary">← 返回主页</a>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="refreshAll()">↻ Refresh</button>
+                <button class="btn btn-primary" onclick="showAddModal()">+ Add Memory</button>
             </div>
         </header>
 
         <!-- Stats -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
-            <div class="stats-card">
-                <div class="value" id="totalMemories">0</div>
-                <div class="label">总记忆数</div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalMemories">-</div>
+                <div class="stat-label">Total Memories</div>
             </div>
-            <div class="stats-card">
-                <div class="value" id="globalMemories">0</div>
-                <div class="label">共享记忆</div>
+            <div class="stat-card">
+                <div class="stat-value" id="globalMemories">-</div>
+                <div class="stat-label">Shared</div>
             </div>
-            <div class="stats-card">
-                <div class="value" id="agentMemories">0</div>
-                <div class="label">Agent 记忆</div>
+            <div class="stat-card">
+                <div class="stat-value" id="agentMemories">-</div>
+                <div class="stat-label">Agent</div>
             </div>
-            <div class="stats-card">
-                <div class="value" id="sessionMemories">0</div>
-                <div class="label">会话记忆</div>
+            <div class="stat-card">
+                <div class="stat-value" id="sessionMemories">-</div>
+                <div class="stat-label">Session</div>
             </div>
         </div>
 
-        <!-- Filter Tabs -->
-        <div class="flex border-b mb-6" style="border-color: var(--border)">
-            <button class="tab-btn active" onclick="switchFilter('all', this)">📋 全部</button>
-            <button class="tab-btn" onclick="switchFilter('global', this)">🌐 共享记忆</button>
-            <button class="tab-btn" onclick="switchFilter('agent', this)">🤖 Agent 记忆</button>
-            <button class="tab-btn" onclick="switchFilter('session', this)">💬 会话记忆</button>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchFilter('all', this)">All</button>
+            <button class="tab-btn" onclick="switchFilter('global', this)">Shared</button>
+            <button class="tab-btn" onclick="switchFilter('agent', this)">Agent</button>
+            <button class="tab-btn" onclick="switchFilter('session', this)">Session</button>
         </div>
 
         <!-- Search -->
-        <div class="card mb-6">
-            <div class="flex gap-3">
-                <input type="text" id="searchQuery" class="input flex-1" placeholder="搜索记忆内容..." onkeyup="handleSearchKeyup(event)">
-                <select id="searchOwner" class="input" style="width: auto;">
-                    <option value="">全部 Owner</option>
-                </select>
-                <button class="btn" onclick="searchMemories()">🔍 搜索</button>
-            </div>
+        <div class="search-bar">
+            <input type="text" id="searchQuery" class="input" placeholder="Search memories..." onkeyup="handleSearchKeyup(event)">
+            <select id="searchOwner" class="input" style="width: 200px;">
+                <option value="">All Owners</option>
+            </select>
+            <button class="btn btn-primary" onclick="searchMemories()">Search</button>
         </div>
 
         <!-- Memory List -->
         <div class="card">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold">📝 记忆列表</h2>
-                <button class="btn btn-success btn-sm" onclick="showAddMemoryModal()">+ 添加记忆</button>
+            <div class="card-header">
+                <span class="card-title">Memory List</span>
+                <span class="text-secondary text-sm" id="memoryCount">0 items</span>
             </div>
-            <div id="loadingMemories" class="loading">加载中...</div>
+            <div id="loadingMemories" class="loading hidden">
+                <div class="loading-spinner"></div>
+                Loading...
+            </div>
             <div id="memoryList"></div>
-            <div id="emptyMemories" class="text-center py-8 hidden" style="color: var(--text-secondary)">
-                <p class="text-4xl mb-4">🧠</p>
-                <p>暂无记忆</p>
+            <div id="emptyMemories" class="empty-state hidden">
+                <div class="empty-state-icon">🧠</div>
+                <div class="empty-state-title">No memories found</div>
+                <div class="empty-state-desc">Add new memories or adjust your search filters</div>
             </div>
         </div>
     </div>
 
     <!-- Add Memory Modal -->
-    <div id="addMemoryModal" class="modal hidden">
+    <div id="addModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">➕ 添加记忆</h2>
-                <button onclick="hideAddMemoryModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+            <div class="modal-header">
+                <h2 class="modal-title">Add Memory</h2>
+                <button class="modal-close" onclick="hideAddModal()">×</button>
             </div>
-
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">记忆内容</label>
-                <textarea id="memoryText" class="input" placeholder="输入记忆内容..." style="min-height: 120px;"></textarea>
+            <div class="form-group">
+                <label class="form-label">Memory Content</label>
+                <textarea id="memoryText" class="input" rows="4" placeholder="Enter memory content..."></textarea>
             </div>
-
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Owner 类型</label>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label">Owner Type</label>
                     <select id="memoryOwnerType" class="input" onchange="handleOwnerTypeChange()">
-                        <option value="global">🌐 共享 (global)</option>
+                        <option value="global">🌐 Shared (global)</option>
                         <option value="agent">🤖 Agent</option>
-                        <option value="session">💬 会话</option>
+                        <option value="session">💬 Session</option>
                     </select>
                 </div>
-                <div>
-                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Owner ID</label>
-                    <input type="text" id="memoryOwnerId" class="input" placeholder="agent_id 或 session_id">
+                <div class="form-group">
+                    <label class="form-label">Owner ID</label>
+                    <input type="text" id="memoryOwnerId" class="input" placeholder="agent_id or session_id">
                 </div>
             </div>
-
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">来源</label>
-                <input type="text" id="memorySource" class="input" placeholder="manual" value="manual">
+            <div class="form-group">
+                <label class="form-label">Source</label>
+                <input type="text" id="memorySource" class="input" value="manual" placeholder="manual">
             </div>
-
-            <div class="flex gap-3">
-                <button class="btn btn-success" onclick="addMemory()">✅ 添加</button>
-                <button class="btn btn-secondary" onclick="hideAddMemoryModal()">取消</button>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="hideAddModal()">Cancel</button>
+                <button class="btn btn-success" onclick="addMemory()">Add Memory</button>
             </div>
         </div>
     </div>
 
     <!-- Search Results Modal -->
-    <div id="searchResultsModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">🔍 搜索结果</h2>
-                <button onclick="hideSearchResultsModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+    <div id="searchModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">🔍 Search Results</h2>
+                <button class="modal-close" onclick="hideSearchModal()">×</button>
             </div>
             <div id="searchResultsList"></div>
         </div>
     </div>
 
-    <div id="toast" class="toast hidden"></div>
-
-    <style>
-        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
-    </style>
+    <div id="toast" class="toast"></div>
 
     <script>
         const API_BASE = 'http://localhost:8000';
@@ -175,10 +133,8 @@
         let owners = [];
 
         async function init() {
-            console.log('[Memory Page] Initializing...');
-            await loadStats();
-            await loadMemories();
-            await loadOwners();
+            console.log('[Memory] Initializing...');
+            await Promise.all([loadStats(), loadOwners(), loadMemories()]);
         }
 
         async function loadStats() {
@@ -202,13 +158,13 @@
                     document.getElementById('sessionMemories').textContent = sessionCount;
                 }
             } catch (e) {
-                console.error('[Memory Page] Failed to load stats:', e);
+                console.error('[Memory] Failed to load stats:', e);
             }
         }
 
         async function loadOwners() {
             try {
-                const res = await fetch(`${API_BASE}/memory/?limit=1000`);
+                const res = await fetch(`${API_BASE}/memory/?limit=500`);
                 const data = await res.json();
                 if (data.success) {
                     const ownerSet = new Set();
@@ -216,21 +172,25 @@
                     owners = Array.from(ownerSet);
                     
                     const select = document.getElementById('searchOwner');
-                    select.innerHTML = '<option value="">全部 Owner</option>';
+                    select.innerHTML = '<option value="">All Owners</option>';
                     owners.forEach(o => {
-                        select.innerHTML += `<option value="${o}">${o}</option>`;
+                        select.innerHTML += `<option value="${escapeHtml(o)}">${escapeHtml(o.substring(0, 12))}...</option>`;
                     });
                 }
             } catch (e) {
-                console.error('[Memory Page] Failed to load owners:', e);
+                console.error('[Memory] Failed to load owners:', e);
             }
         }
 
         async function loadMemories() {
-            console.log('[Memory Page] Loading memories...');
-            document.getElementById('loadingMemories').classList.remove('hidden');
-            document.getElementById('memoryList').innerHTML = '';
-            document.getElementById('emptyMemories').classList.add('hidden');
+            console.log('[Memory] Loading memories...');
+            const loading = document.getElementById('loadingMemories');
+            const list = document.getElementById('memoryList');
+            const empty = document.getElementById('emptyMemories');
+            
+            loading.classList.remove('hidden');
+            list.innerHTML = '';
+            empty.classList.add('hidden');
 
             try {
                 const owner = document.getElementById('searchOwner').value;
@@ -240,40 +200,44 @@
                 
                 const res = await fetch(url);
                 const data = await res.json();
-                console.log('[Memory Page] Memories data:', data);
+                console.log('[Memory] Loaded:', data.total, 'memories');
                 
                 memories = data.memories || [];
+                document.getElementById('memoryCount').textContent = `${memories.length} items`;
                 renderMemories(memories);
             } catch (e) {
-                console.error('[Memory Page] Failed to load memories:', e);
-                showToast('加载记忆失败: ' + e.message, 'error');
+                console.error('[Memory] Failed to load memories:', e);
+                showToast('Failed to load memories', 'error');
             } finally {
-                document.getElementById('loadingMemories').classList.add('hidden');
+                loading.classList.add('hidden');
             }
         }
 
         function renderMemories(memoriesToRender) {
             const list = document.getElementById('memoryList');
+            const empty = document.getElementById('emptyMemories');
             
             if (memoriesToRender.length === 0) {
                 list.innerHTML = '';
-                document.getElementById('emptyMemories').classList.remove('hidden');
+                empty.classList.remove('hidden');
                 return;
             }
 
-            document.getElementById('emptyMemories').classList.add('hidden');
+            empty.classList.add('hidden');
             list.innerHTML = memoriesToRender.map(m => `
                 <div class="memory-card">
-                    <div class="flex items-center justify-between">
-                        <span class="owner">${escapeHtml(m.owner)}</span>
-                        <div class="flex gap-2">
-                            <button class="btn btn-sm btn-secondary" onclick="searchSimilar('${escapeHtml(m.text.replace(/'/g, "\\'"))}')">🔍 相似</button>
-                            <button class="btn btn-sm btn-warning" onclick="deleteMemory('${m.id}')">🗑️</button>
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div class="memory-text" style="flex: 1; margin-right: 16px;">${escapeHtml(m.text)}</div>
+                        <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                            <button class="btn btn-sm btn-secondary" onclick="copyText('${escapeHtml(m.text.replace(/'/g, "\\'"))}')">📋</button>
+                            <button class="btn btn-sm btn-secondary" onclick="searchSimilar('${escapeHtml(m.text.replace(/'/g, "\\'"))}')">🔍</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteMemory('${m.id}')">🗑️</button>
                         </div>
                     </div>
-                    <div class="text">${escapeHtml(m.text)}</div>
-                    <div class="meta">
-                        来源: ${m.source || 'unknown'} | 创建: ${formatTime(m.created_at)} | 版本: ${m.version || '0.02'}
+                    <div class="memory-meta">
+                        <span>Owner: ${escapeHtml(m.owner || 'unknown')}</span>
+                        <span>Source: ${escapeHtml(m.source || 'unknown')}</span>
+                        <span>Created: ${formatTime(m.created_at)}</span>
                     </div>
                 </div>
             `).join('');
@@ -284,23 +248,14 @@
             if (btnElement) btnElement.classList.add('active');
             
             const select = document.getElementById('searchOwner');
-            if (filter === 'all') {
-                select.value = '';
-            } else if (filter === 'global') {
-                select.value = 'global';
-            } else if (filter === 'agent') {
-                select.value = '';
-            } else if (filter === 'session') {
-                select.value = '';
-            }
+            if (filter === 'all') select.value = '';
+            else if (filter === 'global') select.value = 'global';
             
             loadMemories();
         }
 
         function handleSearchKeyup(event) {
-            if (event.key === 'Enter') {
-                searchMemories();
-            }
+            if (event.key === 'Enter') searchMemories();
         }
 
         async function searchMemories() {
@@ -312,8 +267,6 @@
 
             const owner = document.getElementById('searchOwner').value;
 
-            console.log('[Memory Page] Searching:', query, 'owner:', owner);
-
             try {
                 const url = `${API_BASE}/memory/search?query=${encodeURIComponent(query)}&top_k=20${owner ? '&owner=' + encodeURIComponent(owner) : ''}`;
                 const res = await fetch(url);
@@ -322,11 +275,11 @@
                 if (data.success) {
                     showSearchResults(data.results || []);
                 } else {
-                    showToast('搜索失败', 'error');
+                    showToast('Search failed', 'error');
                 }
             } catch (e) {
-                console.error('[Memory Page] Search failed:', e);
-                showToast('搜索失败: ' + e.message, 'error');
+                console.error('[Memory] Search failed:', e);
+                showToast('Search failed: ' + e.message, 'error');
             }
         }
 
@@ -338,37 +291,37 @@
                     showSearchResults(data.results || []);
                 }
             } catch (e) {
-                showToast('相似搜索失败', 'error');
+                showToast('Similar search failed', 'error');
             }
         }
 
         function showSearchResults(results) {
-            const modal = document.getElementById('searchResultsModal');
+            const modal = document.getElementById('searchModal');
             const list = document.getElementById('searchResultsList');
             
             if (results.length === 0) {
-                list.innerHTML = '<p style="color: var(--text-secondary)">没有找到相关记忆</p>';
+                list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No results found</div></div>';
             } else {
                 list.innerHTML = results.map(r => `
                     <div class="memory-card">
-                        <div class="flex items-center justify-between">
-                            <span class="owner">${escapeHtml(r.owner || r.metadata?.owner || 'unknown')}</span>
-                            <span style="color: var(--success)">相似度: ${((r.score || 0) * 100).toFixed(1)}%</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span class="tag">${escapeHtml(r.owner || 'unknown')}</span>
+                            <span style="color: var(--success); font-weight: 600;">${((r.score || 0) * 100).toFixed(1)}%</span>
                         </div>
-                        <div class="text">${escapeHtml(r.text)}</div>
+                        <div class="memory-text">${escapeHtml(r.text)}</div>
                     </div>
                 `).join('');
             }
             
-            modal.classList.remove('hidden');
+            modal.classList.add('active');
         }
 
-        function hideSearchResultsModal() {
-            document.getElementById('searchResultsModal').classList.add('hidden');
+        function hideSearchModal() {
+            document.getElementById('searchModal').classList.remove('active');
         }
 
-        function showAddMemoryModal() {
-            document.getElementById('addMemoryModal').classList.remove('hidden');
+        function showAddModal() {
+            document.getElementById('addModal').classList.add('active');
             document.getElementById('memoryText').value = '';
             document.getElementById('memoryOwnerType').value = 'global';
             document.getElementById('memoryOwnerId').value = '';
@@ -376,8 +329,8 @@
             handleOwnerTypeChange();
         }
 
-        function hideAddMemoryModal() {
-            document.getElementById('addMemoryModal').classList.add('hidden');
+        function hideAddModal() {
+            document.getElementById('addModal').classList.remove('active');
         }
 
         function handleOwnerTypeChange() {
@@ -387,92 +340,82 @@
             if (type === 'global') {
                 ownerInput.value = 'global';
                 ownerInput.disabled = true;
-            } else if (type === 'agent') {
-                ownerInput.value = '';
-                ownerInput.placeholder = 'research_agent';
-                ownerInput.disabled = false;
             } else {
                 ownerInput.value = '';
-                ownerInput.placeholder = 'session_id';
                 ownerInput.disabled = false;
+                ownerInput.placeholder = type === 'agent' ? 'research_agent' : 'session_id';
             }
         }
 
         async function addMemory() {
             const text = document.getElementById('memoryText').value.trim();
             if (!text) {
-                showToast('请输入记忆内容', 'error');
+                showToast('Please enter memory content', 'error');
                 return;
             }
 
             const ownerType = document.getElementById('memoryOwnerType').value;
             let owner = document.getElementById('memoryOwnerId').value.trim();
-            if (!owner) owner = ownerType === 'global' ? 'global' : prompt('请输入 Owner ID:');
+            if (!owner) owner = ownerType === 'global' ? 'global' : prompt('Please enter Owner ID:');
             if (!owner) return;
 
             const source = document.getElementById('memorySource').value.trim() || 'manual';
-            const sessionId = ownerType === 'session' ? owner : 'memory_' + Date.now();
+            const sessionId = ownerType === 'session' ? owner : 'mem_' + Date.now();
 
             try {
-                const res = await fetch(`${API_BASE}/memory/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text,
-                        session_id: sessionId,
-                        owner,
-                        source,
-                    })
+                const res = await fetch(`${API_BASE}/memory/?text=${encodeURIComponent(text)}&session_id=${encodeURIComponent(sessionId)}&owner=${encodeURIComponent(owner)}&source=${encodeURIComponent(source)}`, {
+                    method: 'POST'
                 });
-                const data = await res.json();
                 
-                if (data.success) {
-                    showToast('记忆添加成功', 'success');
-                    hideAddMemoryModal();
-                    await loadMemories();
-                    await loadStats();
+                if (res.ok) {
+                    showToast('Memory added successfully', 'success');
+                    hideAddModal();
+                    await Promise.all([loadStats(), loadMemories()]);
                 } else {
-                    showToast('添加失败', 'error');
+                    showToast('Failed to add memory', 'error');
                 }
             } catch (e) {
-                console.error('[Memory Page] Add memory failed:', e);
-                showToast('添加失败: ' + e.message, 'error');
+                console.error('[Memory] Add failed:', e);
+                showToast('Failed to add memory: ' + e.message, 'error');
             }
         }
 
         async function deleteMemory(memoryId) {
-            if (!confirm('确定要删除这条记忆吗？')) return;
+            if (!confirm('Delete this memory?')) return;
 
             try {
                 const res = await fetch(`${API_BASE}/memory/${memoryId}`, {
                     method: 'DELETE'
                 });
-                const data = await res.json();
                 
-                if (data.success) {
-                    showToast('记忆已删除', 'success');
-                    await loadMemories();
-                    await loadStats();
+                if (res.ok) {
+                    showToast('Memory deleted', 'success');
+                    await Promise.all([loadStats(), loadMemories()]);
                 } else {
-                    showToast('删除失败', 'error');
+                    showToast('Failed to delete', 'error');
                 }
             } catch (e) {
-                console.error('[Memory Page] Delete memory failed:', e);
-                showToast('删除失败: ' + e.message, 'error');
+                showToast('Delete failed: ' + e.message, 'error');
             }
         }
 
-        async function refreshMemories() {
-            await loadStats();
-            await loadMemories();
-            showToast('已刷新', 'success');
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Copied!', 'success');
+            }).catch(() => {
+                showToast('Copy failed', 'error');
+            });
+        }
+
+        async function refreshAll() {
+            await Promise.all([loadStats(), loadMemories(), loadOwners()]);
+            showToast('Refreshed', 'success');
         }
 
         function formatTime(isoString) {
             if (!isoString) return 'unknown';
             try {
-                const d = new Date(isoString);
-                return d.toLocaleString('zh-CN');
+                return new Date(isoString).toLocaleString();
             } catch {
                 return isoString;
             }
@@ -488,10 +431,19 @@
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `toast toast-${type}`;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 3000);
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
         }
+
+        // Close modals on backdrop click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
 
         init();
     </script>

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi-Agent 智能协作系统</title>
+    <link rel="stylesheet" href="/styles.css">
     <style>
         * {
             margin: 0;
@@ -12,22 +13,24 @@
         }
 
         :root {
-            --bg-primary: #1e1e2e;
-            --bg-secondary: #2d2d44;
-            --bg-tertiary: #363654;
-            --bg-hover: #414266;
-            --text-primary: #cdd6f4;
-            --text-secondary: #a6adc8;
-            --accent: #89b4fa;
-            --accent-hover: #6ca8fa;
-            --success: #a6e3a1;
-            --warning: #f9e2af;
-            --error: #f38ba8;
-            --border: #45475a;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-tertiary: #fafafa;
+            --bg-hover: #f0f0f0;
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --text-tertiary: #6e6e73;
+            --accent: #0071e3;
+            --accent-hover: #0077ed;
+            --success: #34c759;
+            --warning: #ff9500;
+            --error: #ff3b30;
+            --border: #d2d2d7;
+            --border-light: #e5e5ea;
         }
 
         body {
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             height: 100vh;
@@ -43,7 +46,7 @@
         .sidebar {
             width: 260px;
             background: var(--bg-secondary);
-            border-right: 1px solid var(--border);
+            border-right: 1px solid var(--border-light);
             display: flex;
             flex-direction: column;
         }
@@ -1015,13 +1018,13 @@
             </div>
 
             <!-- 更多工具链接 -->
-            <div style="padding: 12px; border-top: 1px solid var(--border); margin-top: auto;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">更多工具</div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <a href="/agent.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 4px 8px; border-radius: 4px;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🤖 Agent 管理</a>
-                    <a href="/skills.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 4px 8px; border-radius: 4px;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🛠️ 技能管理</a>
-                    <a href="/memory.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 4px 8px; border-radius: 4px;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🧠 记忆管理</a>
-                    <a href="/evolution.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 4px 8px; border-radius: 4px;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🔄 进化审批</a>
+            <div style="padding: 12px; border-top: 1px solid var(--border-light); margin-top: auto;">
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">More Tools</div>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <a href="/agent.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 6px 8px; border-radius: 6px;" onmouseover="this.style.background='var(--bg-hover)'; this.style.color='var(--text-primary)'" onmouseout="this.style.background='transparent'; this.style.color='var(--text-secondary)'">🤖 Agent</a>
+                    <a href="/skills.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 6px 8px; border-radius: 6px;" onmouseover="this.style.background='var(--bg-hover)'; this.style.color='var(--text-primary)'" onmouseout="this.style.background='transparent'; this.style.color='var(--text-secondary)'">🛠️ Skills</a>
+                    <a href="/memory.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 6px 8px; border-radius: 6px;" onmouseover="this.style.background='var(--bg-hover)'; this.style.color='var(--text-primary)'" onmouseout="this.style.background='transparent'; this.style.color='var(--text-secondary)'">🧠 Memory</a>
+                    <a href="/evolution.html" style="color: var(--text-secondary); text-decoration: none; font-size: 11px; padding: 6px 8px; border-radius: 6px;" onmouseover="this.style.background='var(--bg-hover)'; this.style.color='var(--text-primary)'" onmouseout="this.style.background='transparent'; this.style.color='var(--text-secondary)'">🔄 Evolution</a>
                 </div>
             </div>
         </div>

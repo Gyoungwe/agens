@@ -1,152 +1,150 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>技能管理 - Agens</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Skills Management - Agens</title>
+    <link rel="stylesheet" href="/styles.css">
     <style>
-        :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-tertiary: #0f3460;
-            --text-primary: #eaeaea;
-            --text-secondary: #a0a0a0;
-            --accent: #e94560;
-            --success: #4ecca3;
-            --warning: #f0883e;
-            --border: #2a2a4a;
+        body { background: var(--bg-secondary); }
+        .skill-card {
+            padding: 16px;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            transition: all 0.15s ease;
         }
-        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-        .btn { background: var(--accent); color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: opacity 0.2s; }
-        .btn:hover { opacity: 0.85; }
-        .btn-secondary { background: var(--bg-tertiary); }
-        .btn-success { background: var(--success); }
-        .btn-warning { background: var(--warning); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-        .input { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; width: 100%; }
-        .input:focus { outline: none; border-color: var(--accent); }
-        textarea.input { min-height: 120px; resize: vertical; }
-        .skill-card { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; transition: all 0.2s; }
-        .skill-card:hover { transform: translateY(-2px); }
-        .tag { background: var(--bg-secondary); padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px; }
-        .tag-enabled { border-left: 3px solid var(--success); }
-        .tag-disabled { border-left: 3px solid var(--accent); opacity: 0.6; }
-        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: var(--bg-secondary); border-radius: 12px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
-        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 1000; animation: slideIn 0.3s ease; }
-        .toast-success { background: var(--success); }
-        .toast-error { background: var(--accent); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .json-preview { background: #000; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
-        .warning-text { color: var(--warning); font-size: 12px; }
+        .skill-card:hover { border-color: var(--border); }
+        .skill-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; }
+        .skill-name { font-weight: 600; font-size: 1rem; }
+        .skill-id { font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; }
+        .skill-desc { font-size: 0.875rem; color: var(--text-secondary); margin: 8px 0; line-height: 1.5; }
+        .skill-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+        .skill-actions { display: flex; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+        .import-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .import-tab {
+            padding: 8px 16px;
+            font-size: 0.875rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .import-tab.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
     </style>
 </head>
-<body class="min-h-screen p-6">
-    <div class="max-w-6xl mx-auto">
-        <header class="flex items-center justify-between mb-8">
+<body>
+    <div class="page-container">
+        <header class="header">
             <div>
-                <h1 class="text-2xl font-bold">🛠️ 技能管理</h1>
-                <p class="text-sm mt-1" style="color: var(--text-secondary)">管理、安装和导入 Agent 技能</p>
+                <h1>🛠️ Skills Management</h1>
+                <p class="text-secondary text-sm mt-2">Manage and import agent skills</p>
             </div>
-            <div class="flex gap-3">
-                <button class="btn btn-secondary" onclick="showImportModal()">📥 导入 Claude Skill</button>
-                <a href="/" class="btn btn-secondary">← 返回主页</a>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="reloadAllSkills()">↻ Reload All</button>
+                <button class="btn btn-primary" onclick="showImportModal()">+ Import Claude Skill</button>
             </div>
         </header>
 
         <!-- Stats -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
-            <div class="card text-center">
-                <div class="text-3xl font-bold" id="totalSkills">0</div>
-                <div class="text-sm" style="color: var(--text-secondary)">总技能数</div>
+        <div class="stats-grid mb-4">
+            <div class="stat-card">
+                <div class="stat-value" id="totalSkills">0</div>
+                <div class="stat-label">Total Skills</div>
             </div>
-            <div class="card text-center">
-                <div class="text-3xl font-bold" id="enabledSkills">0</div>
-                <div class="text-sm" style="color: var(--text-secondary)">已启用</div>
+            <div class="stat-card">
+                <div class="stat-value" id="enabledSkills">0</div>
+                <div class="stat-label">Enabled</div>
             </div>
-            <div class="card text-center">
-                <div class="text-3xl font-bold" id="claudeSkills">0</div>
-                <div class="text-sm" style="color: var(--text-secondary)">Claude 导入</div>
+            <div class="stat-card">
+                <div class="stat-value" id="claudeSkills">0</div>
+                <div class="stat-label">Claude Import</div>
             </div>
-            <div class="card text-center">
-                <div class="text-3xl font-bold" id="localSkills">0</div>
-                <div class="text-sm" style="color: var(--text-secondary)">本地技能</div>
+            <div class="stat-card">
+                <div class="stat-value" id="localSkills">0</div>
+                <div class="stat-label">Local</div>
             </div>
         </div>
 
         <!-- Skills Grid -->
         <div class="card">
-            <h2 class="text-lg font-semibold mb-4">📦 已安装技能</h2>
-            <div id="skillsGrid" class="grid grid-cols-3 gap-4"></div>
+            <div class="card-header">
+                <span class="card-title">Installed Skills</span>
+            </div>
+            <div id="skillsGrid" class="grid-3" style="gap: 16px;"></div>
+            <div id="emptySkills" class="empty-state hidden">
+                <div class="empty-state-icon">🛠️</div>
+                <div class="empty-state-title">No skills installed</div>
+                <div class="empty-state-desc">Import a Claude skill to get started</div>
+            </div>
         </div>
     </div>
 
     <!-- Import Modal -->
-    <div id="importModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">📥 导入 Claude Skill</h2>
-                <button onclick="hideImportModal()" class="text-2xl" style="color: var(--text-secondary)">×</button>
+    <div id="importModal" class="modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h2 class="modal-title">📥 Import Claude Skill</h2>
+                <button class="modal-close" onclick="hideImportModal()">×</button>
             </div>
 
-            <div class="mb-4">
-                <label class="block text-sm mb-2" style="color: var(--text-secondary)">导入方式</label>
-                <div class="flex gap-3 mb-3">
-                    <button id="tab-paste" class="btn btn-secondary" onclick="switchImportTab('paste')">📝 粘贴 JSON</button>
-                    <button id="tab-file" class="btn" onclick="switchImportTab('file')">📁 上传文件</button>
-                </div>
+            <div class="import-tabs">
+                <button id="tab-paste" class="import-tab active" onclick="switchImportTab('paste')">📝 Paste JSON</button>
+                <button id="tab-file" class="import-tab" onclick="switchImportTab('file')">📁 Upload File</button>
             </div>
 
             <!-- Paste Tab -->
             <div id="import-paste">
-                <div class="mb-4">
-                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">Claude Tool JSON Schema</label>
-                    <textarea id="claudeSchema" class="input" placeholder='{
+                <div class="form-group">
+                    <label class="form-label">Claude Tool JSON Schema</label>
+                    <textarea id="claudeSchema" class="input font-mono" rows="10" placeholder='{
   "name": "my_tool",
-  "description": "工具描述",
+  "description": "Tool description",
   "input_schema": {
     "type": "object",
     "properties": {
       "param1": {
         "type": "string",
-        "description": "参数描述"
+        "description": "Parameter description"
       }
     },
     "required": ["param1"]
   }
-}' style="min-height: 200px;"></textarea>
+}'></textarea>
                 </div>
             </div>
 
             <!-- File Tab -->
             <div id="import-file" class="hidden">
-                <div class="mb-4">
-                    <label class="block text-sm mb-2" style="color: var(--text-secondary)">选择 JSON 文件</label>
+                <div class="form-group">
+                    <label class="form-label">Select JSON File</label>
                     <input type="file" id="schemaFile" accept=".json" class="input" onchange="handleFileSelect(event)">
                 </div>
-                <div id="fileContentPreview" class="json-preview mb-4 hidden"></div>
+                <div id="fileContentPreview" class="json-viewer hidden mb-4"></div>
             </div>
 
-            <div class="flex gap-3 mb-4">
-                <button class="btn" onclick="importClaudeSkill()">🔍 预览草稿</button>
-                <button class="btn btn-secondary" onclick="hideImportModal()">取消</button>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="hideImportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="previewDraft()">🔍 Preview Draft</button>
             </div>
 
-            <div id="previewSection" class="hidden">
-                <h3 class="font-semibold mb-2">📋 草稿预览</h3>
+            <div id="previewSection" class="hidden" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-light);">
+                <h3 style="margin-bottom: 16px;">📋 Draft Preview</h3>
                 <div id="previewContent"></div>
-                <div id="previewWarnings" class="warning-text mb-4"></div>
-                <button id="installBtn" class="btn btn-success" onclick="installDraft()">✅ 安装技能</button>
+                <div id="previewWarnings" class="mb-4"></div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn btn-secondary" onclick="hidePreview()">Edit Again</button>
+                    <button class="btn btn-success" onclick="installDraft()">✅ Install Skill</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Draft ID (hidden) -->
-    <input type="hidden" id="currentDraftId">
-
-    <div id="toast" class="toast hidden"></div>
+    <div id="toast" class="toast"></div>
 
     <script>
         const API_BASE = 'http://localhost:8000';
@@ -154,28 +152,19 @@
         let currentDraftId = null;
 
         async function init() {
-            console.log('[Skills Page] Initializing...');
+            console.log('[Skills] Initializing...');
             await loadSkills();
         }
 
         async function loadSkills() {
-            console.log('[Skills Page] Loading skills...');
             try {
                 const res = await fetch(`${API_BASE}/skills/`);
-                console.log('[Skills Page] /skills/ response status:', res.status);
-
-                if (!res.ok) {
-                    throw new Error('HTTP ' + res.status);
-                }
-
                 const data = await res.json();
-                console.log('[Skills Page] Skills data:', data);
                 skills = data.skills || [];
                 renderStats();
                 renderSkills();
             } catch (e) {
-                console.error('[Skills Page] Failed to load skills:', e);
-                showToast('加载技能列表失败: ' + e.message, 'error');
+                showToast('Failed to load skills', 'error');
             }
         }
 
@@ -188,137 +177,71 @@
 
         function renderSkills() {
             const grid = document.getElementById('skillsGrid');
+            const empty = document.getElementById('emptySkills');
+
             if (skills.length === 0) {
-                grid.innerHTML = '<p class="col-span-3 text-center py-8" style="color: var(--text-secondary)">暂无技能</p>';
+                grid.innerHTML = '';
+                empty.classList.remove('hidden');
                 return;
             }
 
-            grid.innerHTML = skills.map(skill => {
-                const tags = JSON.parse(skill.tags || '[]');
-                const agentIds = JSON.parse(skill.agent_ids || '[]');
+            empty.classList.add('hidden');
+            grid.innerHTML = skills.map(s => {
+                const tags = JSON.parse(s.tags || '[]');
                 return `
-                <div class="skill-card ${skill.enabled ? 'tag-enabled' : 'tag-disabled'}">
-                    <div class="flex justify-between items-start mb-2">
+                <div class="skill-card">
+                    <div class="skill-header">
                         <div>
-                            <div class="font-semibold">${skill.name || skill.skill_id}</div>
-                            <div class="text-xs" style="color: var(--text-secondary)">${skill.skill_id}</div>
+                            <div class="skill-name">${escapeHtml(s.name || s.skill_id)}</div>
+                            <div class="skill-id">${s.skill_id}</div>
                         </div>
-                        <span class="tag">v${skill.version || '1.0'}</span>
+                        <div class="toggle ${s.enabled ? 'active' : ''}" onclick="toggleSkill('${s.skill_id}', ${!s.enabled})"></div>
                     </div>
-                    <p class="text-sm mb-3" style="color: var(--text-secondary)">${skill.description || '无描述'}</p>
-                    <div class="flex flex-wrap gap-1 mb-3">
-                        ${tags.map(t => `<span class="tag">${t}</span>`).join('')}
-                        ${agentIds.map(a => `<span class="tag">${a}</span>`).join('')}
+                    <div class="skill-desc">${escapeHtml(s.description || 'No description')}</div>
+                    <div class="skill-tags">
+                        ${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+                        <span class="tag ${s.enabled ? 'tag-success' : ''}">${s.enabled ? 'Enabled' : 'Disabled'}</span>
                     </div>
-                    <div class="flex gap-2">
-                        <button class="btn btn-sm ${skill.enabled ? 'btn-warning' : 'btn-success'}" onclick="toggleSkill('${skill.skill_id}', ${!skill.enabled})">
-                            ${skill.enabled ? '禁用' : '启用'}
-                        </button>
-                        <button class="btn btn-sm btn-secondary" onclick="reloadSkill('${skill.skill_id}')">🔄 重载</button>
-                        <button class="btn btn-sm btn-secondary" onclick="uninstallSkill('${skill.skill_id}')">🗑️</button>
+                    <div class="skill-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="reloadSkill('${s.skill_id}')">↻ Reload</button>
+                        <button class="btn btn-sm btn-secondary" onclick="copySkillId('${s.skill_id}')">📋 Copy ID</button>
+                        <button class="btn btn-sm btn-danger" onclick="uninstallSkill('${s.skill_id}')">🗑️ Uninstall</button>
                     </div>
                 </div>
             `}).join('');
         }
 
-        async function toggleSkill(skillId, enable) {
-            try {
-                const endpoint = enable ? 'enable' : 'disable';
-                await fetch(`${API_BASE}/skills/${endpoint}/${skillId}`, { method: 'POST' });
-                showToast(`${enable ? '启用' : '禁用'}成功`, 'success');
-                await loadSkills();
-            } catch (e) {
-                showToast('操作失败', 'error');
-            }
-        }
-
-        async function reloadSkill(skillId) {
-            try {
-                await fetch(`${API_BASE}/skills/reload/${skillId}`, { method: 'POST' });
-                showToast('重载成功', 'success');
-            } catch (e) {
-                showToast('重载失败', 'error');
-            }
-        }
-
-        async function uninstallSkill(skillId) {
-            if (!confirm(`确定要卸载技能 ${skillId} 吗？`)) return;
-            try {
-                await fetch(`${API_BASE}/skills/${skillId}`, { method: 'DELETE' });
-                showToast('卸载成功', 'success');
-                await loadSkills();
-            } catch (e) {
-                showToast('卸载失败', 'error');
-            }
-        }
-
-        function showImportModal() {
-            document.getElementById('importModal').classList.remove('hidden');
-            document.getElementById('previewSection').classList.add('hidden');
-            document.getElementById('currentDraftId').value = '';
-            document.getElementById('claudeSchema').value = '';
-            document.getElementById('schemaFile').value = '';
-            document.getElementById('fileContentPreview').classList.add('hidden');
-            switchImportTab('paste');
-        }
-
-        function hideImportModal() {
-            document.getElementById('importModal').classList.add('hidden');
-        }
-
         function switchImportTab(tab) {
-            document.getElementById('tab-paste').classList.remove('btn-secondary');
-            document.getElementById('tab-paste').classList.add('btn');
-            document.getElementById('tab-file').classList.remove('btn-secondary');
-            document.getElementById('tab-file').classList.add('btn');
-            
-            if (tab === 'paste') {
-                document.getElementById('tab-paste').classList.remove('btn');
-                document.getElementById('tab-paste').classList.add('btn-secondary');
-                document.getElementById('import-paste').classList.remove('hidden');
-                document.getElementById('import-file').classList.add('hidden');
-            } else {
-                document.getElementById('tab-file').classList.remove('btn');
-                document.getElementById('tab-file').classList.add('btn-secondary');
-                document.getElementById('import-paste').classList.add('hidden');
-                document.getElementById('import-file').classList.remove('hidden');
-            }
+            document.getElementById('tab-paste').classList.toggle('active', tab === 'paste');
+            document.getElementById('tab-file').classList.toggle('active', tab === 'file');
+            document.getElementById('import-paste').classList.toggle('hidden', tab !== 'paste');
+            document.getElementById('import-file').classList.toggle('hidden', tab !== 'file');
         }
 
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
-            console.log('[Skills Page] Selected file:', file.name);
-            
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
-                console.log('[Skills Page] File content length:', content.length);
-                
                 try {
                     const parsed = JSON.parse(content);
                     document.getElementById('claudeSchema').value = JSON.stringify(parsed, null, 2);
                     document.getElementById('fileContentPreview').classList.remove('hidden');
-                    document.getElementById('fileContentPreview').innerHTML = `<strong>文件内容预览:</strong><br>${escapeHtml(content.substring(0, 500))}${content.length > 500 ? '...' : ''}`;
-                    showToast('文件加载成功', 'success');
+                    document.getElementById('fileContentPreview').textContent = content.substring(0, 500) + (content.length > 500 ? '...' : '');
+                    showToast('File loaded successfully', 'success');
                 } catch (e) {
-                    showToast('JSON 解析失败: ' + e.message, 'error');
+                    showToast('Invalid JSON file', 'error');
                 }
             };
             reader.readAsText(file);
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        async function importClaudeSkill() {
+        async function previewDraft() {
             const schemaText = document.getElementById('claudeSchema').value.trim();
             if (!schemaText) {
-                showToast('请输入 JSON Schema', 'error');
+                showToast('Please enter JSON Schema', 'error');
                 return;
             }
 
@@ -326,111 +249,169 @@
             try {
                 schema = JSON.parse(schemaText);
             } catch (e) {
-                showToast('JSON 格式错误: ' + e.message, 'error');
+                showToast('Invalid JSON: ' + e.message, 'error');
                 return;
             }
-
-            console.log('[Skills Page] Importing Claude skill:', schema);
 
             try {
                 const res = await fetch(`${API_BASE}/skills/import/claude`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(schema)
+                    body: schemaText
                 });
-                console.log('[Skills Page] Import response status:', res.status);
-
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    console.error('[Skills Page] Import failed:', errorText);
-                    showToast('导入失败: HTTP ' + res.status, 'error');
-                    return;
-                }
-
                 const data = await res.json();
-                console.log('[Skills Page] Import response data:', data);
 
                 if (data.success) {
                     currentDraftId = data.draft_id;
-                    document.getElementById('currentDraftId').value = currentDraftId;
-
-                    const preview = data.preview;
-                    const warnings = preview.warnings || [];
-
-                    document.getElementById('previewContent').innerHTML = `
-                        <div class="json-preview mb-3">
-                            <div class="font-semibold mb-2">工具名称: ${preview.tool_name}</div>
-                            <div class="mb-2">描述: ${preview.description || '无'}</div>
-                            <div class="mb-2">参数:</div>
-                            <ul class="ml-4">
-                                ${(preview.parameters || []).map(p => `
-                                    <li>${p.name} (${p.type}) - ${p.required ? '必需' : '可选'}</li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    `;
-
-                    document.getElementById('previewWarnings').innerHTML = warnings.length
-                        ? `⚠️ 警告: ${warnings.join(', ')}`
-                        : '';
-
-                    document.getElementById('previewSection').classList.remove('hidden');
-                    showToast('草稿预览成功', 'success');
+                    showDraftPreview(data.preview, data.warnings);
                 } else {
-                    showToast('预览失败: ' + (data.detail || '未知错误'), 'error');
+                    showToast('Preview failed: ' + (data.detail || 'Unknown error'), 'error');
                 }
             } catch (e) {
-                console.error('[Skills Page] Import error:', e);
-                showToast('预览失败: ' + e.message, 'error');
+                showToast('Preview failed: ' + e.message, 'error');
             }
         }
 
+        function showDraftPreview(preview, warnings) {
+            const params = (preview.parameters || []).map(p => 
+                `• ${p.name} (${p.type}) ${p.required ? '🔴 required' : '🟢 optional'} - ${p.description || 'No description'}`
+            ).join('\n');
+
+            document.getElementById('previewContent').innerHTML = `
+                <div class="json-viewer">
+                    <strong>Tool Name:</strong> ${escapeHtml(preview.tool_name)}
+                    
+                    <strong style="display: block; margin-top: 12px;">Description:</strong> ${escapeHtml(preview.description || 'None')}
+                    
+                    <strong style="display: block; margin-top: 12px;">Parameters:</strong>
+                    ${params || 'No parameters'}
+                </div>
+            `;
+
+            if (warnings && warnings.length > 0) {
+                document.getElementById('previewWarnings').innerHTML = `
+                    <div class="tag tag-warning" style="display: inline-flex; gap: 4px;">
+                        ⚠️ ${warnings.join(', ')}
+                    </div>
+                `;
+            } else {
+                document.getElementById('previewWarnings').innerHTML = '';
+            }
+
+            document.getElementById('previewSection').classList.remove('hidden');
+        }
+
+        function hidePreview() {
+            document.getElementById('previewSection').classList.add('hidden');
+            currentDraftId = null;
+        }
+
         async function installDraft() {
-            const draftId = document.getElementById('currentDraftId').value;
-            if (!draftId) {
-                showToast('请先预览草稿', 'error');
+            if (!currentDraftId) {
+                showToast('Please preview a draft first', 'error');
                 return;
             }
 
-            console.log('[Skills Page] Installing draft:', draftId);
-
             try {
-                const res = await fetch(`${API_BASE}/skills/drafts/${draftId}/install`, { method: 'POST' });
-                console.log('[Skills Page] Install response status:', res.status);
-
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    console.error('[Skills Page] Install failed:', errorText);
-                    showToast('安装失败: HTTP ' + res.status, 'error');
-                    return;
-                }
-
+                const res = await fetch(`${API_BASE}/skills/drafts/${currentDraftId}/install`, {
+                    method: 'POST'
+                });
                 const data = await res.json();
-                console.log('[Skills Page] Install response data:', data);
 
                 if (data.success) {
-                    showToast(`技能 ${data.skill_id} 安装成功!`, 'success');
+                    showToast(`Skill ${data.skill_id} installed!`, 'success');
                     hideImportModal();
                     await loadSkills();
                 } else {
-                    showToast('安装失败: ' + (data.error || '未知错误'), 'error');
-                    if (data.warnings?.length) {
-                        showToast('警告: ' + data.warnings.join(', '), 'warning');
-                    }
+                    showToast('Install failed: ' + (data.error || 'Unknown'), 'error');
                 }
             } catch (e) {
-                console.error('[Skills Page] Install error:', e);
-                showToast('安装失败: ' + e.message, 'error');
+                showToast('Install failed: ' + e.message, 'error');
             }
+        }
+
+        function showImportModal() {
+            document.getElementById('importModal').classList.add('active');
+            document.getElementById('previewSection').classList.add('hidden');
+            document.getElementById('claudeSchema').value = '';
+            document.getElementById('schemaFile').value = '';
+            document.getElementById('fileContentPreview').classList.add('hidden');
+            switchImportTab('paste');
+        }
+
+        function hideImportModal() {
+            document.getElementById('importModal').classList.remove('active');
+        }
+
+        async function toggleSkill(skillId, enable) {
+            try {
+                const endpoint = enable ? 'enable' : 'disable';
+                await fetch(`${API_BASE}/skills/${endpoint}/${skillId}`, { method: 'POST' });
+                showToast(`${enable ? 'Enabled' : 'Disabled'} ${skillId}`, 'success');
+                await loadSkills();
+            } catch (e) {
+                showToast('Operation failed', 'error');
+            }
+        }
+
+        async function reloadSkill(skillId) {
+            try {
+                await fetch(`${API_BASE}/skills/reload/${skillId}`, { method: 'POST' });
+                showToast(`${skillId} reloaded`, 'success');
+            } catch (e) {
+                showToast('Reload failed', 'error');
+            }
+        }
+
+        async function reloadAllSkills() {
+            try {
+                await fetch(`${API_BASE}/skills/reload-all`, { method: 'POST' });
+                showToast('All skills reloaded', 'success');
+                await loadSkills();
+            } catch (e) {
+                showToast('Reload all failed', 'error');
+            }
+        }
+
+        async function uninstallSkill(skillId) {
+            if (!confirm(`Uninstall ${skillId}?`)) return;
+
+            try {
+                await fetch(`${API_BASE}/skills/${skillId}`, { method: 'DELETE' });
+                showToast(`${skillId} uninstalled`, 'success');
+                await loadSkills();
+            } catch (e) {
+                showToast('Uninstall failed', 'error');
+            }
+        }
+
+        function copySkillId(skillId) {
+            navigator.clipboard.writeText(skillId).then(() => {
+                showToast('Copied!', 'success');
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `toast toast-${type}`;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 3000);
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
         }
+
+        // Close modal on backdrop click
+        document.getElementById('importModal')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                hideImportModal();
+            }
+        });
 
         init();
     </script>
