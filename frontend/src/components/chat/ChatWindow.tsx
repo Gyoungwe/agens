@@ -7,9 +7,11 @@ interface ChatWindowProps {
   messages: Message[]
   isStreaming: boolean
   onSendMessage: (message: string) => void
+  onSelectImage?: (file: File | null) => void
+  selectedImage?: { name: string; size: number } | null
 }
 
-export function ChatWindow({ messages, isStreaming, onSendMessage }: ChatWindowProps) {
+export function ChatWindow({ messages, isStreaming, onSendMessage, onSelectImage, selectedImage }: ChatWindowProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -36,6 +38,8 @@ export function ChatWindow({ messages, isStreaming, onSendMessage }: ChatWindowP
         value={input}
         onChange={setInput}
         onSend={handleSend}
+        onSelectImage={onSelectImage}
+        selectedImage={selectedImage}
         disabled={isStreaming}
       />
     </div>

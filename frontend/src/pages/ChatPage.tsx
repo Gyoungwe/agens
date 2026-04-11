@@ -6,6 +6,7 @@ import { useChatStore } from '@/store'
 import { parseSSEStream } from '@/utils/sse'
 import type { Message } from '@/types'
 import type { TraceEvent } from '@/components/chat/InvocationTrace'
+import { providersApi } from '@/api/providers'
 
 export function ChatPage() {
   const [splitPosition, setSplitPosition] = useState(60)
@@ -13,6 +14,9 @@ export function ChatPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const { messages, isStreaming, currentSessionId, setSessions, setCurrentSession, addMessage, updateMessage, setStreaming } = useChatStore()
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
+  const [sessionTraceMap, setSessionTraceMap] = useState<Record<string, TraceEvent[]>>({})
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [providerInfo, setProviderInfo] = useState<{ id: string; name: string; model: string } | null>(null)
 
   useEffect(() => {
     fetch('/api/sessions')
@@ -26,10 +30,41 @@ export function ChatPage() {
       })
   }, [setSessions, setCurrentSession])
 
+  useEffect(() => {
+    providersApi.getCurrentProvider()
+      .then((res) => setProviderInfo(res.data))
+      .catch(() => setProviderInfo(null))
+  }, [])
+
+  useEffect(() => {
+    if (!currentSessionId) return
+    setTraceEvents(sessionTraceMap[currentSessionId] || [])
+  }, [currentSessionId, sessionTraceMap])
+
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return
 
-    setTraceEvents([])
+    if (selectedImage) {
+      const modelText = `${providerInfo?.id || ''} ${providerInfo?.name || ''} ${providerInfo?.model || ''}`.toLowerCase()
+      const supportsVision =
+        modelText.includes('gpt-4o') ||
+        modelText.includes('vision') ||
+        modelText.includes('claude-3') ||
+        modelText.includes('sonnet')
+
+      if (!supportsVision) {
+        addMessage({
+          id: `system-${Date.now()}`,
+          role: 'system',
+          content: `当前模型（${providerInfo?.model || providerInfo?.id || 'unknown'}）不支持图片输入。请切换到支持视觉的模型（如 GPT-4o / Claude 3.x）后再发送图片。`,
+          created_at: new Date().toISOString(),
+          session_id: currentSessionId || undefined,
+        })
+        return
+      }
+    }
+
+    // Keep invocation trace continuity within the same session
 
     const userMessage = {
       id: `user-${Date.now()}`,
@@ -60,7 +95,7 @@ export function ChatPage() {
             continue_on_error: true,
           }
         : {
-            message,
+            message: selectedImage ? `${message}\n\n[image_attached:${selectedImage.name}]` : message,
             session_id: currentSessionId,
           }
 
@@ -125,17 +160,20 @@ export function ChatPage() {
         traceId = (sseEvent.data.trace_id as string) || traceId
 
         const eventData = sseEvent.data as Record<string, unknown>
-        setTraceEvents((prev) => [
+        const traceEvent: TraceEvent = {
+          event_id: String(sseEvent.eventType) + '-' + Date.now() + '-' + Math.random(),
+          type: sseEvent.eventType,
+          agent: String(eventData.agent || ''),
+          status: String(eventData.status || 'running'),
+          data: eventData,
+          created_at: Date.now() / 1000,
+        }
+        setTraceEvents((prev) => [...prev, traceEvent])
+        const sid = String(eventData.session_id || currentSessionId || 'pending')
+        setSessionTraceMap((prev) => ({
           ...prev,
-          {
-            event_id: String(sseEvent.eventType) + '-' + Date.now() + '-' + Math.random(),
-            type: sseEvent.eventType,
-            agent: String(eventData.agent || ''),
-            status: String(eventData.status || 'running'),
-            data: eventData,
-            created_at: Date.now() / 1000,
-          },
-        ])
+          [sid]: [...(prev[sid] || []), traceEvent],
+        }))
 
         if (chatMode === 'bio_workflow') {
           if (sseEvent.eventType === 'bio_stage_pending' || sseEvent.eventType === 'bio_stage_running' || sseEvent.eventType === 'bio_stage_done') {
@@ -177,6 +215,7 @@ export function ChatPage() {
       }
 
       updateMessage(assistantId, { content: finalResponse } as Partial<Message>)
+      setSelectedImage(null)
 
       const sessionsRes = await fetch('/api/sessions')
       const sessionsData = await sessionsRes.json()
@@ -191,6 +230,43 @@ export function ChatPage() {
     } finally {
       setStreaming(false)
     }
+  }
+
+  const handleNewChat = async () => {
+    try {
+      const res = await fetch('/api/sessions?title=New%20Chat', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      const newSessionId = data.session_id as string
+      setCurrentSession(newSessionId)
+      useChatStore.getState().setMessages([])
+      setTraceEvents([])
+      setSelectedImage(null)
+
+      const sessionsRes = await fetch('/api/sessions')
+      const sessionsData = await sessionsRes.json()
+      setSessions(Array.isArray(sessionsData) ? sessionsData : (sessionsData.sessions || []))
+    } catch (e) {
+      console.error('Failed to create new chat session', e)
+    }
+  }
+
+  const runMemorySelfCheck = () => {
+    const checklist = [
+      '记忆自检步骤：',
+      '1) 在同一会话连续发送两条消息（包含可识别事实，如“我的项目代号是 A1”）。',
+      '2) 发送“请复述我刚才给出的项目代号”。',
+      '3) 切换新会话后再次询问，模型不应继续记住上一会话事实。',
+      '4) 如需底层验证：访问 /debug/results/{session_id} 查看 task_results。',
+    ].join('\n')
+    addMessage({
+      id: `system-memory-check-${Date.now()}`,
+      role: 'system',
+      content: checklist,
+      created_at: new Date().toISOString(),
+      session_id: currentSessionId || undefined,
+    })
   }
 
   const handleMouseDown = () => {
@@ -216,6 +292,18 @@ export function ChatPage() {
 
       <div className="px-4 py-2 border-b border-border flex items-center gap-2">
         <button
+          onClick={handleNewChat}
+          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+        >
+          New Chat
+        </button>
+        <button
+          onClick={runMemorySelfCheck}
+          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+        >
+          Memory Self-Check
+        </button>
+        <button
           onClick={() => setChatMode('chat')}
           className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'chat' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
         >
@@ -239,6 +327,8 @@ export function ChatPage() {
             messages={messages}
             isStreaming={isStreaming}
             onSendMessage={handleSendMessage}
+            onSelectImage={setSelectedImage}
+            selectedImage={selectedImage ? { name: selectedImage.name, size: selectedImage.size } : null}
           />
         </div>
 

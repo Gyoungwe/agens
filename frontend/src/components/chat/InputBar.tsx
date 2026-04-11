@@ -1,15 +1,18 @@
 import { useRef, type KeyboardEvent, type ChangeEvent } from 'react'
-import { Send, Sparkles } from 'lucide-react'
+import { Send, Sparkles, ImagePlus, X } from 'lucide-react'
 
 interface InputBarProps {
   value: string
   onChange: (value: string) => void
   onSend: () => void
+  onSelectImage?: (file: File | null) => void
+  selectedImage?: { name: string; size: number } | null
   disabled?: boolean
 }
 
-export function InputBar({ value, onChange, onSend, disabled }: InputBarProps) {
+export function InputBar({ value, onChange, onSend, onSelectImage, selectedImage, disabled }: InputBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -29,6 +32,24 @@ export function InputBar({ value, onChange, onSend, disabled }: InputBarProps) {
   return (
     <div className="border-t border-border/50 p-4 bg-card/50 backdrop-blur-sm">
       <div className="flex gap-3 max-w-4xl mx-auto">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null
+            onSelectImage?.(file)
+          }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          className="px-3 py-3 rounded-2xl border border-border/50 bg-card hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          title="Attach image"
+        >
+          <ImagePlus className="w-4 h-4" />
+        </button>
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
@@ -52,6 +73,20 @@ export function InputBar({ value, onChange, onSend, disabled }: InputBarProps) {
           <span className="hidden sm:inline">Send</span>
         </button>
       </div>
+      {selectedImage && (
+        <div className="max-w-4xl mx-auto mt-2 flex items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-2 px-2 py-1 rounded border border-border bg-muted/30">
+            <ImagePlus className="w-3 h-3" />
+            {selectedImage.name} ({Math.round(selectedImage.size / 1024)}KB)
+          </span>
+          <button
+            onClick={() => onSelectImage?.(null)}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-border hover:bg-muted/40 cursor-pointer"
+          >
+            <X className="w-3 h-3" /> Remove
+          </button>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto mt-2">
         <p className="text-xs text-muted-foreground/60 text-center">
           Press Enter to send, Shift+Enter for new line
