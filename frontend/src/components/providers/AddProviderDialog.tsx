@@ -1,27 +1,64 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { providersApi } from '@/api'
 import { X, Loader2 } from 'lucide-react'
+import type { UpdateProviderRequest } from '@/api/providers'
 
 interface AddProviderDialogProps {
   open: boolean
   onClose: () => void
+  mode?: 'create' | 'edit'
+  providerId?: string
+  initialValues?: {
+    id: string
+    name: string
+    type: 'openai' | 'anthropic'
+    model: string
+    base_url?: string
+    api_key?: string
+  }
 }
 
-export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
+export function AddProviderDialog({ open, onClose, mode = 'create', providerId, initialValues }: AddProviderDialogProps) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
-    id: '',
-    name: '',
-    type: 'openai' as 'openai' | 'anthropic',
-    model: '',
-    base_url: '',
+    id: initialValues?.id || '',
+    name: initialValues?.name || '',
+    type: (initialValues?.type || 'openai') as 'openai' | 'anthropic',
+    model: initialValues?.model || '',
+    base_url: initialValues?.base_url || '',
     api_key: '',
   })
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (!open) return
+    setForm({
+      id: initialValues?.id || '',
+      name: initialValues?.name || '',
+      type: (initialValues?.type || 'openai') as 'openai' | 'anthropic',
+      model: initialValues?.model || '',
+      base_url: initialValues?.base_url || '',
+      api_key: '',
+    })
+    setError('')
+  }, [open, initialValues?.id, initialValues?.name, initialValues?.type, initialValues?.model, initialValues?.base_url])
+
   const mutation = useMutation({
-    mutationFn: (data: typeof form) => providersApi.addProvider(data),
+    mutationFn: (data: typeof form) => {
+      if (mode === 'edit') {
+        if (!providerId) throw new Error('Missing provider id')
+        const payload: UpdateProviderRequest = {
+          name: data.name,
+          type: data.type,
+          model: data.model,
+          base_url: data.base_url,
+          api_key: data.api_key,
+        }
+        return providersApi.updateProvider(providerId, payload)
+      }
+      return providersApi.addProvider(data)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers'] })
       queryClient.invalidateQueries({ queryKey: ['providers-list'] })
@@ -31,7 +68,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     },
     onError: (err: unknown) => {
       const e = err as { response?: { data?: { detail?: string } } }
-      setError(e.response?.data?.detail || 'Failed to add provider')
+      setError(e.response?.data?.detail || (mode === 'edit' ? 'Failed to update provider' : 'Failed to add provider'))
     },
   })
 
@@ -39,7 +76,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     const { name, value } = e.target
     setForm((prev) => {
       const next = { ...prev, [name]: value }
-      if (name === 'name' && !next.id) {
+      if (name === 'name' && !next.id && mode !== 'edit') {
         next.id = value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
       }
       if (name === 'type') {
@@ -54,7 +91,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
   }
 
   const handleSubmit = () => {
-    if (!form.id || !form.name || !form.model || !form.api_key) {
+    if (!form.name || !form.model || !form.api_key || (mode !== 'edit' && !form.id)) {
       setError('Please fill in all required fields')
       return
     }
@@ -75,7 +112,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
           <X className="w-4 h-4" />
         </button>
 
-        <h3 className="text-lg font-semibold mb-4">Add Model</h3>
+        <h3 className="text-lg font-semibold mb-4">{mode === 'edit' ? 'Edit Model' : 'Add Model'}</h3>
 
         <div className="space-y-3">
           <div>
@@ -105,7 +142,8 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
             />
           </div>
 
-          <div>
+          {mode !== 'edit' && (
+            <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Provider ID <span className="text-destructive">*</span>
             </label>
@@ -119,6 +157,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
             />
             <p className="text-xs text-muted-foreground mt-1">Unique identifier, auto-generated from name</p>
           </div>
+          )}
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
@@ -157,7 +196,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
               name="api_key"
               value={form.api_key}
               onChange={handleChange}
-              placeholder="sk-..."
+              placeholder={mode === 'edit' ? 'Enter new key to update' : 'sk-...'}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
             />
           </div>
@@ -176,11 +215,11 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={mutation.isPending || !form.id || !form.name || !form.model || !form.api_key}
+            disabled={mutation.isPending || !form.name || !form.model || !form.api_key || (mode !== 'edit' && !form.id)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
           >
             {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            Add Model
+            {mode === 'edit' ? 'Save Changes' : 'Add Model'}
           </button>
         </div>
       </div>

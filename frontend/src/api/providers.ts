@@ -22,12 +22,23 @@ export interface AddProviderRequest {
   api_key: string
 }
 
+export interface UpdateProviderRequest {
+  name: string
+  type: 'openai' | 'anthropic'
+  model: string
+  base_url?: string
+  api_key: string
+}
+
 export const providersApi = {
   getProviders: () =>
     client.get<Provider[]>('/providers'),
 
   addProvider: (data: AddProviderRequest) =>
     client.post<{ success: boolean; provider_id: string }>('/providers', data),
+
+  updateProvider: (providerId: string, data: UpdateProviderRequest) =>
+    client.put<{ success: boolean; provider_id: string }>(`/providers/${providerId}`, data),
 
   deleteProvider: (providerId: string) =>
     client.delete<{ success: boolean }>(`/providers/${providerId}`),

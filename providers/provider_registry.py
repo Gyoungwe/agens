@@ -235,6 +235,15 @@ class ProviderRegistry:
         self._profiles[profile_id] = profile
         logger.info(f"✅ 动态添加 Provider: {profile_id}")
 
+    def update(self, profile_id: str, provider: BaseProvider, profile: dict):
+        """更新已有 Provider 配置并替换运行时实例"""
+        if profile_id not in self._providers and profile_id not in self._profiles:
+            raise ValueError(f"Provider [{profile_id}] 未注册")
+
+        self._providers[profile_id] = provider
+        self._profiles[profile_id] = profile
+        logger.info(f"♻️ 更新 Provider: {profile_id}")
+
     def remove(self, profile_id: str):
         """动态删除 Provider（删除前检查引用）"""
         if profile_id == self._active:

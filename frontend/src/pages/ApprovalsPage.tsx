@@ -6,8 +6,10 @@ import { useApprovalStore } from '@/store'
 import { useWebSocket } from '@/hooks'
 import { CheckCircle2, Shield } from 'lucide-react'
 import type { Approval } from '@/types'
+import { useNavigate } from 'react-router-dom'
 
 export function ApprovalsPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setApprovals } = useApprovalStore()
 
@@ -87,6 +89,7 @@ export function ApprovalsPage() {
                       <ApprovalCard
                         key={approval.id}
                         approval={approval}
+                        onOpenDetail={() => navigate('/bio-workflow')}
                         onApprove={() => approveMutation.mutate(approval.id)}
                         onReject={() => rejectMutation.mutate(approval.id)}
                         isApproving={approveMutation.isPending}
@@ -110,6 +113,7 @@ export function ApprovalsPage() {
                       <ApprovalCard
                         key={approval.id}
                         approval={approval}
+                        onOpenDetail={() => navigate('/bio-workflow')}
                         isProcessed
                       />
                     ))}

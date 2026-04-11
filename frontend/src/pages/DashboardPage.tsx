@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Header } from '@/components/layout'
 import { MessageCircle, Wrench, Brain, CheckCircle, TrendingUp, Activity, Clock3 } from 'lucide-react'
 import {
@@ -95,13 +96,15 @@ export function DashboardPage() {
               icon={Brain}
               color="success"
             />
-            <StatCard
-              title="Pending Approvals"
-              value={stats?.pendingApprovals || 0}
-              icon={CheckCircle}
-              color={stats?.pendingApprovals > 0 ? 'destructive' : 'success'}
-              highlight={stats?.pendingApprovals > 0}
-            />
+            <Link to="/approvals" className="block">
+              <StatCard
+                title="Pending Approvals"
+                value={stats?.pendingApprovals || 0}
+                icon={CheckCircle}
+                color={stats?.pendingApprovals > 0 ? 'destructive' : 'success'}
+                highlight={stats?.pendingApprovals > 0}
+              />
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

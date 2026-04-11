@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -139,6 +140,71 @@ class ResearchRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     provider_id: Optional[str] = None
+
+
+def _extract_research_sources(raw_text: str) -> List[str]:
+    if not raw_text:
+        return []
+
+    sources: List[str] = []
+    # URLs
+    for m in re.findall(r"https?://[^\s)\]}>\"']+", raw_text):
+        if m not in sources:
+            sources.append(m)
+
+    # DOI / arXiv / PMID style snippets
+    patterns = [
+        r"doi:\s*10\.\d{4,9}/[-._;()/:A-Z0-9]+",
+        r"arxiv:\s*\d{4}\.\d{4,5}(?:v\d+)?",
+        r"pmid:\s*\d+",
+    ]
+    for p in patterns:
+        for m in re.findall(p, raw_text, flags=re.IGNORECASE):
+            s = m.strip()
+            if s and s not in sources:
+                sources.append(s)
+
+    return sources[:20]
+
+
+def _extract_research_knowledge(raw_text: str) -> List[str]:
+    if not raw_text:
+        return []
+
+    points: List[str] = []
+    for line in raw_text.splitlines():
+        t = line.strip().lstrip("-•0123456789. ")
+        if len(t) < 20:
+            continue
+        if any(
+            k in t.lower()
+            for k in [
+                "found",
+                "evidence",
+                "result",
+                "conclude",
+                "发现",
+                "证据",
+                "结论",
+                "提示",
+            ]
+        ):
+            points.append(t)
+
+    if not points:
+        # fallback: keep first informative lines
+        for line in raw_text.splitlines():
+            t = line.strip().lstrip("-•0123456789. ")
+            if len(t) >= 30:
+                points.append(t)
+            if len(points) >= 12:
+                break
+
+    dedup: List[str] = []
+    for p in points:
+        if p not in dedup:
+            dedup.append(p)
+    return dedup[:20]
 
 
 class ChatResponse(BaseModel):
@@ -987,8 +1053,10 @@ app.include_router(memory_router)
 app.include_router(channels_router)
 
 from api.routers.evolution_router import set_knowledge_base as set_evolution_kb
+from api.routers.channels_router import set_runtime as set_channels_runtime
 
 set_evolution_kb(state.knowledge_base)
+set_channels_runtime(state._get_orchestrator, state._get_session_manager())
 
 # API namespace aliases for frontend proxy (/api/*)
 app.include_router(skill_router, prefix="/api")
@@ -1389,6 +1457,23 @@ def _estimate_context_pressure(session_id: str) -> Dict[str, Any]:
     return {"total_tokens": total_tokens, "window": window, "ratio": ratio}
 
 
+def _extract_xml_tag_values(text: str, tag: str) -> List[str]:
+    if not text:
+        return []
+    pattern = rf"<{tag}>(.*?)</{tag}>"
+    values = []
+    for m in re.finditer(pattern, text, flags=re.IGNORECASE | re.DOTALL):
+        value = (m.group(1) or "").strip()
+        if value:
+            values.append(value)
+    return values
+
+
+def _extract_xml_tag_value(text: str, tag: str) -> str:
+    values = _extract_xml_tag_values(text, tag)
+    return values[0] if values else ""
+
+
 async def _summarize_session_context(session_id: str) -> Dict[str, Any]:
     """手动/自动触发会话上下文压缩，返回完成与待完成摘要。"""
     if not state.session_manager or not state.session_manager._memory:
@@ -1399,7 +1484,15 @@ async def _summarize_session_context(session_id: str) -> Dict[str, Any]:
             "compressed": False,
         }
 
-    messages = state.session_manager.get_history()
+    from core.message import ChatMessage
+
+    raw = state.session_manager.store.get_messages(session_id)
+    messages = [
+        ChatMessage(
+            role=str(m.get("role", "assistant")), content=str(m.get("content", ""))
+        )
+        for m in raw
+    ]
     if not messages:
         return {
             "summary": "No messages to summarize.",
@@ -1413,17 +1506,23 @@ async def _summarize_session_context(session_id: str) -> Dict[str, Any]:
     if compressed and compressed[0].role == "system":
         summary_text = compressed[0].content
 
-    # Parse simple completed/pending extraction from summary text
-    completed: List[str] = []
-    pending: List[str] = []
-    for line in summary_text.splitlines():
-        t = line.strip()
-        if not t:
-            continue
-        if any(k in t for k in ["决策", "decision", "已完成", "done"]):
-            completed.append(t)
-        if any(k in t for k in ["待处理", "pending", "topic", "TODO", "todo"]):
-            pending.append(t)
+    # Prefer structured extraction from summary XML first
+    completed: List[str] = _extract_xml_tag_values(summary_text, "decision")
+    pending: List[str] = _extract_xml_tag_values(summary_text, "topic")
+    abstract = _extract_xml_tag_value(summary_text, "abstract")
+
+    # Fallback heuristics for non-XML summaries
+    if not completed and not pending:
+        for line in summary_text.splitlines():
+            t = line.strip().lstrip("-• ")
+            if not t:
+                continue
+            if any(k in t for k in ["决策", "decision", "已完成", "done"]):
+                completed.append(t)
+            if any(k in t for k in ["待处理", "pending", "topic", "TODO", "todo"]):
+                pending.append(t)
+
+    returned_summary = abstract or summary_text[:4000]
 
     # Persist compaction summary as system message for continuation
     state.session_manager.store.append_message(
@@ -1433,7 +1532,7 @@ async def _summarize_session_context(session_id: str) -> Dict[str, Any]:
     )
 
     return {
-        "summary": summary_text[:4000],
+        "summary": returned_summary,
         "completed": completed[:20],
         "pending": pending[:20],
         "compressed": True,
@@ -2051,6 +2150,174 @@ async def run_research(request: ResearchRequest):
     }
 
 
+@app.post("/research/stream")
+@app.post("/api/research/stream")
+async def stream_research(request: ResearchRequest):
+    """SSE 流式 research：输出中间过程（来源/知识点）与最终总结。"""
+    trace_id = str(uuid.uuid4())
+
+    async def event_generator():
+        try:
+            orch = state._get_orchestrator()
+            if not orch:
+                yield {
+                    "event": "error",
+                    "data": json.dumps(
+                        {"event": "error", "message": "System not initialized"},
+                        ensure_ascii=False,
+                    ),
+                }
+                return
+
+            if request.provider_id:
+                try:
+                    state.provider_registry.use(request.provider_id)
+                except Exception:
+                    pass
+
+            session_id = request.session_id or state.session_manager.new_session(
+                title=f"Research: {request.query[:40]}"
+            )
+
+            yield {
+                "event": "research_start",
+                "data": json.dumps(
+                    {
+                        "event": "research_start",
+                        "trace_id": trace_id,
+                        "session_id": session_id,
+                        "query": request.query,
+                    },
+                    ensure_ascii=False,
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+
+            yield {
+                "event": "research_progress",
+                "data": json.dumps(
+                    {
+                        "event": "research_progress",
+                        "trace_id": trace_id,
+                        "stage": "searching",
+                        "message": "Research agent is searching sources...",
+                    },
+                    ensure_ascii=False,
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+
+            raw = await orch.run_single_agent(
+                user_input=request.query,
+                agent_id="research_agent",
+                session_id=session_id,
+                trace_id=trace_id,
+            )
+
+            sources = _extract_research_sources(raw)
+            for idx, src in enumerate(sources, start=1):
+                yield {
+                    "event": "research_source",
+                    "data": json.dumps(
+                        {
+                            "event": "research_source",
+                            "trace_id": trace_id,
+                            "index": idx,
+                            "source": src,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "id": str(uuid.uuid4())[:8],
+                }
+
+            knowledge_points = _extract_research_knowledge(raw)
+            for idx, point in enumerate(knowledge_points, start=1):
+                yield {
+                    "event": "research_knowledge",
+                    "data": json.dumps(
+                        {
+                            "event": "research_knowledge",
+                            "trace_id": trace_id,
+                            "index": idx,
+                            "point": point,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "id": str(uuid.uuid4())[:8],
+                }
+
+            yield {
+                "event": "research_progress",
+                "data": json.dumps(
+                    {
+                        "event": "research_progress",
+                        "trace_id": trace_id,
+                        "stage": "summarizing",
+                        "message": "Report agent is synthesizing structured summary...",
+                    },
+                    ensure_ascii=False,
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+
+            summary_prompt = (
+                "请将以下 research 结果整理为结构化结论，输出包括："
+                "1) 关键发现 2) 证据与来源 3) 风险与局限 4) 下一步建议。\n\n"
+                f"Research Query: {request.query}\n\nRaw Findings:\n{raw}"
+            )
+            summarized = await orch.run_single_agent(
+                user_input=summary_prompt,
+                agent_id="bio_report_agent",
+                session_id=session_id,
+                trace_id=str(uuid.uuid4()),
+            )
+
+            yield {
+                "event": "research_done",
+                "data": json.dumps(
+                    {
+                        "event": "research_done",
+                        "success": True,
+                        "trace_id": trace_id,
+                        "session_id": session_id,
+                        "query": request.query,
+                        "research": raw,
+                        "summary": summarized,
+                        "sources": sources,
+                        "knowledge": knowledge_points,
+                    },
+                    ensure_ascii=False,
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+            yield {
+                "event": "done",
+                "data": json.dumps(
+                    {"event": "done", "trace_id": trace_id}, ensure_ascii=False
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+        except Exception as e:
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"event": "error", "trace_id": trace_id, "message": str(e)},
+                    ensure_ascii=False,
+                ),
+                "id": str(uuid.uuid4())[:8],
+            }
+
+    return EventSourceResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 会话管理
 # ═══════════════════════════════════════════════════════════════════
@@ -2229,6 +2496,14 @@ class AddProviderRequest(BaseModel):
     api_key: str
 
 
+class UpdateProviderRequest(BaseModel):
+    name: str
+    type: str  # "openai" or "anthropic"
+    model: str
+    base_url: str = ""
+    api_key: str
+
+
 @app.post("/providers")
 @app.post("/api/providers")
 async def add_provider(request: AddProviderRequest):
@@ -2290,6 +2565,58 @@ async def delete_provider(provider_id: str):
         logger.info(f"🗑️ 删除 Provider: {provider_id}")
         return {"success": True}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/providers/{provider_id}")
+@app.put("/api/providers/{provider_id}")
+async def update_provider(provider_id: str, request: UpdateProviderRequest):
+    """更新已有 Provider 配置"""
+    try:
+        pr = state.provider_registry
+        if provider_id not in pr.profiles:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        from providers.openai_provider import OpenAIProvider
+        from providers.anthropic_provider import AnthropicProvider
+
+        if request.type == "anthropic":
+            provider = AnthropicProvider(
+                model=request.model,
+                api_key=request.api_key,
+            )
+            provider.name = request.name
+        else:
+            provider = OpenAIProvider(
+                model=request.model,
+                base_url=request.base_url or "https://api.openai.com/v1",
+                api_key=request.api_key,
+            )
+            provider.name = request.name
+
+        profile = {
+            "id": provider_id,
+            "name": request.name,
+            "type": request.type,
+            "model": request.model,
+            "base_url": request.base_url or "https://api.openai.com/v1",
+            "api_key": request.api_key,
+            "active": provider_id == pr.active_id,
+        }
+
+        pr.update(provider_id, provider, profile)
+
+        logger.info(f"♻️ 更新 Provider: {provider_id} ({request.name})")
+        return {
+            "success": True,
+            "provider_id": provider_id,
+            "name": request.name,
+            "model": request.model,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新 Provider 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -8,6 +8,7 @@ import type { Provider } from '@/api/providers'
 
 export function ProvidersPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<Provider | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null)
   const queryClient = useQueryClient()
 
@@ -122,6 +123,12 @@ export function ProvidersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setEditTarget(provider)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors cursor-pointer"
+                      >
+                        Edit
+                      </button>
                       {!provider.active && (
                         <button
                           onClick={() => switchMutation.mutate(provider.id)}
@@ -149,6 +156,24 @@ export function ProvidersPage() {
       </div>
 
       <AddProviderDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+
+      <AddProviderDialog
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        mode="edit"
+        providerId={editTarget?.id}
+        initialValues={
+          editTarget
+            ? {
+                id: editTarget.id,
+                name: editTarget.name,
+                type: 'openai',
+                model: editTarget.model,
+                base_url: 'https://api.openai.com/v1',
+              }
+            : undefined
+        }
+      />
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

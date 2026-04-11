@@ -5,6 +5,7 @@ interface ApprovalCardProps {
   approval: Approval
   onApprove?: () => void
   onReject?: () => void
+  onOpenDetail?: () => void
   isApproving?: boolean
   isRejecting?: boolean
   isProcessed?: boolean
@@ -14,6 +15,7 @@ export function ApprovalCard({
   approval,
   onApprove,
   onReject,
+  onOpenDetail,
   isApproving,
   isRejecting,
   isProcessed,
@@ -29,6 +31,11 @@ export function ApprovalCard({
           ? 'border-l-green-500'
           : 'border-l-red-500 opacity-60'
       }`}
+      onClick={() => {
+        if (isWorkflowEvolution && onOpenDetail) onOpenDetail()
+      }}
+      role={isWorkflowEvolution && onOpenDetail ? 'button' : undefined}
+      tabIndex={isWorkflowEvolution && onOpenDetail ? 0 : undefined}
     >
       <div className="flex items-start justify-between mb-3">
         <div>
@@ -88,7 +95,10 @@ export function ApprovalCard({
         ) : (
           <div className="flex gap-2">
             <button
-              onClick={onReject}
+              onClick={(e) => {
+                e.stopPropagation()
+                onReject?.()
+              }}
               disabled={isRejecting}
               className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
             >
@@ -96,7 +106,10 @@ export function ApprovalCard({
               Reject
             </button>
             <button
-              onClick={onApprove}
+              onClick={(e) => {
+                e.stopPropagation()
+                onApprove?.()
+              }}
               disabled={isApproving}
               className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
             >

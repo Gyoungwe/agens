@@ -30,6 +30,49 @@ class SessionMemory:
         self.max_messages = max_messages
         self.compress_threshold = compress_threshold
 
+    async def summarize_topic_if_needed(
+        self, session_id: str, role: str, content: str
+    ) -> bool:
+        """当消息包含显式总结触发词时，生成并写入一条结构化记忆摘要。"""
+        text = (content or "").lower()
+        triggers = [
+            "总结",
+            "summarize",
+            "summary",
+            "记住",
+            "remember",
+            "记录",
+            "save this",
+            "关键结论",
+        ]
+        if not any(t in text for t in triggers):
+            return False
+
+        # Pull more context to make the summary meaningful
+        recent = await self.get_context(
+            session_id, query=None, max_messages=max(12, self.max_messages)
+        )
+        if not recent:
+            return False
+
+        compressed = await self.compressor.compress(recent)
+        summary_text = ""
+        if compressed and compressed[0].role == "system":
+            summary_text = compressed[0].content
+        if not summary_text:
+            return False
+
+        tagged = f"[AgentMemorySummary trigger_role={role}]\n{summary_text[:3000]}"
+        await self.vector_store.add(
+            text=f"system: {tagged}",
+            session_id=session_id,
+            role="system",
+            source="auto_summary_trigger",
+            metadata={"triggered": True, "trigger_role": role},
+        )
+        logger.info(f"auto_summary_triggered session={session_id} role={role}")
+        return True
+
     async def add_message(
         self,
         session_id: str,

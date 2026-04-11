@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { LogOut, User, ChevronDown } from 'lucide-react'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useLanguageStore } from '@/store'
 import { useEffect, useState } from 'react'
 import { client } from '@/api'
+import { t } from '@/i18n'
 
 interface HeaderProps {
   title?: string
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const { username, logout } = useAuthStore()
+  const { language, setLanguage } = useLanguageStore()
   const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [switching, setSwitching] = useState(false)
 
@@ -58,6 +60,21 @@ export function Header({ title }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden" title="Language">
+          <button
+            onClick={() => setLanguage('en')}
+            className={`px-2 py-1 text-xs sm:text-sm ${language === 'en' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-foreground'}`}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLanguage('zh-CN')}
+            className={`px-2 py-1 text-xs sm:text-sm ${language === 'zh-CN' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-foreground'}`}
+          >
+            中文
+          </button>
+        </div>
+
         <div className="relative">
           <select
             value={selectedProvider}
@@ -65,7 +82,7 @@ export function Header({ title }: HeaderProps) {
             disabled={switching}
             className="appearance-none w-[150px] sm:w-[210px] bg-secondary/50 border border-border rounded-lg px-3 py-1.5 pr-8 text-xs sm:text-sm font-medium text-foreground cursor-pointer hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-60"
           >
-            <option value="">Select Model</option>
+            <option value="">{t('selectModel')}</option>
             {providers?.map((p: { id: string; name: string; model: string }) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -80,12 +97,12 @@ export function Header({ title }: HeaderProps) {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-cta flex items-center justify-center">
               <User className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-medium hidden sm:inline">{username || 'User'}</span>
+            <span className="text-sm font-medium hidden sm:inline">{username || t('user')}</span>
           </div>
           <button
             onClick={logout}
             className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-            title="Logout"
+            title={t('logout')}
           >
             <LogOut className="w-4 h-4" />
           </button>

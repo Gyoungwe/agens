@@ -68,6 +68,9 @@ class SessionManager:
         self.store.append_message(self._current_session_id, "user", content)
         if self._memory:
             await self._memory.add_message(self._current_session_id, "user", content)
+            await self._memory.summarize_topic_if_needed(
+                self._current_session_id, "user", content
+            )
             await self._memory.compress_if_needed(self._current_session_id)
 
     async def add_assistant_message(self, content: str):
@@ -75,6 +78,9 @@ class SessionManager:
         self.store.append_message(self._current_session_id, "assistant", content)
         if self._memory:
             await self._memory.add_message(
+                self._current_session_id, "assistant", content
+            )
+            await self._memory.summarize_topic_if_needed(
                 self._current_session_id, "assistant", content
             )
             await self._memory.compress_if_needed(self._current_session_id)
@@ -85,6 +91,9 @@ class SessionManager:
         self.store.append_message(self._current_session_id, role, content)
         if self._memory:
             await self._memory.add_message(self._current_session_id, role, content)
+            await self._memory.summarize_topic_if_needed(
+                self._current_session_id, role, content
+            )
             await self._memory.compress_if_needed(self._current_session_id)
 
     async def get_context(self, query: str = None) -> list[ChatMessage]:

@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useLanguageStore } from '@/store'
 import { Sparkles, Lock, User, Loader2 } from 'lucide-react'
+import { t } from '@/i18n'
 
 export function LoginPage() {
+  useLanguageStore((s) => s.language)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -20,7 +22,7 @@ export function LoginPage() {
       await login(username, password)
       navigate('/')
     } catch {
-      setError('Invalid username or password')
+      setError(t('invalidCredentials'))
     } finally {
       setIsLoading(false)
     }
@@ -43,7 +45,7 @@ export function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="username" className="block text-sm font-semibold mb-2 text-foreground">
-                Username
+                {t('username')}
               </label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -61,7 +63,7 @@ export function LoginPage() {
 
             <div>
               <label htmlFor="password" className="block text-sm font-semibold mb-2 text-foreground">
-                Password
+                {t('password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -91,12 +93,12 @@ export function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in...
+                  {t('signingIn')}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  Sign In
+                  {t('signIn')}
                 </>
               )}
             </button>
