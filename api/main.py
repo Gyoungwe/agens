@@ -34,6 +34,7 @@ from api.routers import (
     soul_router,
     evolution_router,
     memory_router,
+    channels_router,
 )
 from api.auth import router as auth_router
 from api.ws.events import (
@@ -127,6 +128,17 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     use_collaboration: bool = False
     memory_scope: Optional[str] = "session"  # session | global
+
+
+class ChatSummarizeRequest(BaseModel):
+    session_id: str
+    auto_trigger: bool = False
+
+
+class ResearchRequest(BaseModel):
+    query: str
+    session_id: Optional[str] = None
+    provider_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -401,6 +413,7 @@ class AgentSystemState:
 
         # Agent 配置
         AGENT_CLASSES = {
+            "research_agent": "agents.research_agent.research_agent.ResearchAgent",
             "bio_planner_agent": "agents.bio_planner_agent.bio_planner_agent.BioPlannerAgent",
             "bio_code_agent": "agents.bio_code_agent.bio_code_agent.BioCodeAgent",
             "bio_qc_agent": "agents.bio_qc_agent.bio_qc_agent.BioQCAgent",
@@ -971,6 +984,7 @@ app.include_router(agent_router)
 app.include_router(soul_router)
 app.include_router(evolution_router)
 app.include_router(memory_router)
+app.include_router(channels_router)
 
 from api.routers.evolution_router import set_knowledge_base as set_evolution_kb
 
@@ -982,6 +996,7 @@ app.include_router(agent_router, prefix="/api")
 app.include_router(soul_router, prefix="/api")
 app.include_router(evolution_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
+app.include_router(channels_router, prefix="/api")
 app.include_router(auth_router)
 
 from fastapi import WebSocket
@@ -1362,6 +1377,69 @@ def _set_cached_bio_workflow_result(cache_key: str, result: dict) -> None:
     }
 
 
+def _estimate_context_pressure(session_id: str) -> Dict[str, Any]:
+    """估算会话上下文占用率，供自动压缩策略使用。"""
+    if not state.session_manager or not getattr(state.session_manager, "store", None):
+        return {"total_tokens": 0, "window": 32000, "ratio": 0.0}
+    total_tokens = state.session_manager.store.get_total_tokens(session_id)
+    window = (
+        state.provider_registry.context_window() if state.provider_registry else 32000
+    )
+    ratio = (total_tokens / max(window, 1)) if window > 0 else 0.0
+    return {"total_tokens": total_tokens, "window": window, "ratio": ratio}
+
+
+async def _summarize_session_context(session_id: str) -> Dict[str, Any]:
+    """手动/自动触发会话上下文压缩，返回完成与待完成摘要。"""
+    if not state.session_manager or not state.session_manager._memory:
+        return {
+            "summary": "Memory subsystem not enabled.",
+            "completed": [],
+            "pending": [],
+            "compressed": False,
+        }
+
+    messages = state.session_manager.get_history()
+    if not messages:
+        return {
+            "summary": "No messages to summarize.",
+            "completed": [],
+            "pending": [],
+            "compressed": False,
+        }
+
+    compressed = await state.session_manager._memory.compressor.compress(messages)
+    summary_text = ""
+    if compressed and compressed[0].role == "system":
+        summary_text = compressed[0].content
+
+    # Parse simple completed/pending extraction from summary text
+    completed: List[str] = []
+    pending: List[str] = []
+    for line in summary_text.splitlines():
+        t = line.strip()
+        if not t:
+            continue
+        if any(k in t for k in ["决策", "decision", "已完成", "done"]):
+            completed.append(t)
+        if any(k in t for k in ["待处理", "pending", "topic", "TODO", "todo"]):
+            pending.append(t)
+
+    # Persist compaction summary as system message for continuation
+    state.session_manager.store.append_message(
+        session_id,
+        "system",
+        f"[ContextCompaction]\n{summary_text[:4000]}",
+    )
+
+    return {
+        "summary": summary_text[:4000],
+        "completed": completed[:20],
+        "pending": pending[:20],
+        "compressed": True,
+    }
+
+
 def _resume_stage_results_from_trace(
     session_id: str,
     resume_from_trace_id: Optional[str],
@@ -1710,6 +1788,29 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     f"chat_stream_resume_session trace_id={trace_id} session_id={session_id}"
                 )
 
+            # Auto compaction when context pressure is high
+            pressure = _estimate_context_pressure(session_id)
+            if pressure["ratio"] >= 0.70:
+                compaction = await _summarize_session_context(session_id)
+                yield {
+                    "event": "context_compaction",
+                    "data": json.dumps(
+                        {
+                            "event": "context_compaction",
+                            "trace_id": trace_id,
+                            "session_id": session_id,
+                            "total_tokens": pressure["total_tokens"],
+                            "window": pressure["window"],
+                            "ratio": pressure["ratio"],
+                            "summary": compaction.get("summary", ""),
+                            "completed": compaction.get("completed", []),
+                            "pending": compaction.get("pending", []),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "id": str(uuid.uuid4())[:8],
+                }
+
             event_queue = asyncio.Queue()
             last_yielded_event_id = last_event_id or ""
             events_received = 0
@@ -1856,6 +1957,39 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
     )
 
 
+@app.post("/chat/summarize")
+@app.post("/api/chat/summarize")
+async def summarize_chat_context(request: ChatSummarizeRequest):
+    """手动触发会话上下文总结并返回 completed/pending。"""
+    session = state.session_manager.get_session(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    pressure = _estimate_context_pressure(request.session_id)
+    if not request.auto_trigger and pressure["ratio"] < 0.20:
+        return {
+            "success": True,
+            "session_id": request.session_id,
+            "message": "Context usage is low; summary is optional.",
+            "total_tokens": pressure["total_tokens"],
+            "window": pressure["window"],
+            "ratio": pressure["ratio"],
+            "summary": "",
+            "completed": [],
+            "pending": [],
+        }
+
+    result = await _summarize_session_context(request.session_id)
+    return {
+        "success": True,
+        "session_id": request.session_id,
+        "total_tokens": pressure["total_tokens"],
+        "window": pressure["window"],
+        "ratio": pressure["ratio"],
+        **result,
+    }
+
+
 @app.get("/chat/history/{session_id}")
 @app.get("/api/chat/history/{session_id}")
 async def get_chat_history(session_id: str):
@@ -1870,6 +2004,51 @@ async def get_chat_history(session_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/research/run")
+@app.post("/api/research/run")
+async def run_research(request: ResearchRequest):
+    """运行 research_agent 并由 bio_report_agent 进行结构化总结。"""
+    orch = state._get_orchestrator()
+    if not orch:
+        raise HTTPException(status_code=500, detail="System not initialized")
+
+    if request.provider_id:
+        try:
+            state.provider_registry.use(request.provider_id)
+        except Exception:
+            pass
+
+    trace_id = str(uuid.uuid4())
+    session_id = request.session_id
+
+    raw = await orch.run_single_agent(
+        user_input=request.query,
+        agent_id="research_agent",
+        session_id=session_id,
+        trace_id=trace_id,
+    )
+
+    summary_prompt = (
+        "请将以下 research 结果整理为结构化结论，输出包括："
+        "1) 关键发现 2) 证据与来源 3) 风险与局限 4) 下一步建议。\n\n"
+        f"Research Query: {request.query}\n\nRaw Findings:\n{raw}"
+    )
+    summarized = await orch.run_single_agent(
+        user_input=summary_prompt,
+        agent_id="bio_report_agent",
+        session_id=session_id,
+        trace_id=str(uuid.uuid4()),
+    )
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "query": request.query,
+        "research": raw,
+        "summary": summarized,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════

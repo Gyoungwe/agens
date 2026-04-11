@@ -349,6 +349,40 @@ export function ChatPage() {
     })
   }
 
+  const summarizeAndContinue = async () => {
+    if (!currentSessionId) return
+    try {
+      const res = await fetch('/api/chat/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: currentSessionId }),
+      })
+      const data = await res.json()
+      const completed = Array.isArray(data.completed) ? data.completed.slice(0, 8) : []
+      const pending = Array.isArray(data.pending) ? data.pending.slice(0, 8) : []
+      addMessage({
+        id: `system-summary-${Date.now()}`,
+        role: 'system',
+        content: [
+          '上下文已总结并继续：',
+          `- token usage: ${data.total_tokens ?? 0}/${data.window ?? 0} (${((Number(data.ratio || 0) * 100).toFixed(1))}%)`,
+          completed.length ? `- 已完成:\n${completed.map((x: string) => `  • ${x}`).join('\n')}` : '- 已完成: （无提取）',
+          pending.length ? `- 待完成:\n${pending.map((x: string) => `  • ${x}`).join('\n')}` : '- 待完成: （无提取）',
+        ].join('\n'),
+        created_at: new Date().toISOString(),
+        session_id: currentSessionId || undefined,
+      })
+    } catch (e) {
+      addMessage({
+        id: `system-summary-error-${Date.now()}`,
+        role: 'system',
+        content: `总结失败：${e instanceof Error ? e.message : String(e)}`,
+        created_at: new Date().toISOString(),
+        session_id: currentSessionId || undefined,
+      })
+    }
+  }
+
   const handleMouseDown = () => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return
@@ -382,6 +416,12 @@ export function ChatPage() {
           className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
         >
           Memory Self-Check
+        </button>
+        <button
+          onClick={summarizeAndContinue}
+          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+        >
+          Summarize & Continue
         </button>
         <button
           onClick={() => setMemoryScope(memoryScope === 'session' ? 'global' : 'session')}

@@ -10,10 +10,12 @@ import {
   SlidersHorizontal,
   Sparkles,
   MessageSquare,
+  Microscope,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
+  { to: '/research', icon: Microscope, label: 'Research' },
   { to: '/dashboard', icon: BarChart3, label: 'Dashboard' },
   { to: '/providers', icon: Bot, label: 'Models' },
   { to: '/skills', icon: Wrench, label: 'Skills' },

@@ -183,6 +183,27 @@ class ProviderRegistry:
             )
         return self._providers[pid]
 
+    def context_window(self, profile_id: str = None) -> int:
+        """估算当前模型上下文窗口大小（token）。"""
+        pid = profile_id or self._active
+        profile = self._profiles.get(pid, {})
+        model = str(profile.get("model", "")).lower()
+
+        # conservative defaults
+        if "claude" in model:
+            return 200_000
+        if "gpt-4o" in model or "gpt-4.1" in model:
+            return 128_000
+        if "deepseek" in model:
+            return 128_000
+        if "doubao" in model or "32k" in model:
+            return 32_000
+        if "qwen" in model:
+            return 32_000
+        if "haiku" in model:
+            return 200_000
+        return 32_000
+
     def use(self, profile_id: str):
         if profile_id not in self._providers:
             logger.error(f"Provider [{profile_id}] 未注册")

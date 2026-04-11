@@ -12,6 +12,7 @@ import {
   ProvidersPage,
   BioWorkflowPage,
   ChatPage,
+  ResearchPage,
   LoginPage,
 } from '@/pages'
 
@@ -61,6 +62,7 @@ function App() {
         <Route path="agent-settings" element={<AgentSettingsPage />} />
         <Route path="providers" element={<ProvidersPage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="research" element={<ResearchPage />} />
         <Route path="bio-workflow" element={<BioWorkflowPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/chat" replace />} />

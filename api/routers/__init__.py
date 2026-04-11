@@ -4,6 +4,7 @@ from .agent_router import router as agent_router
 from .soul_router import router as soul_router
 from .evolution_router import router as evolution_router
 from .memory_router import router as memory_router
+from .channels_router import router as channels_router
 
 __all__ = [
     "skill_router",
@@ -11,4 +12,5 @@ __all__ = [
     "soul_router",
     "evolution_router",
     "memory_router",
+    "channels_router",
 ]
