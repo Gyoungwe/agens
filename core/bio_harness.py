@@ -28,6 +28,9 @@ class HarnessStageResult:
     error: Optional[str]
     output: str
     provenance: Dict[str, Any] = field(default_factory=dict)
+    needs_user_input: bool = False
+    user_question: Optional[str] = None
+    required_fields: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         base = {
@@ -41,6 +44,10 @@ class HarnessStageResult:
         }
         if self.provenance is not None:
             base["provenance"] = self.provenance
+        if self.needs_user_input:
+            base["needs_user_input"] = True
+            base["user_question"] = self.user_question
+            base["required_fields"] = self.required_fields
         return base
 
 
@@ -480,7 +487,10 @@ class BioWorkflowHarness:
         stage_results: List[HarnessStageResult] = []
         critical_failures = 0
         qc_gate_failures = 0
+        needs_input_failures = 0
         stopped_by_policy = False
+        workflow_user_question: Optional[str] = None
+        workflow_required_fields: List[str] = []
         stage_result_map: Dict[str, HarnessStageResult] = {}
         stage_index_map = {
             spec.name: idx for idx, spec in enumerate(stage_specs, start=1)
@@ -595,6 +605,36 @@ class BioWorkflowHarness:
                     if spec.critical or not continue_on_error:
                         stopped_by_policy = True
 
+                if result.status == "ok" and result.output:
+                    try:
+                        import json as _json
+
+                        stage_json = _json.loads(result.output)
+                        if (
+                            isinstance(stage_json, dict)
+                            and stage_json.get("needs_user_input") is True
+                        ):
+                            needs_input_failures += 1
+                            stopped_by_policy = True
+                            workflow_user_question = (
+                                stage_json.get("user_question")
+                                or "Need more information from user before continuing."
+                            )
+                            workflow_required_fields = stage_json.get(
+                                "required_fields", []
+                            )
+                            await self._emit(
+                                event="bio_workflow_needs_input",
+                                stage=result.stage,
+                                agent_id=result.agent_id,
+                                trace_id=trace_id,
+                                session_id=session_id,
+                                user_question=workflow_user_question,
+                                required_fields=workflow_required_fields,
+                            )
+                    except Exception:
+                        pass
+
                 spec = next(s for s in stage_specs if s.name == result.stage)
                 if spec.qc_gate and result.status == "ok" and result.output:
                     try:
@@ -645,7 +685,11 @@ class BioWorkflowHarness:
                     status="error",
                     elapsed_ms=0,
                     trace_id=f"{trace_id}-{stage_index_map[spec.name]}",
-                    error="execution stopped by policy",
+                    error=(
+                        "needs_user_input"
+                        if workflow_user_question
+                        else "execution stopped by policy"
+                    ),
                     output="",
                 )
                 stage_results.append(skipped)
@@ -668,7 +712,7 @@ class BioWorkflowHarness:
                 )
                 pending_specs.pop(stage_name)
 
-        total_failures = critical_failures + qc_gate_failures
+        total_failures = critical_failures + qc_gate_failures + needs_input_failures
         await self._emit(
             event="bio_workflow_done",
             stage="workflow",
@@ -676,9 +720,16 @@ class BioWorkflowHarness:
             trace_id=trace_id,
             session_id=session_id,
             success=total_failures == 0,
-            status="success" if total_failures == 0 else "partial_failure",
+            status=(
+                "needs_user_input"
+                if workflow_user_question
+                else ("success" if total_failures == 0 else "partial_failure")
+            ),
             total_stages=len(stage_specs),
             failed_stages=total_failures,
+            needs_user_input=workflow_user_question is not None,
+            user_question=workflow_user_question,
+            required_fields=workflow_required_fields,
         )
 
         await self._persist_workflow_learning(
@@ -700,14 +751,17 @@ class BioWorkflowHarness:
                     f"- [{item.stage}] {item.status} ({item.elapsed_ms}ms): {item.error}"
                 )
 
+        total_failures = critical_failures + qc_gate_failures + needs_input_failures
         return {
-            "success": (critical_failures + qc_gate_failures) == 0,
-            "status": "success"
-            if (critical_failures + qc_gate_failures) == 0
-            else "partial_failure",
+            "success": total_failures == 0,
+            "status": (
+                "needs_user_input"
+                if workflow_user_question
+                else ("success" if total_failures == 0 else "partial_failure")
+            ),
             "response": "\n".join(report_lines),
             "stage_results": [s.to_dict() for s in stage_results],
-            "failed_stages": critical_failures + qc_gate_failures,
+            "failed_stages": total_failures,
             "total_stages": len(stage_specs),
             "last_checkpoint": self.state_manager.last_checkpoint(session_id),
             "execution_policy": {
@@ -715,7 +769,11 @@ class BioWorkflowHarness:
                 "critical_stage_always_stops": True,
                 "stopped_by_policy": stopped_by_policy,
                 "qc_gate_failures": qc_gate_failures,
+                "needs_input_failures": needs_input_failures,
             },
             "scope_id": scope_id,
             "provider_id": provider_id,
+            "needs_user_input": workflow_user_question is not None,
+            "user_question": workflow_user_question,
+            "required_fields": workflow_required_fields,
         }

@@ -162,11 +162,26 @@ export function useBioEvents() {
           if (cur) {
             store.setStream({ ...cur, isRunning: false, failed_stages: data.failed_stages as number })
           }
+        } else if (eventType === 'bio_workflow_needs_input') {
+          store.setRunning(false)
+          const cur = store.stream
+          if (cur) {
+            store.addLog({
+              id: `needs-input-${Date.now()}`,
+              created_at: Date.now(),
+              event_type: 'bio_workflow_needs_input',
+              agent_id: String(data.agent_id || 'harness'),
+              trace_id: String(data.trace_id || ''),
+              status: 'needs_user_input',
+              message: `${String(data.stage || 'workflow')}: ${String(data.user_question || 'Workflow requires user input to continue.')}`,
+            })
+            store.setStream({ ...cur, isRunning: false })
+          }
         } else if (eventType === 'bio_workflow_final') {
           store.setRunning(false)
           finalResult = {
             success: Boolean(data.success),
-            status: (data.status as 'success' | 'partial_failure') || 'partial_failure',
+            status: (data.status as 'success' | 'partial_failure' | 'needs_user_input') || 'partial_failure',
             trace_id: String(data.trace_id || ''),
             session_id: String(data.session_id || ''),
             workflow: String(data.workflow || 'bioinformatics-mvp'),
@@ -177,6 +192,9 @@ export function useBioEvents() {
             failed_stages: Number(data.failed_stages || 0),
             total_stages: Number(data.total_stages || 0),
             execution_policy: (data.execution_policy as Record<string, unknown> | undefined),
+            needs_user_input: Boolean(data.needs_user_input),
+            user_question: data.user_question ? String(data.user_question) : undefined,
+            required_fields: Array.isArray(data.required_fields) ? (data.required_fields as string[]) : undefined,
             intent: data.intent as BioWorkflowResponse['intent'],
             plan: data.plan as BioWorkflowResponse['plan'],
           }

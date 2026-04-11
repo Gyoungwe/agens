@@ -1185,6 +1185,9 @@ async def run_bio_workflow(request: BioWorkflowRequest, stream: bool = False):
             "total_stages": harness_result["total_stages"],
             "last_checkpoint": harness_result["last_checkpoint"],
             "execution_policy": harness_result["execution_policy"],
+            "needs_user_input": harness_result.get("needs_user_input", False),
+            "user_question": harness_result.get("user_question"),
+            "required_fields": harness_result.get("required_fields", []),
             "harness": {
                 "state_persistence": True,
                 "execution_boundaries": {
@@ -1554,6 +1557,9 @@ async def _bio_stream_generator(
                     "failed_stages": result["failed_stages"],
                     "total_stages": result["total_stages"],
                     "execution_policy": result["execution_policy"],
+                    "needs_user_input": result.get("needs_user_input", False),
+                    "user_question": result.get("user_question"),
+                    "required_fields": result.get("required_fields", []),
                     "provider_fallback": provider_id
                     != prepared["requested_provider_id"],
                     "intent": prepared["intent"].model_dump()

@@ -70,7 +70,7 @@ export interface BioStageResult {
 
 export interface BioWorkflowResponse {
   success: boolean
-  status: 'success' | 'partial_failure'
+  status: 'success' | 'partial_failure' | 'needs_user_input'
   trace_id: string
   session_id: string
   workflow: string
@@ -82,6 +82,9 @@ export interface BioWorkflowResponse {
   failed_stages: number
   total_stages: number
   execution_policy?: Record<string, unknown>
+  needs_user_input?: boolean
+  user_question?: string | null
+  required_fields?: string[]
   intent?: WorkflowIntentSpec
   plan?: WorkflowPlanSpec
 }

@@ -202,6 +202,16 @@ function parseConstraints(raw: string): import('@/api/bio').WorkflowIntentSpec['
   return Object.keys(result).length > 0 ? result : undefined
 }
 
+function tryParseJson(text?: string): Record<string, unknown> | null {
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
 export function BioWorkflowPage() {
   const [goal, setGoal] = useState('给出一个最小可执行生信流程模板')
   const [dataset, setDataset] = useState('demo-min')
@@ -258,6 +268,13 @@ export function BioWorkflowPage() {
     () => expectedOutputs.split(',').map((s) => s.trim()).filter(Boolean),
     [expectedOutputs],
   )
+
+  const finalArtifacts = useMemo(() => {
+    if (!finalResult?.stage_results) return [] as Array<{ stage: string; artifact: Record<string, unknown> }>
+    return finalResult.stage_results
+      .map((s) => ({ stage: s.stage, artifact: tryParseJson(s.output || '') }))
+      .filter((x): x is { stage: string; artifact: Record<string, unknown> } => x.artifact !== null)
+  }, [finalResult])
 
   const confirmIntent = async () => {
     if (!goal.trim()) return
@@ -758,6 +775,22 @@ export function BioWorkflowPage() {
 
           {finalResult && !stream?.isRunning && (
             <div className="space-y-4">
+              {finalResult.needs_user_input && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                  <div className="flex items-center gap-2 text-amber-700 font-semibold">
+                    <AlertTriangle className="w-4 h-4" /> User input required
+                  </div>
+                  <div className="text-sm text-amber-800 mt-2">
+                    {finalResult.user_question || 'Workflow paused and needs your confirmation/input to continue.'}
+                  </div>
+                  {finalResult.required_fields && finalResult.required_fields.length > 0 && (
+                    <div className="mt-2 text-xs text-amber-700 font-mono">
+                      required_fields: {finalResult.required_fields.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="glass-card rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -782,6 +815,22 @@ export function BioWorkflowPage() {
                   {finalResult.response}
                 </pre>
               </div>
+
+              {finalArtifacts.length > 0 && (
+                <div className="glass-card rounded-xl p-4">
+                  <div className="text-sm text-muted-foreground">Structured stage artifacts</div>
+                  <div className="space-y-3 mt-3">
+                    {finalArtifacts.map(({ stage, artifact }) => (
+                      <div key={stage} className="rounded-lg border border-border bg-muted/20 p-3">
+                        <div className="font-semibold capitalize text-sm mb-2">{stage}</div>
+                        <pre className="text-xs whitespace-pre-wrap bg-muted/40 rounded p-2 max-h-52 overflow-y-auto">
+                          {JSON.stringify(artifact, null, 2)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {finalResult.stage_results.map((stage) => (
                 <LiveStageCard
