@@ -10,7 +10,7 @@ import { providersApi } from '@/api/providers'
 
 export function ChatPage() {
   const [splitPosition, setSplitPosition] = useState(60)
-  const [chatMode, setChatMode] = useState<'chat' | 'bio_workflow'>('chat')
+  const [chatMode, setChatMode] = useState<'auto' | 'chat' | 'bio_workflow'>('auto')
   const containerRef = useRef<HTMLDivElement>(null)
   const { messages, isStreaming, currentSessionId, setSessions, setCurrentSession, addMessage, updateMessage, setStreaming } = useChatStore()
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
@@ -18,6 +18,28 @@ export function ChatPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [providerInfo, setProviderInfo] = useState<{ id: string; name: string; model: string } | null>(null)
   const [memoryScope, setMemoryScope] = useState<'session' | 'global'>('session')
+
+  const classifyTaskType = (text: string): 'chat' | 'bio_workflow' | 'uncertain' => {
+    const t = text.trim().toLowerCase()
+    if (!t) return 'chat'
+
+    const hardChatPatterns = [
+      /生日|birthday|是谁|what is|who is|怎么说|翻译|解释|meaning|含义/,
+      /你好|hi|hello|早上好|晚上好|谢谢|thank you/,
+      /写一段|润色|改写|总结一下|随便聊聊|聊天/,
+    ]
+    if (hardChatPatterns.some((re) => re.test(t))) return 'chat'
+
+    const bioWorkflowPatterns = [
+      /rna-?seq|wgs|wes|metagenomics|atac-?seq|chip-?seq|assembly/,
+      /fastq|bam|vcf|gtf|fasta|nextflow|snakemake|qc|quality control/,
+      /生信|生物信息|pipeline|workflow|差异表达|变异检测|组装/,
+      /样本|参考基因组|annotation|reference bundle/,
+    ]
+    if (bioWorkflowPatterns.some((re) => re.test(t))) return 'bio_workflow'
+
+    return 'uncertain'
+  }
 
   useEffect(() => {
     fetch('/api/sessions')
@@ -112,8 +134,20 @@ export function ChatPage() {
     })
 
     try {
-      const endpoint = chatMode === 'bio_workflow' ? '/api/bio/workflow?stream=true' : '/api/chat/stream'
-      const body = chatMode === 'bio_workflow'
+      const classified = chatMode === 'auto' ? classifyTaskType(message) : chatMode
+      const effectiveMode = classified === 'uncertain' ? 'chat' : classified
+
+      if (chatMode === 'auto' && classified === 'uncertain') {
+        addMessage({
+          id: `system-clarify-${Date.now()}`,
+          role: 'system',
+          content: '我先按普通对话来回答；如果你想执行生信流程，请明确写出分析目标和数据类型（如 RNA-seq/FASTQ/QC）。',
+          created_at: new Date().toISOString(),
+          session_id: currentSessionId || undefined,
+        })
+      }
+      const endpoint = effectiveMode === 'bio_workflow' ? '/api/bio/workflow?stream=true' : '/api/chat/stream'
+      const body = effectiveMode === 'bio_workflow'
         ? {
             goal: message,
             dataset: 'chat-session',
@@ -202,7 +236,7 @@ export function ChatPage() {
           [sid]: [...(prev[sid] || []), traceEvent],
         }))
 
-        if (chatMode === 'bio_workflow') {
+        if (effectiveMode === 'bio_workflow') {
           if (sseEvent.eventType === 'bio_stage_pending' || sseEvent.eventType === 'bio_stage_running' || sseEvent.eventType === 'bio_stage_done') {
             const stage = String(eventData.stage || 'unknown')
             stageStatus[stage] = {
@@ -336,6 +370,12 @@ export function ChatPage() {
           title="Toggle memory retrieval scope"
         >
           Memory: {memoryScope === 'global' ? 'Global' : 'Session'}
+        </button>
+        <button
+          onClick={() => setChatMode('auto')}
+          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'auto' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
+        >
+          Auto
         </button>
         <button
           onClick={() => setChatMode('chat')}
