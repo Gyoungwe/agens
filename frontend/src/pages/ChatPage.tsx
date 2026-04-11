@@ -20,6 +20,7 @@ export function ChatPage() {
   const [memoryScope, setMemoryScope] = useState<'session' | 'global'>('session')
   const [pendingWorkflowTraceId, setPendingWorkflowTraceId] = useState<string | null>(null)
   const [pendingWorkflowFields, setPendingWorkflowFields] = useState<string[]>([])
+  const [sessionList, setSessionList] = useState<Array<{ session_id: string; title?: string; updated_at?: string }>>([])
 
   const classifyTaskType = (text: string): 'chat' | 'bio_workflow' | 'uncertain' => {
     const t = text.trim().toLowerCase()
@@ -49,6 +50,7 @@ export function ChatPage() {
       .then((data) => {
         const sessions = Array.isArray(data) ? data : (data.sessions || [])
         setSessions(sessions)
+        setSessionList(sessions)
         if (sessions.length > 0) {
           setCurrentSession(sessions[0].session_id)
         }
@@ -293,7 +295,9 @@ export function ChatPage() {
 
       const sessionsRes = await fetch('/api/sessions')
       const sessionsData = await sessionsRes.json()
-      setSessions(Array.isArray(sessionsData) ? sessionsData : (sessionsData.sessions || []))
+      const sessions = Array.isArray(sessionsData) ? sessionsData : (sessionsData.sessions || [])
+      setSessions(sessions)
+      setSessionList(sessions)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Chat error:', msg)
@@ -386,6 +390,18 @@ export function ChatPage() {
         >
           Memory: {memoryScope === 'global' ? 'Global' : 'Session'}
         </button>
+        <select
+          value={currentSessionId || ''}
+          onChange={(e) => setCurrentSession(e.target.value)}
+          className="px-2 py-1.5 text-xs rounded-lg border border-border bg-background max-w-[280px]"
+          title="历史会话"
+        >
+          {sessionList.map((s) => (
+            <option key={s.session_id} value={s.session_id}>
+              {(s.title && s.title.trim()) || s.session_id.slice(0, 8)}
+            </option>
+          ))}
+        </select>
         <button
           onClick={() => setChatMode('auto')}
           className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'auto' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}

@@ -48,11 +48,11 @@ function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <AppLayout />
+          <AppLayout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/bio-workflow" replace />} />
+        <Route index element={<Navigate to="/chat" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
@@ -63,7 +63,7 @@ function App() {
         <Route path="chat" element={<ChatPage />} />
         <Route path="bio-workflow" element={<BioWorkflowPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/bio-workflow" replace />} />
+      <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
   )
 }

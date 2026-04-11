@@ -8,13 +8,11 @@ import {
   ScrollText,
   Bot,
   SlidersHorizontal,
-  Dna,
   Sparkles,
   MessageSquare,
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/bio-workflow', icon: Dna, label: 'Bio Workflow' },
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/dashboard', icon: BarChart3, label: 'Dashboard' },
   { to: '/providers', icon: Bot, label: 'Models' },
