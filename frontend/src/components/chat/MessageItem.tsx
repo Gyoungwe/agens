@@ -1,7 +1,6 @@
-import ReactMarkdown from 'react-markdown'
-import rehypeHighlight from 'rehype-highlight'
 import { User, Sparkles } from 'lucide-react'
 import type { Message } from '@/types'
+import { RichAgentOutput } from './RichAgentOutput'
 
 interface MessageItemProps {
   message: Message
@@ -29,9 +28,7 @@ export function MessageItem({ message }: MessageItemProps) {
             : 'bg-card border border-border/50 rounded-tl-sm shadow-lg'
         }`}
       >
-        <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-          {message.content}
-        </ReactMarkdown>
+        <RichAgentOutput content={message.content} isUser={isUser} />
         <div
           className={`text-xs mt-2 font-mono ${
             isUser ? 'text-primary-foreground/60' : 'text-muted-foreground/60'
