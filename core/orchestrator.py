@@ -37,6 +37,92 @@ def _default_parallel_plan(user_input: str, available_agents: List[str]) -> List
     return fallback
 
 
+def _select_candidate_agents(
+    user_input: str,
+    available_agents: List[str],
+) -> tuple[List[str], Optional[str]]:
+    """根据用户输入选择最小必要 agent 子集，并给出补充建议。"""
+    text = (user_input or "").lower()
+
+    bio_keywords = [
+        "rna-seq",
+        "rna_seq",
+        "wgs",
+        "wes",
+        "metagenomics",
+        "atac",
+        "chip",
+        "assembly",
+        "fastq",
+        "bam",
+        "vcf",
+        "gtf",
+        "fasta",
+        "nextflow",
+        "snakemake",
+        "pipeline",
+        "workflow",
+        "生信",
+        "生物信息",
+        "差异表达",
+        "变异检测",
+        "质控",
+        "qc",
+    ]
+    chat_keywords = [
+        "生日",
+        "who is",
+        "what is",
+        "你好",
+        "hello",
+        "hi",
+        "翻译",
+        "解释",
+        "写一段",
+        "润色",
+        "谢谢",
+    ]
+
+    has_bio = any(k in text for k in bio_keywords)
+    has_chat = any(k in text for k in chat_keywords)
+
+    if has_chat and not has_bio:
+        return [], None
+
+    if not has_bio:
+        return [], None
+
+    selected: List[str] = []
+    recommendation: Optional[str] = None
+
+    def add_if_exists(agent_id: str):
+        if agent_id in available_agents and agent_id not in selected:
+            selected.append(agent_id)
+
+    if any(k in text for k in ["规划", "plan", "流程设计", "路线"]):
+        add_if_exists("bio_planner_agent")
+    if any(k in text for k in ["代码", "脚本", "nextflow", "snakemake", "实现"]):
+        add_if_exists("bio_code_agent")
+    if any(k in text for k in ["qc", "质控", "质量", "通过", "指标"]):
+        add_if_exists("bio_qc_agent")
+    if any(k in text for k in ["报告", "总结", "汇报", "结论"]):
+        add_if_exists("bio_report_agent")
+    if any(k in text for k in ["优化", "改进", "迭代", "evolution"]):
+        add_if_exists("bio_evolution_agent")
+
+    if not selected:
+        # 生信相关但用户没明确需求时，先做轻量协作并给建议
+        add_if_exists("bio_planner_agent")
+        add_if_exists("bio_report_agent")
+        recommendation = (
+            "你的需求还比较宽泛。建议补充 assay 类型（如 RNA-seq/WGS）、"
+            "输入数据格式（FASTQ/BAM/VCF）和期望产出（如 QC 报告/差异表达结果），"
+            "这样我可以调度更精准的 agent 协作。"
+        )
+
+    return selected, recommendation
+
+
 def _load_agents_config() -> dict:
     global _agents_config_cache
     if _agents_config_cache is None:
@@ -256,6 +342,39 @@ class Orchestrator(BaseAgent):
         )
 
         try:
+            if not plan:
+                from providers.base_provider import ChatMessage
+
+                direct_prompt = (
+                    "请以自然对话方式直接回答用户，不要假设这是生信 workflow 任务，"
+                    "除非用户明确要求 pipeline/workflow。"
+                )
+                provider = self.get_provider()
+                resp = await provider.chat(
+                    messages=[ChatMessage(role="user", content=user_input)],
+                    system=direct_prompt,
+                    max_tokens=1024,
+                )
+                final = resp.text
+                await self._emit_event(
+                    EventEnvelope.final_response(
+                        agent_id=self.agent_id,
+                        trace_id=trace_id,
+                        response=final,
+                        session_id=self._current_session_id,
+                    )
+                )
+                if sm:
+                    await sm.add_assistant_message(final)
+                self._trace_tracker.finish_trace(
+                    trace_id=trace_id,
+                    status="success",
+                    elapsed_ms=int((time.time() - trace_start) * 1000),
+                    results_count=0,
+                    final_length=len(final or ""),
+                )
+                return final
+
             # 3. 按计划分发子任务
             await self._dispatch(
                 plan,
@@ -471,13 +590,22 @@ class Orchestrator(BaseAgent):
             a for a in self.bus.registered_agents if a != "orchestrator"
         ]
 
+        selected_agents, recommendation = _select_candidate_agents(
+            user_input=user_input,
+            available_agents=available_agents,
+        )
+
+        if not selected_agents:
+            logger.info("任务识别为普通对话，跳过多 Agent 协作调度")
+            return []
+
         if not available_agents:
             logger.warning("没有可用的 Agent")
             return []
 
         config = _load_agents_config()
         agent_descriptions = []
-        for agent_id in available_agents:
+        for agent_id in selected_agents:
             for agent_cfg in config.get("agents", []):
                 if agent_cfg.get("id") == agent_id:
                     desc = agent_cfg.get("description", "")
@@ -543,13 +671,18 @@ class Orchestrator(BaseAgent):
                         "depends_on": step.get("depends_on", []),
                     }
                 )
-            return normalized or _default_parallel_plan(user_input, available_agents)
+            if recommendation and normalized:
+                for step in normalized:
+                    step["instruction"] = (
+                        f"{step['instruction']}\n\n[建议补充给用户]\n{recommendation}"
+                    )
+            return normalized or _default_parallel_plan(user_input, selected_agents)
         except json.JSONDecodeError as e:
             logger.error(f"JSON 解析失败: {e}, 原始响应: {text[:500]}")
-            return _default_parallel_plan(user_input, available_agents)
+            return _default_parallel_plan(user_input, selected_agents)
         except Exception as e:
             logger.error(f"任务规划失败: {e}", exc_info=True)
-            return _default_parallel_plan(user_input, available_agents)
+            return _default_parallel_plan(user_input, selected_agents)
 
     # ── 任务分发（带重试） ─────────────────────────
 
