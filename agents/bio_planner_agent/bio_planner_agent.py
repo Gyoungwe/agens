@@ -35,12 +35,11 @@ class BioPlannerAgent(BaseAgent):
             "inferred_workflow_family", "bioinformatics-mvp"
         )
 
-        # Retrieve relevant historical workflow retrospectives from knowledge base
         historical_ctx = ""
-        if self._knowledge_base:
+        if self.knowledge:
             try:
                 scope_id = context.get("scope_id") if context else None
-                results = await self._knowledge_base.search(
+                results = await self.knowledge.search(
                     query=f"past {workflow_family} workflow retrospective lessons learned",
                     top_k=3,
                     topic="planning",
@@ -52,7 +51,7 @@ class BioPlannerAgent(BaseAgent):
                     )
                     historical_ctx = f"\n\n## 历史 Workflow 回顾\n请参考以下历史经验来优化当前计划：\n{entries}\n"
             except Exception:
-                pass  # Non-blocking: knowledge retrieval failure shouldn't halt planning
+                pass
 
         planning_instruction = (
             "你是生物信息学流程规划专家，输出严格 JSON PlanSpec。\n"
