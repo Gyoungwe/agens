@@ -192,6 +192,7 @@ class Orchestrator(BaseAgent):
         user_input: str,
         session_id: str = None,
         trace_id: str = None,
+        memory_scope: str = "session",
     ) -> str:
         """
         支持 Session Resume：
@@ -220,7 +221,18 @@ class Orchestrator(BaseAgent):
                 self._current_session_id = session_id
             await sm.add_user_message(user_input)
             if self.context_compressor:
-                context_messages = await sm.get_context() or []
+                if memory_scope == "global" and sm._memory:
+                    context_messages = (
+                        await sm._memory.get_context(
+                            session_id=sm.current_session_id,
+                            query=user_input,
+                            max_messages=self.context_compressor.max_messages,
+                            global_scope=True,
+                        )
+                        or []
+                    )
+                else:
+                    context_messages = await sm.get_context() or []
 
         # 1. 用 LLM 拆解任务（带上下文）
         plan = await self._plan(user_input, context_messages=context_messages)

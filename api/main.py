@@ -126,6 +126,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     use_collaboration: bool = False
+    memory_scope: Optional[str] = "session"  # session | global
 
 
 class ChatResponse(BaseModel):
@@ -1743,6 +1744,7 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                     user_input=request.message,
                     session_id=session_id,
                     trace_id=trace_id,
+                    memory_scope=request.memory_scope or "session",
                 )
             )
 

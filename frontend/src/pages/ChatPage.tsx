@@ -17,6 +17,7 @@ export function ChatPage() {
   const [sessionTraceMap, setSessionTraceMap] = useState<Record<string, TraceEvent[]>>({})
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [providerInfo, setProviderInfo] = useState<{ id: string; name: string; model: string } | null>(null)
+  const [memoryScope, setMemoryScope] = useState<'session' | 'global'>('session')
 
   useEffect(() => {
     fetch('/api/sessions')
@@ -40,6 +41,31 @@ export function ChatPage() {
     if (!currentSessionId) return
     setTraceEvents(sessionTraceMap[currentSessionId] || [])
   }, [currentSessionId, sessionTraceMap])
+
+  useEffect(() => {
+    if (!currentSessionId) return
+    fetch(`/api/chat/history/${currentSessionId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const raw = Array.isArray(data?.messages) ? data.messages : []
+        const mapped: Message[] = raw.map((m: unknown, idx: number) => {
+          const item = (m && typeof m === 'object') ? (m as Record<string, unknown>) : {}
+          const roleRaw = String(item.role || 'assistant')
+          const role: Message['role'] = roleRaw === 'user' || roleRaw === 'system' ? roleRaw : 'assistant'
+          return {
+            id: String(item.id || `msg-${idx}-${Date.now()}`),
+            role,
+            content: String(item.content || ''),
+            created_at: String(item.created_at || new Date().toISOString()),
+            session_id: currentSessionId,
+          }
+        })
+        useChatStore.getState().setMessages(mapped)
+      })
+      .catch(() => {
+        useChatStore.getState().setMessages([])
+      })
+  }, [currentSessionId])
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return
@@ -97,6 +123,7 @@ export function ChatPage() {
         : {
             message: selectedImage ? `${message}\n\n[image_attached:${selectedImage.name}]` : message,
             session_id: currentSessionId,
+            memory_scope: memoryScope,
           }
 
       const response = await fetch(endpoint, {
@@ -302,6 +329,13 @@ export function ChatPage() {
           className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
         >
           Memory Self-Check
+        </button>
+        <button
+          onClick={() => setMemoryScope(memoryScope === 'session' ? 'global' : 'session')}
+          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+          title="Toggle memory retrieval scope"
+        >
+          Memory: {memoryScope === 'global' ? 'Global' : 'Session'}
         </button>
         <button
           onClick={() => setChatMode('chat')}

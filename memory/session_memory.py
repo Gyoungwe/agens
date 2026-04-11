@@ -50,6 +50,7 @@ class SessionMemory:
         session_id: str,
         query: str = None,
         max_messages: int = None,
+        global_scope: bool = False,
     ) -> list[ChatMessage]:
         """
         获取对话上下文。
@@ -62,14 +63,21 @@ class SessionMemory:
         if query:
             memories = await self.vector_store.search(
                 query=query,
-                session_id=session_id,
+                session_id=None if global_scope else session_id,
                 top_k=limit,
             )
         else:
-            memories = await self.vector_store.get_recent(
-                session_id=session_id,
-                limit=limit,
-            )
+            if global_scope:
+                memories = await self.vector_store.search(
+                    query=session_id,
+                    session_id=None,
+                    top_k=limit,
+                )
+            else:
+                memories = await self.vector_store.get_recent(
+                    session_id=session_id,
+                    limit=limit,
+                )
 
         messages = []
         for m in memories:
