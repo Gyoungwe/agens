@@ -113,6 +113,8 @@ export const bioApi = {
       continue_on_error?: boolean
       plan?: WorkflowPlanSpec
       intent?: WorkflowIntentSpec
+      user_input_payload?: Record<string, unknown>
+      resume_from_trace_id?: string
     }
   ) => client.post<BioWorkflowResponse>('/bio/workflow', data),
 
@@ -125,6 +127,8 @@ export const bioApi = {
       continue_on_error?: boolean
       plan?: WorkflowPlanSpec
       intent?: WorkflowIntentSpec
+      user_input_payload?: Record<string, unknown>
+      resume_from_trace_id?: string
     }) => {
     const params = new URLSearchParams({ stream: 'true' })
     if (data.session_id) params.set('session_id', data.session_id)
@@ -142,6 +146,8 @@ export const bioApi = {
         continue_on_error: data.continue_on_error,
         plan: data.plan,
         intent: data.intent,
+        user_input_payload: data.user_input_payload,
+        resume_from_trace_id: data.resume_from_trace_id,
       }),
     })
   },

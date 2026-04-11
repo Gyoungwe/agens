@@ -278,6 +278,28 @@ export function BioWorkflowPage() {
       .filter((x): x is { stage: string; artifact: Record<string, unknown> } => x.artifact !== null)
   }, [finalResult])
 
+  const finalDeliverables = useMemo(() => {
+    if (!finalArtifacts.length) return [] as string[]
+    const lines: string[] = []
+    for (const item of finalArtifacts) {
+      const a = item.artifact
+      if (item.stage === 'report' && Array.isArray(a.sections)) {
+        lines.push(`Report sections: ${(a.sections as unknown[]).length}`)
+      }
+      if (item.stage === 'evolution' && Array.isArray(a.improvements)) {
+        lines.push(`Evolution improvements: ${(a.improvements as unknown[]).length}`)
+      }
+      if (item.stage === 'codegen') {
+        if (typeof a.engine === 'string') lines.push(`Pipeline engine: ${a.engine}`)
+        if (Array.isArray(a.processes)) lines.push(`Pipeline processes: ${(a.processes as unknown[]).length}`)
+      }
+      if (item.stage === 'qc') {
+        if (typeof a.overall_pass === 'boolean') lines.push(`QC overall_pass: ${String(a.overall_pass)}`)
+      }
+    }
+    return lines
+  }, [finalArtifacts])
+
   const confirmIntent = async () => {
     if (!goal.trim()) return
     setIntentInfo(null)
@@ -354,6 +376,7 @@ export function BioWorkflowPage() {
         dataset.trim() || undefined,
         scopeId.trim() || undefined,
         activeProviderId || undefined,
+        stream?.session_id,
         continueOnError,
         payloadPlan,
       )
@@ -375,6 +398,7 @@ export function BioWorkflowPage() {
         dataset.trim() || undefined,
         scopeId.trim() || undefined,
         activeProviderId || undefined,
+        stream?.session_id,
         continueOnError,
         planInfo?.plan,
       )
@@ -396,6 +420,7 @@ export function BioWorkflowPage() {
         dataset.trim() || undefined,
         scopeId.trim() || undefined,
         activeProviderId || undefined,
+        finalResult?.session_id || stream?.session_id,
         continueOnError,
         planInfo?.plan,
         {
@@ -419,6 +444,15 @@ export function BioWorkflowPage() {
     cancelStream()
     clearStream()
     setFinalResult(null)
+  }
+
+  const startNewPlan = async () => {
+    cancelStream()
+    clearStream()
+    setFinalResult(null)
+    setUserAnswer('')
+    setPlanInfo(null)
+    await generatePlan()
   }
 
   return (
@@ -693,6 +727,13 @@ export function BioWorkflowPage() {
                       >
                         <Play className="w-4 h-4" /> Run Planned Workflow
                       </button>
+                      <button
+                        onClick={startNewPlan}
+                        disabled={isRunning || planGenerating || !goal.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border hover:bg-muted/50 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        New Plan (clear previous)
+                      </button>
                     </div>
                   )}
                 </div>
@@ -860,6 +901,19 @@ export function BioWorkflowPage() {
                 <pre className="mt-3 text-xs whitespace-pre-wrap bg-muted/30 rounded-lg p-3 max-h-56 overflow-y-auto">
                   {finalResult.response}
                 </pre>
+              </div>
+
+              <div className="glass-card rounded-xl p-4">
+                <div className="text-sm text-muted-foreground">Final Deliverables</div>
+                {finalDeliverables.length === 0 ? (
+                  <div className="text-sm mt-2 text-muted-foreground">No structured deliverables parsed yet.</div>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm list-disc pl-5">
+                    {finalDeliverables.map((line, idx) => (
+                      <li key={`${line}-${idx}`}>{line}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {finalArtifacts.length > 0 && (
