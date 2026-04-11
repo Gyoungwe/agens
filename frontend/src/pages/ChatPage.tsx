@@ -9,6 +9,7 @@ import type { TraceEvent } from '@/components/chat/InvocationTrace'
 
 export function ChatPage() {
   const [splitPosition, setSplitPosition] = useState(60)
+  const [chatMode, setChatMode] = useState<'chat' | 'bio_workflow'>('chat')
   const containerRef = useRef<HTMLDivElement>(null)
   const { messages, isStreaming, currentSessionId, setSessions, setCurrentSession, addMessage, updateMessage, setStreaming } = useChatStore()
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
@@ -50,16 +51,26 @@ export function ChatPage() {
     })
 
     try {
-      const response = await fetch('/api/chat/stream', {
+      const endpoint = chatMode === 'bio_workflow' ? '/api/bio/workflow?stream=true' : '/api/chat/stream'
+      const body = chatMode === 'bio_workflow'
+        ? {
+            goal: message,
+            dataset: 'chat-session',
+            session_id: currentSessionId,
+            continue_on_error: true,
+          }
+        : {
+            message,
+            session_id: currentSessionId,
+          }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        body: JSON.stringify({
-          message,
-          session_id: currentSessionId,
-        }),
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
@@ -75,6 +86,17 @@ export function ChatPage() {
       const decoder = new TextDecoder()
       let finalResponse = ''
       let traceId = ''
+      const stageStatus: Record<string, { status: string; elapsed_ms?: number; error?: string | null }> = {}
+
+      const renderBioProgress = (): string => {
+        const lines = ['## Bio Workflow Progress']
+        for (const [stage, info] of Object.entries(stageStatus)) {
+          const elapsed = typeof info.elapsed_ms === 'number' ? ` (${info.elapsed_ms}ms)` : ''
+          const err = info.error ? ` - ${info.error}` : ''
+          lines.push(`- ${stage}: ${info.status}${elapsed}${err}`)
+        }
+        return lines.join('\n')
+      }
 
       for await (const sseEvent of parseSSEStream(reader, decoder)) {
         traceId = (sseEvent.data.trace_id as string) || traceId
@@ -92,11 +114,31 @@ export function ChatPage() {
           },
         ])
 
-        if (sseEvent.eventType === 'final_response') {
-          finalResponse = ((eventData.data as Record<string, unknown>)?.response as string) || ''
+        if (chatMode === 'bio_workflow') {
+          if (sseEvent.eventType === 'bio_stage_pending' || sseEvent.eventType === 'bio_stage_running' || sseEvent.eventType === 'bio_stage_done') {
+            const stage = String(eventData.stage || 'unknown')
+            stageStatus[stage] = {
+              status: String(eventData.status || (sseEvent.eventType === 'bio_stage_running' ? 'running' : sseEvent.eventType === 'bio_stage_pending' ? 'pending' : 'done')),
+              elapsed_ms: Number(eventData.elapsed_ms || 0),
+              error: (eventData.error as string | null) || null,
+            }
+            updateMessage(assistantId, { content: renderBioProgress() } as Partial<Message>)
+          } else if (sseEvent.eventType === 'bio_workflow_needs_input') {
+            const q = String(eventData.user_question || 'Need more user input')
+            const fields = Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]).join(', ') : ''
+            finalResponse = `${renderBioProgress()}\n\n⚠️ Need user input: ${q}${fields ? `\nRequired: ${fields}` : ''}`
+          } else if (sseEvent.eventType === 'bio_workflow_final') {
+            const workflowSummary = String(eventData.response || '')
+            const status = String(eventData.status || 'unknown')
+            finalResponse = `${renderBioProgress()}\n\n## Final Status: ${status}\n\n${workflowSummary}`
+          } else if (sseEvent.eventType === 'error') {
+            throw new Error((eventData.message as string) || (eventData.error as string) || 'workflow stream error')
+          }
         } else if (sseEvent.eventType === 'task_failed' || sseEvent.eventType === 'task_timeout') {
           const err = (eventData.error as string) || (eventData.message as string) || sseEvent.eventType
           throw new Error(`${sseEvent.eventType}: ${err}`)
+        } else if (sseEvent.eventType === 'final_response') {
+          finalResponse = ((eventData.data as Record<string, unknown>)?.response as string) || ''
         } else if (sseEvent.eventType === 'error') {
           throw new Error((eventData.message as string) || (eventData.error as string) || 'stream error')
         }
@@ -143,6 +185,21 @@ export function ChatPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Chat" />
+
+      <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+        <button
+          onClick={() => setChatMode('chat')}
+          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'chat' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
+        >
+          Normal Chat
+        </button>
+        <button
+          onClick={() => setChatMode('bio_workflow')}
+          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'bio_workflow' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
+        >
+          Bio Workflow Mode
+        </button>
+      </div>
 
       <div className="flex-1 flex overflow-hidden">
         <div
