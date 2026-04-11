@@ -223,6 +223,8 @@ export function BioWorkflowPage() {
   const [sampleSheet, setSampleSheet] = useState('')
   const [referenceBundle, setReferenceBundle] = useState('')
   const [constraints, setConstraints] = useState('')
+  const [userAnswer, setUserAnswer] = useState('')
+  const [resumeLoading, setResumeLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [intentInfo, setIntentInfo] = useState<import('@/api/bio').ConfirmIntentResponse | null>(null)
   const [finalResult, setFinalResult] = useState<import('@/api/bio').BioWorkflowResponse | null>(null)
@@ -381,6 +383,34 @@ export function BioWorkflowPage() {
       if (e instanceof Error && e.name !== 'AbortError') {
         setError(e.message)
       }
+    }
+  }
+
+  const resumeWorkflow = async () => {
+    if (!finalResult?.needs_user_input) return
+    setResumeLoading(true)
+    setError(null)
+    try {
+      const result = await startStream(
+        goal.trim(),
+        dataset.trim() || undefined,
+        scopeId.trim() || undefined,
+        activeProviderId || undefined,
+        continueOnError,
+        planInfo?.plan,
+        {
+          user_answer: userAnswer.trim(),
+          provided_fields: finalResult.required_fields || [],
+        },
+      )
+      setFinalResult(result)
+      setUserAnswer('')
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        setError(e.message)
+      }
+    } finally {
+      setResumeLoading(false)
     }
   }
 
@@ -788,6 +818,21 @@ export function BioWorkflowPage() {
                       required_fields: {finalResult.required_fields.join(', ')}
                     </div>
                   )}
+                  <textarea
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    placeholder="Provide the missing info, e.g. genome=/path/ref.fa annotation=/path/genes.gtf"
+                    className="w-full mt-3 min-h-[80px] rounded-lg border border-amber-400/40 bg-white/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500/30"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={resumeWorkflow}
+                      disabled={resumeLoading}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {resumeLoading ? 'Resuming...' : 'Resume Workflow'}
+                    </button>
+                  </div>
                 </div>
               )}
 

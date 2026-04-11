@@ -27,6 +27,7 @@ export function useBioEvents() {
     provider_id?: string,
     continue_on_error = true,
     plan?: any,
+    user_input_payload?: Record<string, unknown>,
   ): Promise<BioWorkflowResponse | null> => {
     if (abortRef.current) {
       abortRef.current.abort()
@@ -69,7 +70,7 @@ export function useBioEvents() {
     const response = await fetch(`${getDirectApiBaseUrl()}/bio/workflow?stream=true`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ goal, dataset, scope_id, provider_id, continue_on_error, plan }),
+      body: JSON.stringify({ goal, dataset, scope_id, provider_id, continue_on_error, plan, user_input_payload }),
       signal: abortRef.current.signal,
     })
 

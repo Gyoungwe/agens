@@ -144,6 +144,7 @@ class BioWorkflowRequest(BaseModel):
     stage_timeout_seconds: int = 120
     intent: Optional[WorkflowIntentSpec] = None
     plan: Optional[WorkflowPlanSpec] = None
+    user_input_payload: Optional[Dict[str, Any]] = None
 
 
 class WorkflowIntentConfirmRequest(BaseModel):
@@ -570,6 +571,7 @@ def _normalize_workflow_intent(
     goal: str,
     dataset: Optional[str],
     intent: Optional[WorkflowIntentSpec],
+    user_input_payload: Optional[Dict[str, Any]] = None,
 ) -> WorkflowIntentSpec:
     if intent:
         normalized = (
@@ -610,6 +612,24 @@ def _normalize_workflow_intent(
         inferred_risks=risks,
         confidence=confidence,
     )
+
+    if user_input_payload:
+        answer = user_input_payload.get("user_answer")
+        provided_fields = user_input_payload.get("provided_fields") or []
+        if answer:
+            normalized.analysis_type = (
+                f"{normalized.analysis_type or ''}\nuser_answer:{answer}".strip()
+            )
+        if isinstance(provided_fields, list):
+            remove_set = set(str(x) for x in provided_fields)
+            normalized.fields_requiring_confirmation = [
+                f
+                for f in normalized.fields_requiring_confirmation
+                if f not in remove_set
+            ]
+        if len(normalized.fields_requiring_confirmation) == 0:
+            normalized.user_confirmed = True
+
     return normalized
 
 
@@ -1270,6 +1290,7 @@ async def _prepare_bio_workflow_request(
         goal=request.goal,
         dataset=request.dataset,
         intent=request.intent,
+        user_input_payload=request.user_input_payload,
     )
     dataset_desc = normalized_intent.dataset or dataset_desc
     if request.plan and request.plan.stages:
