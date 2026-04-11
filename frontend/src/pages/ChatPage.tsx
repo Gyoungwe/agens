@@ -88,13 +88,36 @@ export function ChatPage() {
       let traceId = ''
       const stageStatus: Record<string, { status: string; elapsed_ms?: number; error?: string | null }> = {}
 
-      const renderBioProgress = (): string => {
-        const lines = ['## Bio Workflow Progress']
-        for (const [stage, info] of Object.entries(stageStatus)) {
-          const elapsed = typeof info.elapsed_ms === 'number' ? ` (${info.elapsed_ms}ms)` : ''
-          const err = info.error ? ` - ${info.error}` : ''
-          lines.push(`- ${stage}: ${info.status}${elapsed}${err}`)
+      const toChineseStageName = (stage: string): string => {
+        const map: Record<string, string> = {
+          planning: '规划',
+          codegen: '代码生成',
+          qc: '质控检查',
+          report: '结果报告',
+          evolution: '策略进化',
         }
+        return map[stage] || stage
+      }
+
+      const toChineseStatus = (status: string): string => {
+        if (status === 'pending') return '等待中'
+        if (status === 'running') return '进行中'
+        if (status === 'ok' || status === 'success' || status === 'done') return '已完成'
+        if (status === 'timeout') return '超时'
+        if (status === 'error' || status === 'failed') return '失败'
+        return status
+      }
+
+      const renderBioProgress = (): string => {
+        const lines = ['正在执行生物信息学流程，当前进展如下：']
+        for (const [stage, info] of Object.entries(stageStatus)) {
+          const elapsed = typeof info.elapsed_ms === 'number' && info.elapsed_ms > 0
+            ? `，耗时约 ${(info.elapsed_ms / 1000).toFixed(1)} 秒`
+            : ''
+          const err = info.error ? `。异常原因：${info.error}` : ''
+          lines.push(`- ${toChineseStageName(stage)}：${toChineseStatus(info.status)}${elapsed}${err}`)
+        }
+        lines.push('\n系统会继续推进后续步骤，直到完成或需要你补充信息。')
         return lines.join('\n')
       }
 
@@ -126,11 +149,16 @@ export function ChatPage() {
           } else if (sseEvent.eventType === 'bio_workflow_needs_input') {
             const q = String(eventData.user_question || 'Need more user input')
             const fields = Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]).join(', ') : ''
-            finalResponse = `${renderBioProgress()}\n\n⚠️ Need user input: ${q}${fields ? `\nRequired: ${fields}` : ''}`
+            finalResponse = `${renderBioProgress()}\n\n流程已暂停：需要你补充信息后才能继续。\n\n问题：${q}${fields ? `\n建议补充字段：${fields}` : ''}`
           } else if (sseEvent.eventType === 'bio_workflow_final') {
             const workflowSummary = String(eventData.response || '')
             const status = String(eventData.status || 'unknown')
-            finalResponse = `${renderBioProgress()}\n\n## Final Status: ${status}\n\n${workflowSummary}`
+            const statusCn = status === 'success'
+              ? '流程已成功完成'
+              : status === 'needs_user_input'
+                ? '流程暂停，等待你的输入'
+                : '流程已结束，但有部分步骤失败'
+            finalResponse = `${renderBioProgress()}\n\n最终结论：${statusCn}\n\n${workflowSummary || '系统已完成执行，但没有返回额外摘要。'}`
           } else if (sseEvent.eventType === 'error') {
             throw new Error((eventData.message as string) || (eventData.error as string) || 'workflow stream error')
           }

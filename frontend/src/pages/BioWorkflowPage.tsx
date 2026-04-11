@@ -284,17 +284,17 @@ export function BioWorkflowPage() {
     for (const item of finalArtifacts) {
       const a = item.artifact
       if (item.stage === 'report' && Array.isArray(a.sections)) {
-        lines.push(`Report sections: ${(a.sections as unknown[]).length}`)
+        lines.push(`报告已生成，共 ${(a.sections as unknown[]).length} 个章节。`)
       }
       if (item.stage === 'evolution' && Array.isArray(a.improvements)) {
-        lines.push(`Evolution improvements: ${(a.improvements as unknown[]).length}`)
+        lines.push(`策略优化建议共 ${(a.improvements as unknown[]).length} 条。`)
       }
       if (item.stage === 'codegen') {
-        if (typeof a.engine === 'string') lines.push(`Pipeline engine: ${a.engine}`)
-        if (Array.isArray(a.processes)) lines.push(`Pipeline processes: ${(a.processes as unknown[]).length}`)
+        if (typeof a.engine === 'string') lines.push(`流程执行引擎：${a.engine}。`)
+        if (Array.isArray(a.processes)) lines.push(`流程包含 ${(a.processes as unknown[]).length} 个处理步骤。`)
       }
       if (item.stage === 'qc') {
-        if (typeof a.overall_pass === 'boolean') lines.push(`QC overall_pass: ${String(a.overall_pass)}`)
+        if (typeof a.overall_pass === 'boolean') lines.push(`质控结论：${a.overall_pass ? '通过' : '未通过'}。`)
       }
     }
     return lines
@@ -881,7 +881,7 @@ export function BioWorkflowPage() {
               <div className="glass-card rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-sm text-muted-foreground">Final Result</div>
+                    <div className="text-sm text-muted-foreground">最终结果</div>
                     <div className="text-lg font-semibold">
                       {finalResult.status} · {finalResult.failed_stages}/{finalResult.total_stages} failed
                     </div>
@@ -904,9 +904,9 @@ export function BioWorkflowPage() {
               </div>
 
               <div className="glass-card rounded-xl p-4">
-                <div className="text-sm text-muted-foreground">Final Deliverables</div>
+                <div className="text-sm text-muted-foreground">最终产出（自然语言摘要）</div>
                 {finalDeliverables.length === 0 ? (
-                  <div className="text-sm mt-2 text-muted-foreground">No structured deliverables parsed yet.</div>
+                  <div className="text-sm mt-2 text-muted-foreground">当前还没有可提取的结构化产出。</div>
                 ) : (
                   <ul className="mt-2 space-y-1 text-sm list-disc pl-5">
                     {finalDeliverables.map((line, idx) => (
