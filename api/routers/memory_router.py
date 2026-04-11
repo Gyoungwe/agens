@@ -20,11 +20,17 @@ async def get_memories(
     owner: Optional[str] = None,
     scope: Optional[str] = "memory",
     limit: int = 100,
+    scope_id: Optional[str] = None,
 ):
     """获取记忆列表"""
     try:
         vs = get_vector_store()
-        memories = await vs.list_memories(owner=owner, scope=scope, limit=limit)
+        memories = await vs.list_memories(
+            owner=owner,
+            scope=scope,
+            limit=limit,
+            scope_id=scope_id,
+        )
         return {
             "success": True,
             "memories": memories,
@@ -40,6 +46,7 @@ async def search_memories(
     query: str,
     owner: Optional[str] = None,
     top_k: int = 10,
+    scope_id: Optional[str] = None,
 ):
     """搜索记忆"""
     try:
@@ -48,6 +55,7 @@ async def search_memories(
             query=query,
             owner=owner,
             top_k=top_k,
+            scope_id=scope_id,
         )
         return {
             "success": True,
@@ -67,6 +75,7 @@ async def add_memory(
     source: str = "manual",
     metadata: Optional[dict] = None,
     ttl_seconds: int = 0,
+    scope_id: Optional[str] = None,
 ):
     """添加记忆"""
     try:
@@ -78,6 +87,7 @@ async def add_memory(
             source=source,
             metadata=metadata,
             ttl_seconds=ttl_seconds,
+            scope_id=scope_id,
         )
         return {
             "success": True,

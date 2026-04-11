@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Header } from '@/components/layout'
 import { agentsApi, client } from '@/api'
@@ -21,31 +21,28 @@ export function AgentSettingsPage() {
     queryFn: async () => (await agentsApi.getAgents()).data,
   })
 
-  useEffect(() => {
-    if (!selectedAgent && agentsData?.agents?.length) {
-      setSelectedAgent(agentsData.agents[0].agent_id)
-    }
-  }, [agentsData, selectedAgent])
+  const defaultAgentId = agentsData?.agents?.[0]?.agent_id || ''
+  const activeAgent = selectedAgent || defaultAgentId
 
   const { data: skillData, refetch: refetchSkills } = useQuery({
-    queryKey: ['agent-skills-all', selectedAgent],
-    enabled: !!selectedAgent,
-    queryFn: async () => (await agentsApi.getAllSkillsForAgent(selectedAgent)).data,
+    queryKey: ['agent-skills-all', activeAgent],
+    enabled: !!activeAgent,
+    queryFn: async () => (await agentsApi.getAllSkillsForAgent(activeAgent)).data,
   })
 
   const { data: memoryData, refetch: refetchMemory } = useQuery({
-    queryKey: ['agent-memory', selectedAgent],
-    enabled: !!selectedAgent,
-    queryFn: async () => (await client.get('/memory/', { params: { owner: selectedAgent, limit: 30 } })).data,
+    queryKey: ['agent-memory', activeAgent],
+    enabled: !!activeAgent,
+    queryFn: async () => (await client.get('/memory/', { params: { owner: activeAgent, limit: 30 } })).data,
   })
 
   const bindMutation = useMutation({
     mutationFn: async ({ skillId, assigned }: { skillId: string; assigned: boolean }) => {
       if (assigned) {
-        await agentsApi.unassignSkill(selectedAgent, skillId)
-      } else {
-        await agentsApi.assignSkill(selectedAgent, skillId)
-      }
+         await agentsApi.unassignSkill(activeAgent, skillId)
+       } else {
+         await agentsApi.assignSkill(activeAgent, skillId)
+       }
     },
     onSuccess: () => refetchSkills(),
   })
@@ -55,8 +52,8 @@ export function AgentSettingsPage() {
       await client.post('/memory/', null, {
         params: {
           text: newMemory,
-          owner: selectedAgent,
-          session_id: `agent-settings-${selectedAgent}`,
+          owner: activeAgent,
+          session_id: `agent-settings-${activeAgent}`,
           source: 'agent-settings-ui',
         },
       })
@@ -86,7 +83,7 @@ export function AgentSettingsPage() {
                 key={agent.agent_id}
                 onClick={() => setSelectedAgent(agent.agent_id)}
                 className={`w-full text-left p-3 rounded-xl border transition-colors ${
-                  selectedAgent === agent.agent_id ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50'
+                  activeAgent === agent.agent_id ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50'
                 }`}
               >
                 <div className="font-medium text-sm">{agent.name || agent.agent_id}</div>
@@ -131,7 +128,7 @@ export function AgentSettingsPage() {
               />
               <button
                 onClick={() => addMemoryMutation.mutate()}
-                disabled={!newMemory.trim() || addMemoryMutation.isPending || !selectedAgent}
+                disabled={!newMemory.trim() || addMemoryMutation.isPending || !activeAgent}
                 className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
               >
                 <Plus className="w-4 h-4" />

@@ -91,7 +91,7 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
       case 'error':
         return <span className="text-red-700">{String(data.error || '')}</span>
       case 'task_timeout':
-        return <span className="text-orange-700">Timeout after {data.timeout_seconds}s</span>
+        return <span className="text-orange-700">Timeout after {String(data.timeout_seconds ?? '')}s</span>
       default:
         return null
     }

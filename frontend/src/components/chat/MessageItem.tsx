@@ -29,11 +29,9 @@ export function MessageItem({ message }: MessageItemProps) {
             : 'bg-card border border-border/50 rounded-tl-sm shadow-lg'
         }`}
       >
-        <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert' : ''}`}>
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-            {message.content}
-          </ReactMarkdown>
-        </div>
+        <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+          {message.content}
+        </ReactMarkdown>
         <div
           className={`text-xs mt-2 font-mono ${
             isUser ? 'text-primary-foreground/60' : 'text-muted-foreground/60'

@@ -1,87 +1,117 @@
 # config/agents.yaml
 
 agents:
-
-  - id:          research_agent
-    name:        研究员 Rex
-    version:     0.02
-    description: 专注于信息搜集、数据分析和知识整理的专职研究员
+  - id:          bio_planner_agent
+    name:        Bio Planner Iris
+    version:     0.01
+    description: 生信流程规划 Agent，负责阶段拆解与执行路径设计
     skills:
-      - web_search
+      - plan_pipeline
       - summarize
-    knowledge:
-      topics:
-        - research
-        - general
-      max_results: 5
     llm:
-      model:      claude-sonnet-4-5
+      model:      deepseek-chat
       max_tokens: 2048
       system_prompt: |
-        你是研究员 Rex，一个严谨、细致的信息分析专家。
-        你的工作原则：
-        - 只陈述有依据的事实，不确定时明确说明
-        - 信息来源要标注清楚
-        - 输出结构化内容，便于后续 Agent 使用
-        - 遇到超出能力范围的任务，主动申请新技能
+        你是 Bio Planner Iris，负责将生物信息学任务拆分为可执行阶段。
+        强调输入输出定义、依赖关系、风险控制和回滚策略。
     rules:
       max_retries:     3
       timeout_seconds: 60
       output_format:   markdown
       can_delegate:    false
     meta:
-      created_at: 2026-04-08
-      tags: [research, analysis]
+      created_at: 2026-04-11
+      tags: [bioinformatics, planning]
       enabled: true
 
-  - id:          executor_agent
-    name:        执行器 Ace
-    version:     0.02
-    description: 负责执行具体操作（代码运行、API 调用等）
+  - id:          bio_code_agent
+    name:        Bio Code Nova
+    version:     0.01
+    description: 生信代码 Agent，负责生成 pipeline 执行脚本与命令
     skills:
+      - generate_bio_code
       - shell
-      - github-code-search
     llm:
-      model:      claude-sonnet-4-5
+      model:      deepseek-chat
       max_tokens: 2048
       system_prompt: |
-        你是执行器 Ace，一个高效、可靠的操作专家。
-        你的工作原则：
-        - 清晰描述执行步骤和结果
-        - 遇到错误时提供诊断信息
-        - 遵守安全约束，不执行未授权操作
+        你是 Bio Code Nova，负责生成可执行的生信流水线步骤与脚本建议。
+        输出需包含目录结构、命令模板、日志与错误处理建议。
     rules:
-      max_retries:     2
-      timeout_seconds: 120
+      max_retries:     3
+      timeout_seconds: 90
       output_format:   markdown
       can_delegate:    false
     meta:
-      created_at: 2026-04-08
-      tags: [execution, operations]
+      created_at: 2026-04-11
+      tags: [bioinformatics, codegen]
       enabled: true
 
-  - id:          writer_agent
-    name:        写手 Luna
-    version:     0.02
-    description: 负责内容撰写、格式化、总结的专业写手
+  - id:          bio_qc_agent
+    name:        Bio QC Atlas
+    version:     0.01
+    description: 生信质检 Agent，负责结果质量评估与异常定位
     skills:
+      - qc_review
       - summarize
-      - ui-ux-pro-max
     llm:
-      model:      claude-sonnet-4-5
+      model:      deepseek-chat
       max_tokens: 2048
       system_prompt: |
-        你是写手 Luna，一个专业的内容创作者。
-        你的工作原则：
-        - 输出结构清晰、表达流畅
-        - 根据需求调整文风（正式/通俗/技术性）
-        - 内容准确，逻辑连贯
+        你是 Bio QC Atlas，专注质量检查。
+        输出通过结论、关键指标阈值、异常项和修复建议。
     rules:
       max_retries:     3
       timeout_seconds: 60
       output_format:   markdown
       can_delegate:    false
     meta:
-      created_at: 2026-04-08
-      tags: [writing, content]
+      created_at: 2026-04-11
+      tags: [bioinformatics, qc]
+      enabled: true
+
+  - id:          bio_report_agent
+    name:        Bio Report Lyra
+    version:     0.01
+    description: 生信汇报 Agent，负责汇总全流程并输出报告
+    skills:
+      - compile_bio_report
+      - summarize
+    llm:
+      model:      deepseek-chat
+      max_tokens: 2048
+      system_prompt: |
+        你是 Bio Report Lyra，负责将生信流程结果整理成结构化报告。
+        报告需包含摘要、关键发现、质量结论、局限性、下一步建议。
+    rules:
+      max_retries:     3
+      timeout_seconds: 60
+      output_format:   markdown
+      can_delegate:    false
+    meta:
+      created_at: 2026-04-11
+      tags: [bioinformatics, reporting]
+      enabled: true
+
+  - id:          bio_evolution_agent
+    name:        Bio Evo Orion
+    version:     0.01
+    description: 生信进化 Agent，负责总结经验并提出策略迭代
+    skills:
+      - evolve_strategy
+      - summarize
+    llm:
+      model:      deepseek-chat
+      max_tokens: 2048
+      system_prompt: |
+        你是 Bio Evo Orion，负责流程复盘与能力进化。
+        输出成功因素、失败模式、优先改进项与待安装能力列表。
+    rules:
+      max_retries:     3
+      timeout_seconds: 60
+      output_format:   markdown
+      can_delegate:    false
+    meta:
+      created_at: 2026-04-11
+      tags: [bioinformatics, evolution]
       enabled: true

@@ -22,6 +22,7 @@ import httpx
 from pathlib import Path
 from typing import Any, List, Optional
 from datetime import datetime, timedelta
+from utils.retry import retry_with_backoff, RetryError
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class VectorStore:
         self.db_path = db_path
         self._embed_provider = embed_provider
         self._table = None
+        self._last_embedding_status = "unknown"
         self._ensure_table()
 
     def _ensure_table(self):
@@ -139,7 +141,15 @@ class VectorStore:
         """
         if self._embed_provider:
             try:
-                return await self._embed_provider(text)
+                embedding = await retry_with_backoff(
+                    self._embed_provider,
+                    text,
+                    max_retries=3,
+                    base_delay=0.5,
+                    max_delay=5.0,
+                )
+                self._last_embedding_status = "custom_provider"
+                return embedding
             except Exception as e:
                 logger.warning(f"Custom embed provider failed: {e}")
 
@@ -147,43 +157,66 @@ class VectorStore:
             api_key = _get_embedding_api_key()
             if not api_key:
                 logger.warning("⚠️ SILICONFLOW_API_KEY not set, using random vector")
+                self._last_embedding_status = "fallback_random_missing_key"
                 return self._random_vector()
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    EMBEDDING_API_URL,
-                    json={
-                        "model": EMBEDDING_MODEL,
-                        "input": text,
-                    },
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                )
-
-                if resp.status_code == 401:
-                    logger.error(
-                        f"SiliconFlow 401: {resp.text}. API Key 可能无效或过期"
+            async def fetch_embedding():
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        EMBEDDING_API_URL,
+                        json={
+                            "model": EMBEDDING_MODEL,
+                            "input": text,
+                        },
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
                     )
-                    return self._random_vector()
 
-                resp.raise_for_status()
-                data = resp.json()
+                    if resp.status_code == 401:
+                        raise PermissionError(
+                            f"SiliconFlow 401: {resp.text}. API Key 可能无效或过期"
+                        )
 
-                if "data" in data and len(data["data"]) > 0:
-                    embedding = data["data"][0]["embedding"]
-                    logger.debug(f"✅ SiliconFlow embedding: {len(embedding)} dims")
-                    return embedding
-                else:
-                    logger.error(f"Unexpected response format: {data}")
-                    return self._random_vector()
+                    resp.raise_for_status()
+                    data = resp.json()
 
+                    if "data" in data and len(data["data"]) > 0:
+                        embedding = data["data"][0]["embedding"]
+                        logger.debug(f"✅ SiliconFlow embedding: {len(embedding)} dims")
+                        return embedding
+                    raise ValueError(f"Unexpected response format: {data}")
+
+            embedding = await retry_with_backoff(
+                fetch_embedding,
+                max_retries=3,
+                base_delay=0.5,
+                max_delay=5.0,
+                retryable_exceptions=(
+                    httpx.TimeoutException,
+                    httpx.TransportError,
+                    OSError,
+                ),
+            )
+            self._last_embedding_status = "siliconflow"
+            return embedding
+
+        except PermissionError as e:
+            logger.error(str(e))
+            self._last_embedding_status = "fallback_random_permission"
+            return self._random_vector()
+        except RetryError as e:
+            logger.warning(f"Embedding retry exhausted: {e}")
+            self._last_embedding_status = "fallback_random_retry_exhausted"
+            return self._random_vector()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
+            self._last_embedding_status = "fallback_random_http_error"
             return self._random_vector()
         except Exception as e:
             logger.warning(f"Embedding API failed: {e}")
+            self._last_embedding_status = "fallback_random_exception"
             return self._random_vector()
 
     def _random_vector(self) -> List[float]:
@@ -204,6 +237,7 @@ class VectorStore:
         version: str = None,
         ttl_seconds: int = 0,
         metadata: dict = None,
+        scope_id: str = None,
     ) -> str:
         """
         添加记忆
@@ -228,6 +262,8 @@ class VectorStore:
         _version = version or self.DEFAULT_VERSION
 
         full_metadata = {"role": role, **(metadata or {})}
+        if scope_id:
+            full_metadata["scope_id"] = scope_id
 
         arrays = [
             pa.array([memory_id], type=pa.string()),
@@ -268,6 +304,7 @@ class VectorStore:
         owner: str = None,
         top_k: int = 5,
         include_expired: bool = False,
+        scope_id: str = None,
     ) -> List[dict]:
         """
         向量相似性搜索
@@ -321,7 +358,11 @@ class VectorStore:
                 if r.get("scope") != "memory":
                     continue
 
-                filtered.append(self._result_to_dict(r))
+                parsed = self._result_to_dict(r)
+                if scope_id and parsed.get("scope_id") not in (None, "", scope_id):
+                    continue
+
+                filtered.append(parsed)
 
             return filtered[:top_k]
 
@@ -389,6 +430,7 @@ class VectorStore:
             "score": r.get("score", 0),
             "created_at": r.get("created_at"),
             "role": meta.get("role", ""),
+            "scope_id": meta.get("scope_id"),
         }
 
     async def delete(self, memory_id: str):
@@ -418,7 +460,11 @@ class VectorStore:
             return 0
 
     async def list_memories(
-        self, owner: str = None, scope: str = "memory", limit: int = 100
+        self,
+        owner: str = None,
+        scope: str = "memory",
+        limit: int = 100,
+        scope_id: str = None,
     ) -> List[dict]:
         """列出记忆"""
         try:
@@ -439,6 +485,9 @@ class VectorStore:
                     )
                 except Exception:
                     pass
+
+                if scope_id and metadata.get("scope_id") not in (None, "", scope_id):
+                    continue
 
                 memories.append(
                     {
@@ -529,6 +578,7 @@ class VectorStore:
             return {
                 "status": "healthy" if not is_random else "degraded",
                 "embedding_api": "working" if not is_random else "fallback_random",
+                "embedding_status": self._last_embedding_status,
                 "lanceDB": "connected",
                 "table": self.TABLE_NAME,
                 "total_memories": await self.count(),

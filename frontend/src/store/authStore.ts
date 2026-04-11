@@ -23,6 +23,7 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (username: string, password: string) => {
         const response = await authApi.login({ username, password })
+        localStorage.setItem('token', response.data.access_token)
         set({
           token: response.data.access_token,
           username,
@@ -39,15 +40,15 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         const token = localStorage.getItem('token')
         if (!token) {
-          set({ isAuthenticated: false })
+          set({ token: null, isAuthenticated: false })
           return
         }
         try {
           await authApi.getCurrentUser()
-          set({ isAuthenticated: true })
+          set({ token, isAuthenticated: true })
         } catch {
           localStorage.removeItem('token')
-          set({ isAuthenticated: false })
+          set({ token: null, isAuthenticated: false })
         }
       },
 
@@ -55,6 +56,11 @@ export const useAuthStore = create<AuthState>()(
         set({ _hasHydrated: v })
         if (v) {
           const token = get().token
+          if (token) {
+            localStorage.setItem('token', token)
+          } else {
+            localStorage.removeItem('token')
+          }
           set({ isAuthenticated: !!token })
         }
       },

@@ -1,26 +1,25 @@
 import { NavLink } from 'react-router-dom'
 import { useApprovalStore } from '@/store'
 import {
-  MessageCircle,
   BarChart3,
   Wrench,
   BookOpen,
   CheckCircle,
   ScrollText,
-  Sparkles,
   Bot,
   SlidersHorizontal,
+  Dna,
+  Sparkles,
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/', icon: MessageCircle, label: 'Chat' },
+  { to: '/bio-workflow', icon: Dna, label: 'Bio Workflow' },
   { to: '/dashboard', icon: BarChart3, label: 'Dashboard' },
   { to: '/providers', icon: Bot, label: 'Models' },
   { to: '/skills', icon: Wrench, label: 'Skills' },
   { to: '/knowledge', icon: BookOpen, label: 'Knowledge' },
   { to: '/approvals', icon: CheckCircle, label: 'Approvals', badge: true },
   { to: '/sessions', icon: ScrollText, label: 'Sessions' },
-  { to: '/agent-chat', icon: Sparkles, label: 'Agent Chat' },
   { to: '/agent-settings', icon: SlidersHorizontal, label: 'Agent Settings' },
 ]
 

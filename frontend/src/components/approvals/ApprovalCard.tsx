@@ -18,6 +18,8 @@ export function ApprovalCard({
   isRejecting,
   isProcessed,
 }: ApprovalCardProps) {
+  const isWorkflowEvolution = approval.kind === 'workflow_retrospective'
+
   return (
     <div
       className={`bg-card rounded-xl border-l-4 p-4 ${
@@ -31,7 +33,8 @@ export function ApprovalCard({
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-medium">
-            Agent <span className="text-primary">{approval.agent_id}</span> requests skill installation
+            Agent <span className="text-primary">{approval.agent_id}</span>{' '}
+            {isWorkflowEvolution ? 'submitted a workflow evolution record' : 'requests skill installation'}
           </h3>
           <p className="text-sm font-mono text-muted-foreground">
             {approval.skill_name || approval.skill_id}
@@ -54,6 +57,23 @@ export function ApprovalCard({
         <p className="text-sm text-muted-foreground mb-1">Reason</p>
         <p className="text-sm">{approval.reason}</p>
       </div>
+
+      {isWorkflowEvolution && (
+        <div className="bg-muted rounded-lg p-3 mb-4 space-y-2">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">Workflow Summary</p>
+            <p className="text-sm whitespace-pre-wrap break-words">{approval.summary || 'No summary'}</p>
+          </div>
+          <div className="text-xs text-muted-foreground font-mono">
+            provider={approval.provider_id || 'default'} · scope={approval.scope_id || 'default'}
+          </div>
+          {approval.workflow_trace_id && (
+            <div className="text-xs text-muted-foreground font-mono">
+              trace={approval.workflow_trace_id}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1 text-xs text-muted-foreground">

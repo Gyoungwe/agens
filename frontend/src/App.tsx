@@ -3,15 +3,14 @@ import { useEffect } from 'react'
 import { useAuthStore } from '@/store'
 import {
   AppLayout,
-  ChatPage,
   DashboardPage,
   SkillsPage,
   KnowledgePage,
   ApprovalsPage,
   SessionsPage,
-  AgentChatPage,
   AgentSettingsPage,
   ProvidersPage,
+  BioWorkflowPage,
   LoginPage,
 } from '@/pages'
 
@@ -52,17 +51,17 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<ChatPage />} />
+        <Route index element={<Navigate to="/bio-workflow" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="sessions" element={<SessionsPage />} />
-        <Route path="agent-chat" element={<AgentChatPage />} />
         <Route path="agent-settings" element={<AgentSettingsPage />} />
         <Route path="providers" element={<ProvidersPage />} />
+        <Route path="bio-workflow" element={<BioWorkflowPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/bio-workflow" replace />} />
     </Routes>
   )
 }

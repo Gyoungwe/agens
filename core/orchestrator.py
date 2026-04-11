@@ -7,6 +7,7 @@ import time
 import uuid
 import yaml
 from pathlib import Path
+from copy import deepcopy
 from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 from core.message import Message, TaskPayload, ResultPayload
@@ -20,6 +21,20 @@ logger = logging.getLogger(__name__)
 
 AGENTS_CONFIG_PATH = Path("config/agents.yaml")
 _agents_config_cache = None
+
+
+def _default_parallel_plan(user_input: str, available_agents: List[str]) -> List[dict]:
+    """当 LLM 规划失败时，提供安全回退计划。"""
+    fallback = []
+    for agent_id in available_agents:
+        fallback.append(
+            {
+                "agent": agent_id,
+                "instruction": f"围绕以下原始任务，从你的专业角色给出可执行贡献：{user_input}",
+                "depends_on": [],
+            }
+        )
+    return fallback
 
 
 def _load_agents_config() -> dict:
@@ -184,6 +199,8 @@ class Orchestrator(BaseAgent):
         - session_id="xxx"  → 恢复历史会话继续对话
         """
         sm = self.session_manager
+        previous_trace_id = self._current_trace_id
+        previous_session_id = self._current_session_id
         self._current_session_id = session_id
 
         context_messages = []
@@ -228,10 +245,20 @@ class Orchestrator(BaseAgent):
 
         try:
             # 3. 按计划分发子任务
-            await self._dispatch(plan, user_input, context_messages, trace_id)
+            await self._dispatch(
+                plan,
+                user_input,
+                context_messages,
+                trace_id,
+                session_id=session_id,
+            )
 
             # 4. 等待所有结果（最多 120 秒）
-            results = await self._wait_for_results(trace_id, timeout=120)
+            results = await self._wait_for_results(
+                trace_id,
+                timeout=120,
+                session_id=session_id,
+            )
 
             # 5. 汇总结果（带上下文）
             final = await self._synthesize(
@@ -281,6 +308,9 @@ class Orchestrator(BaseAgent):
                 error=f"{type(e).__name__}: {e}",
             )
             raise
+        finally:
+            self._current_trace_id = previous_trace_id
+            self._current_session_id = previous_session_id
 
     async def run_single_agent(
         self,
@@ -288,6 +318,7 @@ class Orchestrator(BaseAgent):
         agent_id: str,
         session_id: str = None,
         trace_id: str = None,
+        runtime_context: Optional[dict] = None,
     ) -> str:
         """
         直接运行单个 Agent（不经过 Orchestrator 调度）
@@ -304,6 +335,8 @@ class Orchestrator(BaseAgent):
             Agent 的响应结果
         """
         sm = self.session_manager
+        previous_trace_id = self._current_trace_id
+        previous_session_id = self._current_session_id
         if trace_id:
             self._current_trace_id = trace_id
         else:
@@ -315,6 +348,7 @@ class Orchestrator(BaseAgent):
         else:
             sm.new_session(title=user_input[:40])
             session_id = sm.current_session_id
+        self._current_session_id = session_id
 
         await sm.add_user_message(user_input)
 
@@ -322,7 +356,7 @@ class Orchestrator(BaseAgent):
         self._pending_timestamps[trace_id] = time.time()
         self._events[trace_id] = asyncio.Event()
 
-        self._emit_event(
+        await self._emit_event(
             EventEnvelope.agent_start(
                 agent_id=agent_id,
                 trace_id=trace_id,
@@ -330,43 +364,53 @@ class Orchestrator(BaseAgent):
             )
         )
 
-        await self._send_task_with_retry(
-            recipient=agent_id,
-            trace_id=trace_id,
-            instruction=user_input,
-            original_input=user_input,
-        )
-
-        results = await self._wait_for_results(trace_id, timeout=120)
-
-        final = ""
-        if results and agent_id in results:
-            final = results[agent_id]
-            if hasattr(final, "output"):
-                final = final.output
-            elif isinstance(final, dict):
-                final = final.get("output", str(final))
-
-        self._emit_event(
-            EventEnvelope.agent_done(
-                agent_id=agent_id,
+        try:
+            await self._send_task_with_retry(
+                recipient=agent_id,
                 trace_id=trace_id,
-                result=final,
-            )
-        )
-
-        self._emit_event(
-            EventEnvelope.final_response(
-                agent_id=agent_id,
-                trace_id=trace_id,
-                response=final,
+                instruction=user_input,
+                original_input=user_input,
+                runtime_context=runtime_context,
                 session_id=session_id,
             )
-        )
 
-        await sm.add_assistant_message(final)
+            results = await self._wait_for_results(
+                trace_id,
+                timeout=120,
+                session_id=session_id,
+            )
 
-        return final
+            final = ""
+            if results and agent_id in results:
+                final = results[agent_id]
+                if hasattr(final, "output"):
+                    final = final.output
+                elif isinstance(final, dict):
+                    final = final.get("output", str(final))
+
+            await self._emit_event(
+                EventEnvelope.agent_done(
+                    agent_id=agent_id,
+                    trace_id=trace_id,
+                    result=final,
+                )
+            )
+
+            await self._emit_event(
+                EventEnvelope.final_response(
+                    agent_id=agent_id,
+                    trace_id=trace_id,
+                    response=final,
+                    session_id=session_id,
+                )
+            )
+
+            await sm.add_assistant_message(final)
+
+            return final
+        finally:
+            self._current_trace_id = previous_trace_id
+            self._current_session_id = previous_session_id
 
     async def run_stream(
         self,
@@ -387,8 +431,14 @@ class Orchestrator(BaseAgent):
         plan = await self._plan(user_input)
         logger.info(f"📋 任务计划: {plan}")
 
-        trace_id = await self._dispatch(plan, user_input)
-        results = await self._wait_for_results(trace_id, timeout=120)
+        trace_id = await self._dispatch(
+            plan, user_input, session_id=sm.current_session_id if sm else None
+        )
+        results = await self._wait_for_results(
+            trace_id,
+            timeout=120,
+            session_id=sm.current_session_id if sm else None,
+        )
 
         async for chunk in self._synthesize_stream(user_input, results):
             yield chunk
@@ -466,14 +516,28 @@ class Orchestrator(BaseAgent):
             end = text.rfind("]") + 1
             if start == -1 or end == 0:
                 logger.error(f"LLM 返回不是有效的 JSON 格式: {text[:200]}")
-                return []
-            return json.loads(text[start:end])
+                return _default_parallel_plan(user_input, available_agents)
+            plan = json.loads(text[start:end])
+            normalized = []
+            for step in plan:
+                agent = step.get("agent")
+                instruction = step.get("instruction")
+                if not agent or not instruction:
+                    continue
+                normalized.append(
+                    {
+                        "agent": agent,
+                        "instruction": instruction,
+                        "depends_on": step.get("depends_on", []),
+                    }
+                )
+            return normalized or _default_parallel_plan(user_input, available_agents)
         except json.JSONDecodeError as e:
             logger.error(f"JSON 解析失败: {e}, 原始响应: {text[:500]}")
-            return []
+            return _default_parallel_plan(user_input, available_agents)
         except Exception as e:
             logger.error(f"任务规划失败: {e}", exc_info=True)
-            return []
+            return _default_parallel_plan(user_input, available_agents)
 
     # ── 任务分发（带重试） ─────────────────────────
 
@@ -491,6 +555,8 @@ class Orchestrator(BaseAgent):
         trace_id: str,
         instruction: str,
         original_input: str,
+        runtime_context: Optional[dict] = None,
+        session_id: str = None,
         correlation_id: str = None,
     ) -> dict:
         """发送任务带重试，只负责发送，不等待结果"""
@@ -499,6 +565,7 @@ class Orchestrator(BaseAgent):
         base_delay = rules.get("retry_base_delay", 1.0)
         max_delay = rules.get("retry_max_delay", 30.0)
 
+        task_context = {"original_task": original_input, **(runtime_context or {})}
         msg = Message(
             sender="orchestrator",
             recipient=recipient,
@@ -506,13 +573,14 @@ class Orchestrator(BaseAgent):
             trace_id=trace_id,
             payload=TaskPayload(
                 instruction=instruction,
-                context={"original_task": original_input},
+                context=task_context,
             ).model_dump(),
         )
         if correlation_id:
             msg.correlation_id = correlation_id
         else:
             msg.correlation_id = trace_id
+        msg.session_id = session_id
 
         async def send_once():
             await self.bus.send(msg)
@@ -546,7 +614,7 @@ class Orchestrator(BaseAgent):
                     trace_id=trace_id,
                     error_message=str(e),
                     error_code="RETRY_EXHAUSTED",
-                    session_id=self._current_session_id,
+                    session_id=session_id,
                 )
             )
             return {"error": str(e)}
@@ -557,6 +625,7 @@ class Orchestrator(BaseAgent):
         original_input: str,
         context_messages: list = None,
         trace_id: str = None,
+        session_id: str = None,
     ) -> str:
         """并行分发所有子任务（带重试机制），返回 trace_id"""
         if not plan:
@@ -574,7 +643,7 @@ class Orchestrator(BaseAgent):
                 agent_id=self.agent_id,
                 trace_id=trace_id,
                 instruction=original_input,
-                session_id=self._current_session_id,
+                session_id=session_id,
             )
         )
 
@@ -597,6 +666,8 @@ class Orchestrator(BaseAgent):
                 trace_id=trace_id,
                 instruction=step["instruction"],
                 original_input=original_input,
+                runtime_context=step.get("context"),
+                session_id=session_id,
             )
             tasks.append(task)
 
@@ -611,7 +682,9 @@ class Orchestrator(BaseAgent):
         return "Orchestrator 不接受直接任务指派"
 
     async def _handle_task(self, message: Message):
-        pass
+        logger.warning(
+            f"Orchestrator received direct task but does not support direct execution: sender={message.sender} trace_id={message.trace_id}"
+        )
 
     async def _listen_loop(self):
         """覆盖父类的监听循环，专门收集子 Agent 的返回"""
@@ -670,7 +743,9 @@ class Orchestrator(BaseAgent):
         if all(v is not None for v in self._pending[trace_id].values()):
             self._events[trace_id].set()
 
-    async def _wait_for_results(self, trace_id: str, timeout: float) -> dict:
+    async def _wait_for_results(
+        self, trace_id: str, timeout: float, session_id: str = None
+    ) -> dict:
         """等待所有子任务完成"""
         event = self._events.get(trace_id)
         start_time = time.time()
@@ -701,7 +776,7 @@ class Orchestrator(BaseAgent):
                     agent_id=self.agent_id,
                     trace_id=trace_id,
                     timeout_seconds=timeout,
-                    session_id=self._current_session_id,
+                    session_id=session_id,
                 )
             )
             if trace_id in self._pending:

@@ -7,6 +7,7 @@ FastAPI 后端 - Multi-Agent 系统 REST API
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -35,8 +36,22 @@ from api.routers import (
     memory_router,
 )
 from api.auth import router as auth_router
-from api.ws.events import websocket_endpoint
+from api.ws.events import (
+    websocket_endpoint,
+    publish_bio_stage_pending,
+    publish_bio_stage_running,
+    publish_bio_stage_done,
+    publish_bio_workflow_start,
+    publish_bio_workflow_done,
+)
+from api.models.bio_workflow import (
+    WorkflowIntentSpec,
+    WorkflowPlanSpec,
+    WorkflowStageSpec,
+    SystemInferenceSpec,
+)
 from utils.feature_logs import setup_feature_loggers, get_feature_logger
+from core.bio_harness import HarnessStageSpec, BioWorkflowHarness
 
 LOG_DIR = Path("./logs")
 LOG_DIR.mkdir(exist_ok=True)
@@ -119,6 +134,30 @@ class ChatResponse(BaseModel):
     provider: str
 
 
+class BioWorkflowRequest(BaseModel):
+    goal: str
+    dataset: Optional[str] = None
+    session_id: Optional[str] = None
+    scope_id: Optional[str] = None
+    provider_id: Optional[str] = None
+    continue_on_error: bool = True
+    stage_timeout_seconds: int = 120
+    intent: Optional[WorkflowIntentSpec] = None
+    plan: Optional[WorkflowPlanSpec] = None
+
+
+class WorkflowIntentConfirmRequest(BaseModel):
+    goal: str
+    dataset: Optional[str] = None
+    intent: Optional[WorkflowIntentSpec] = None
+
+
+class WorkflowPlanGenerateRequest(BaseModel):
+    goal: Optional[str] = None
+    dataset: Optional[str] = None
+    intent: WorkflowIntentSpec
+
+
 class SessionInfo(BaseModel):
     session_id: str
     title: str
@@ -173,6 +212,11 @@ class AgentSystemState:
         self._vector_store = None
         self._context_compressor = None
         self._knowledge_base = None
+        self._approval_queue = None
+        self._skill_installer = None
+        self._auto_installer = None
+        self._auto_installer_task = None
+        self._bio_workflow_cache = {}
         self._all_agents = []  # 存储所有 Agent
 
     @property
@@ -210,6 +254,14 @@ class AgentSystemState:
     @property
     def knowledge_base(self):
         return self._get_knowledge_base()
+
+    @property
+    def approval_queue(self):
+        return self._get_approval_queue()
+
+    @property
+    def auto_installer(self):
+        return self._get_auto_installer()
 
     def _get_provider_registry(self):
         if self._provider_registry is None:
@@ -285,6 +337,32 @@ class AgentSystemState:
             self._knowledge_base = KnowledgeBase(db_path="./data/knowledge")
         return self._knowledge_base
 
+    def _get_approval_queue(self):
+        if self._approval_queue is None:
+            from evolution.approval_queue import ApprovalQueue
+
+            self._approval_queue = ApprovalQueue()
+        return self._approval_queue
+
+    def _get_skill_installer(self):
+        if self._skill_installer is None:
+            from installer.skill_installer import SkillInstaller
+
+            self._skill_installer = SkillInstaller(registry=self._get_skill_registry())
+        return self._skill_installer
+
+    def _get_auto_installer(self):
+        if self._auto_installer is None:
+            from evolution.auto_installer import AutoInstaller
+
+            self._auto_installer = AutoInstaller(
+                registry=self._get_skill_registry(),
+                installer=self._get_skill_installer(),
+                queue=self._get_approval_queue(),
+                provider_registry=self._get_provider_registry(),
+            )
+        return self._auto_installer
+
     def _get_orchestrator(self):
         if self._orchestrator is None:
             logger.info("🚀 [_get_orchestrator] 创建新 Orchestrator 实例")
@@ -320,12 +398,17 @@ class AgentSystemState:
 
         # Agent 配置
         AGENT_CLASSES = {
-            "research_agent": "agents.research_agent.research_agent.ResearchAgent",
-            "executor_agent": "agents.executor_agent.executor_agent.ExecutorAgent",
-            "writer_agent": "agents.writer_agent.writer_agent.WriterAgent",
+            "bio_planner_agent": "agents.bio_planner_agent.bio_planner_agent.BioPlannerAgent",
+            "bio_code_agent": "agents.bio_code_agent.bio_code_agent.BioCodeAgent",
+            "bio_qc_agent": "agents.bio_qc_agent.bio_qc_agent.BioQCAgent",
+            "bio_report_agent": "agents.bio_report_agent.bio_report_agent.BioReportAgent",
+            "bio_evolution_agent": "agents.bio_evolution_agent.bio_evolution_agent.BioEvolutionAgent",
         }
 
         import importlib
+        from core.soul_parser import SoulParser
+
+        soul_parser = SoulParser()
 
         for agent_id, class_path in AGENT_CLASSES.items():
             try:
@@ -337,9 +420,32 @@ class AgentSystemState:
                     bus=bus,
                     provider_registry=self._get_provider_registry(),
                     registry=self._get_skill_registry(),
-                    knowledge=self._knowledge_base,
-                    auto_installer=None,
+                    knowledge=self._get_knowledge_base(),
+                    auto_installer=self._get_auto_installer(),
+                    memory_store=self._get_vector_store(),
                 )
+
+                soul_doc = soul_parser.parse_file(agent_id)
+                if soul_doc:
+                    soul_meta = soul_doc.meta
+                    agent.description = soul_meta.role or agent.description
+                    if soul_meta.skills:
+                        agent.skills = soul_meta.skills
+                    agent.config.setdefault("llm", {})
+                    agent.config["llm"].update(
+                        {
+                            "model": soul_meta.model
+                            or agent.config["llm"].get("model", ""),
+                            "max_tokens": soul_meta.max_tokens,
+                            "temperature": soul_meta.temperature,
+                            "system_prompt": soul_meta.system_prompt
+                            or f"你是 {soul_meta.name or agent_id}，当前角色是{soul_meta.role or agent.description}。",
+                        }
+                    )
+                    agent.config["name"] = soul_meta.name or agent_id
+                    agent.config["role"] = soul_meta.role or agent.description
+                    agent.config["_soul_body"] = soul_doc.body
+
                 agent.set_hook_registry(self._hook_registry)
 
                 self._all_agents.append(agent)
@@ -376,12 +482,18 @@ class AgentSystemState:
             _ = self.session_manager
             logger.info("🚀 [initialize_async] 初始化 vector_store...")
             _ = self.vector_store
+            logger.info("🚀 [initialize_async] 初始化 auto_installer...")
+            _ = self.auto_installer
             kb = self._knowledge_base
             if kb:
                 logger.info("🚀 [initialize_async] 初始化 knowledge_base...")
                 await kb.init()
             logger.info("🚀 [initialize_async] 初始化 agents...")
             await self._init_agents()
+            if self._auto_installer_task is None or self._auto_installer_task.done():
+                self._auto_installer_task = asyncio.create_task(
+                    self.auto_installer.start_watcher(interval=15)
+                )
             self._initialized = True
             logger.info("✅ Multi-Agent 系统初始化完成")
         except Exception as e:
@@ -391,6 +503,338 @@ class AgentSystemState:
 
 
 state = AgentSystemState()
+
+
+def _default_dynamic_stage_templates(timeout_seconds: int) -> List[WorkflowStageSpec]:
+    return [
+        WorkflowStageSpec(
+            id="planning",
+            name="planning",
+            kind="planning",
+            agent_id="bio_planner_agent",
+            prompt_template="请根据目标与数据集输出阶段化执行计划（输入/输出/风险/回滚）。\n目标: {goal}\n数据集: {dataset}",
+            timeout_seconds=timeout_seconds,
+            critical=True,
+            knowledge_topic="planning",
+            outputs=["plan"],
+        ),
+        WorkflowStageSpec(
+            id="codegen",
+            name="codegen",
+            kind="codegen",
+            agent_id="bio_code_agent",
+            depends_on=["planning"],
+            prompt_template="基于规划结果生成可执行脚本模板与命令清单。\n目标: {goal}\n数据集: {dataset}\n规划摘要: {prev}",
+            timeout_seconds=timeout_seconds,
+            knowledge_topic="codegen",
+            outputs=["commands", "scripts"],
+        ),
+        WorkflowStageSpec(
+            id="qc",
+            name="qc",
+            kind="qc",
+            agent_id="bio_qc_agent",
+            depends_on=["planning", "codegen"],
+            prompt_template="基于当前方案给出 QC 检查项、阈值、失败处理建议。\n目标: {goal}\n数据集: {dataset}\n已有结果: {prev}",
+            timeout_seconds=timeout_seconds,
+            knowledge_topic="qc",
+            qc_gate=True,
+            outputs=["qc_report"],
+        ),
+        WorkflowStageSpec(
+            id="report",
+            name="report",
+            kind="report",
+            agent_id="bio_report_agent",
+            depends_on=["planning", "codegen", "qc"],
+            prompt_template="汇总当前阶段结果，输出结构化报告。\n目标: {goal}\n数据集: {dataset}\n阶段结果: {prev}",
+            timeout_seconds=timeout_seconds,
+            knowledge_topic="report",
+            outputs=["report"],
+        ),
+        WorkflowStageSpec(
+            id="evolution",
+            name="evolution",
+            kind="evolution",
+            agent_id="bio_evolution_agent",
+            depends_on=["planning", "codegen", "qc"],
+            prompt_template="复盘本次工作流，输出下一轮优化策略与能力补齐清单。\n目标: {goal}\n数据集: {dataset}\n阶段结果: {prev}",
+            timeout_seconds=timeout_seconds,
+            knowledge_topic="evolution",
+            outputs=["retrospective"],
+        ),
+    ]
+
+
+def _normalize_workflow_intent(
+    goal: str,
+    dataset: Optional[str],
+    intent: Optional[WorkflowIntentSpec],
+) -> WorkflowIntentSpec:
+    if intent:
+        normalized = (
+            intent.model_copy(deep=True)
+            if hasattr(intent, "model_copy")
+            else intent.copy(deep=True)
+        )
+    else:
+        normalized = WorkflowIntentSpec(goal=goal)
+    normalized.goal = normalized.goal or goal
+    normalized.dataset = normalized.dataset or dataset
+    if not normalized.request_id:
+        normalized.request_id = str(uuid.uuid4())
+
+    inferred_assay = normalized.assay_type
+    confidence = 0.6 if normalized.assay_type != "other" else 0.3
+    risks: List[str] = []
+    if not normalized.dataset and not normalized.input_assets:
+        risks.append("missing_input_assets")
+    if not normalized.reference_bundle:
+        risks.append("missing_reference_bundle")
+    if not normalized.expected_outputs:
+        risks.append("missing_expected_outputs")
+
+    fields = list(normalized.fields_requiring_confirmation)
+    for field_name, missing in [
+        ("assay_type", normalized.assay_type == "other"),
+        ("reference_bundle", normalized.reference_bundle is None),
+        ("expected_outputs", len(normalized.expected_outputs) == 0),
+    ]:
+        if missing and field_name not in fields:
+            fields.append(field_name)
+
+    normalized.fields_requiring_confirmation = fields
+    normalized.system_inference = SystemInferenceSpec(
+        inferred_assay_type=inferred_assay,
+        inferred_workflow_family=f"bio::{inferred_assay or 'generic'}",
+        inferred_risks=risks,
+        confidence=confidence,
+    )
+    return normalized
+
+
+def _workflow_family_from_intent(intent: WorkflowIntentSpec) -> str:
+    assay = (intent.assay_type or "other").lower()
+    mapping = {
+        "rna_seq": "rna-seq",
+        "scrna_seq": "single-cell-rna",
+        "wgs": "wgs-variant",
+        "wes": "wes-variant",
+        "metagenomics": "metagenomics",
+        "atac_seq": "atac-seq",
+        "chip_seq": "chip-seq",
+        "assembly": "assembly",
+    }
+    return mapping.get(assay, "bioinformatics-mvp")
+
+
+def _assay_stage_profile(assay_type: str) -> Dict[str, Dict[str, Any]]:
+    profiles: Dict[str, Dict[str, Dict[str, Any]]] = {
+        "rna_seq": {
+            "codegen": {
+                "focus": "prepare trimming, alignment-or-pseudoalignment, quantification, and DEG-ready matrix generation",
+                "outputs": ["count_matrix", "commands", "scripts"],
+            },
+            "qc": {
+                "focus": "review read quality, alignment rate, assignment rate, clustering, and batch effects",
+                "outputs": ["qc_report", "sample_diagnostics"],
+            },
+            "report": {
+                "focus": "summarize expression results, DEG highlights, and reproducibility metadata",
+                "outputs": ["report", "de_summary"],
+            },
+            "evolution": {
+                "focus": "capture template, parameter, and annotation improvements for RNA-seq runs",
+                "outputs": ["retrospective", "template_updates"],
+            },
+        },
+        "scrna_seq": {
+            "codegen": {
+                "focus": "prepare cell calling, filtering, normalization, dimensionality reduction, clustering, and marker discovery",
+                "outputs": ["filtered_matrix", "cluster_labels", "commands"],
+            },
+            "qc": {
+                "focus": "review doublets, mitochondrial fraction, cell filtering thresholds, and integration quality",
+                "outputs": ["qc_report", "cell_filtering_metrics"],
+            },
+            "report": {
+                "focus": "summarize cell populations, marker genes, and analysis caveats",
+                "outputs": ["report", "marker_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for cell filtering thresholds and integration strategy",
+                "outputs": ["retrospective", "threshold_updates"],
+            },
+        },
+        "wgs": {
+            "codegen": {
+                "focus": "prepare alignment, duplicate handling, recalibration, variant calling, filtering, and annotation",
+                "outputs": ["aligned_bam", "vcf", "commands"],
+            },
+            "qc": {
+                "focus": "review coverage, contamination, duplication, callset quality, and reference concordance",
+                "outputs": ["qc_report", "coverage_metrics"],
+            },
+            "report": {
+                "focus": "summarize variant findings, annotation impact, and sequencing quality",
+                "outputs": ["report", "variant_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for calling parameters, filtering, and annotation sources",
+                "outputs": ["retrospective", "calling_updates"],
+            },
+        },
+        "wes": {
+            "codegen": {
+                "focus": "prepare target-aware alignment, coverage assessment, variant calling, filtering, and annotation",
+                "outputs": ["coverage_metrics", "vcf", "commands"],
+            },
+            "qc": {
+                "focus": "review on-target rate, callable exome fraction, duplication, and target capture quality",
+                "outputs": ["qc_report", "target_metrics"],
+            },
+            "report": {
+                "focus": "summarize exon-targeted variant findings and panel limitations",
+                "outputs": ["report", "variant_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for panel-specific thresholds and annotation policy",
+                "outputs": ["retrospective", "panel_updates"],
+            },
+        },
+        "metagenomics": {
+            "codegen": {
+                "focus": "prepare host depletion, taxonomic profiling, functional annotation, and abundance summarization",
+                "outputs": ["taxonomic_profile", "functional_profile", "commands"],
+            },
+            "qc": {
+                "focus": "review host contamination, classifier confidence, read complexity, and database suitability",
+                "outputs": ["qc_report", "classification_metrics"],
+            },
+            "report": {
+                "focus": "summarize dominant taxa, functional signatures, and contamination caveats",
+                "outputs": ["report", "abundance_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for database choice, host depletion, and profiling thresholds",
+                "outputs": ["retrospective", "database_updates"],
+            },
+        },
+        "atac_seq": {
+            "codegen": {
+                "focus": "prepare alignment, peak calling, accessibility quantification, and differential accessibility analysis",
+                "outputs": ["peak_set", "accessibility_matrix", "commands"],
+            },
+            "qc": {
+                "focus": "review TSS enrichment, FRiP, fragment distribution, and replicate concordance",
+                "outputs": ["qc_report", "peak_qc"],
+            },
+            "report": {
+                "focus": "summarize accessibility patterns, peak quality, and biological interpretation",
+                "outputs": ["report", "peak_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for peak calling thresholds and accessibility comparison logic",
+                "outputs": ["retrospective", "peak_updates"],
+            },
+        },
+        "chip_seq": {
+            "codegen": {
+                "focus": "prepare alignment, enrichment peak calling, motif/annotation, and differential binding analysis",
+                "outputs": ["peak_set", "annotated_peaks", "commands"],
+            },
+            "qc": {
+                "focus": "review enrichment quality, FRiP, cross-correlation, and control/input suitability",
+                "outputs": ["qc_report", "enrichment_metrics"],
+            },
+            "report": {
+                "focus": "summarize binding/enrichment findings, motif enrichment, and control caveats",
+                "outputs": ["report", "binding_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for control strategy and peak calling thresholds",
+                "outputs": ["retrospective", "peak_updates"],
+            },
+        },
+        "assembly": {
+            "codegen": {
+                "focus": "prepare assembly, polishing, contamination screening, and annotation-ready outputs",
+                "outputs": ["assembly_fasta", "polishing_outputs", "commands"],
+            },
+            "qc": {
+                "focus": "review N50, completeness, contamination, polishing convergence, and platform error patterns",
+                "outputs": ["qc_report", "assembly_metrics"],
+            },
+            "report": {
+                "focus": "summarize assembly quality, completeness, contamination, and readiness for annotation",
+                "outputs": ["report", "assembly_summary"],
+            },
+            "evolution": {
+                "focus": "capture improvements for assembler choice, polishing passes, and contamination handling",
+                "outputs": ["retrospective", "assembly_updates"],
+            },
+        },
+    }
+    return profiles.get(assay_type, {})
+
+
+def _generate_workflow_plan(
+    intent: WorkflowIntentSpec,
+    timeout_seconds: int,
+) -> WorkflowPlanSpec:
+    workflow_family = _workflow_family_from_intent(intent)
+    assay_profile = _assay_stage_profile(intent.assay_type)
+    stages = _default_dynamic_stage_templates(timeout_seconds)
+    for stage in stages:
+        profile = assay_profile.get(stage.name)
+        if not profile:
+            continue
+        stage.prompt_template = (
+            f"{profile['focus']}。\n目标: {{goal}}\n数据集: {{dataset}}\n阶段结果: {{prev}}"
+            if stage.name in {"qc", "report", "evolution"}
+            else f"{profile['focus']}。\n目标: {{goal}}\n数据集: {{dataset}}\n规划摘要: {{prev}}"
+            if stage.name == "codegen"
+            else stage.prompt_template
+        )
+        stage.outputs = profile.get("outputs", stage.outputs)
+    return WorkflowPlanSpec(
+        plan_id=str(uuid.uuid4()),
+        intent_id=intent.request_id,
+        workflow_family=workflow_family,
+        stages=stages,
+    )
+
+
+def _stage_specs_from_plan(
+    plan: WorkflowPlanSpec,
+    timeout_seconds: int,
+) -> List[HarnessStageSpec]:
+    stage_specs: List[HarnessStageSpec] = []
+    for stage in plan.stages:
+        stage_specs.append(
+            HarnessStageSpec(
+                name=stage.name,
+                agent_id=stage.agent_id or "bio_planner_agent",
+                prompt=stage.prompt_template
+                or f"请完成阶段 {stage.name}。\\n目标: {{goal}}\\n数据集: {{dataset}}\\n已有结果: {{prev}}",
+                timeout_seconds=stage.timeout_seconds or timeout_seconds,
+                critical=stage.critical,
+                depends_on=stage.depends_on,
+                knowledge_topic=stage.knowledge_topic or stage.kind or stage.name,
+                qc_gate=stage.qc_gate,
+            )
+        )
+    return stage_specs
+
+
+def _fallback_stage_specs(timeout_seconds: int) -> List[HarnessStageSpec]:
+    return _stage_specs_from_plan(
+        WorkflowPlanSpec(
+            workflow_family="bioinformatics-mvp",
+            stages=_default_dynamic_stage_templates(timeout_seconds),
+        ),
+        timeout_seconds=timeout_seconds,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -408,6 +852,8 @@ async def lifespan(app: FastAPI):
     except asyncio.TimeoutError:
         logger.error("系统初始化超时")
     yield
+    if state._auto_installer:
+        state._auto_installer.stop_watcher()
     logging.info("👋 API 服务器关闭")
 
 
@@ -417,6 +863,46 @@ app = FastAPI(
     version="0.02",
     lifespan=lifespan,
 )
+
+
+@app.post("/bio/intent/confirm")
+@app.post("/api/bio/intent/confirm")
+async def confirm_bio_intent(request: WorkflowIntentConfirmRequest):
+    normalized = _normalize_workflow_intent(
+        goal=request.goal,
+        dataset=request.dataset,
+        intent=request.intent,
+    )
+    return {
+        "success": True,
+        "intent": normalized.model_dump()
+        if hasattr(normalized, "model_dump")
+        else normalized.dict(),
+        "requires_confirmation": len(normalized.fields_requiring_confirmation) > 0,
+        "workflow_family": normalized.system_inference.inferred_workflow_family
+        if normalized.system_inference
+        else "bio::generic",
+    }
+
+
+@app.post("/bio/plan/generate")
+@app.post("/api/bio/plan/generate")
+async def generate_bio_workflow_plan(request: WorkflowPlanGenerateRequest):
+    timeout_seconds = 120
+    normalized = _normalize_workflow_intent(
+        goal=request.goal or request.intent.goal,
+        dataset=request.dataset or request.intent.dataset,
+        intent=request.intent,
+    )
+    plan = _generate_workflow_plan(normalized, timeout_seconds=timeout_seconds)
+    return {
+        "success": True,
+        "intent": normalized.model_dump()
+        if hasattr(normalized, "model_dump")
+        else normalized.dict(),
+        "plan": plan.model_dump() if hasattr(plan, "model_dump") else plan.dict(),
+    }
+
 
 _cors_origins = os.getenv(
     "CORS_ORIGINS",
@@ -464,6 +950,10 @@ app.include_router(soul_router)
 app.include_router(evolution_router)
 app.include_router(memory_router)
 
+from api.routers.evolution_router import set_knowledge_base as set_evolution_kb
+
+set_evolution_kb(state.knowledge_base)
+
 # API namespace aliases for frontend proxy (/api/*)
 app.include_router(skill_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
@@ -490,9 +980,18 @@ async def health_check():
         pr = state.provider_registry
         vs = state.vector_store
         sr = state.skill_registry
+        kb = state.knowledge_base
+        provider_ok = await pr.health_check()
+        memory_health = await vs.health_check()
+        knowledge_health = await kb.health_check()
+        overall_status = "healthy"
+        if not provider_ok or memory_health.get("status") != "healthy":
+            overall_status = "degraded"
+        if knowledge_health.get("status") == "unhealthy":
+            overall_status = "degraded"
 
         return HealthResponse(
-            status="healthy",
+            status=overall_status,
             provider=pr.active_id,
             model=pr.active_model,
             providers_available=len(pr.list_all()),
@@ -610,6 +1109,473 @@ async def chat_with_agent(agent_id: str, request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/bio/workflow")
+@app.post("/api/bio/workflow")
+async def run_bio_workflow(request: BioWorkflowRequest, stream: bool = False):
+    """生物信息学 MVP 工作流入口（阶段执行 + 结构化错误上报）"""
+    trace_id = str(uuid.uuid4())
+    chat_log = get_feature_logger("chat")
+    try:
+        orch = state._get_orchestrator()
+        if not orch:
+            raise HTTPException(status_code=503, detail="System not initialized")
+
+        if stream:
+            return EventSourceResponse(
+                _bio_stream_generator(
+                    request=request,
+                    trace_id=trace_id,
+                    chat_log=chat_log,
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        prepared = await _prepare_bio_workflow_request(request, trace_id, chat_log)
+        cache_key = _bio_workflow_cache_key(
+            request.goal,
+            prepared["dataset_desc"],
+            prepared["scope_id"],
+            prepared["target_provider_id"],
+        )
+        cached_result = _get_cached_bio_workflow_result(cache_key)
+        if cached_result:
+            return {
+                **cached_result,
+                "trace_id": trace_id,
+                "session_id": prepared["session_id"],
+                "cached": True,
+            }
+
+        harness = BioWorkflowHarness(
+            session_manager=state.session_manager,
+            logger=chat_log,
+            vector_store=state.vector_store,
+            knowledge_base=state.knowledge_base,
+        )
+        harness_result = await harness.run(
+            orchestrator=prepared["orch"],
+            session_id=prepared["session_id"],
+            trace_id=trace_id,
+            goal=request.goal,
+            dataset=prepared["dataset_desc"],
+            stage_specs=prepared["stage_specs"],
+            continue_on_error=request.continue_on_error,
+            scope_id=prepared["scope_id"],
+            provider_id=prepared["target_provider_id"],
+        )
+
+        response = {
+            "success": harness_result["success"],
+            "status": harness_result["status"],
+            "trace_id": trace_id,
+            "session_id": prepared["session_id"],
+            "workflow": prepared["plan"].workflow_family,
+            "scope_id": prepared["scope_id"],
+            "provider_id": prepared["target_provider_id"],
+            "provider_fallback": prepared["target_provider_id"]
+            != prepared["requested_provider_id"],
+            "response": harness_result["response"],
+            "stage_results": harness_result["stage_results"],
+            "failed_stages": harness_result["failed_stages"],
+            "total_stages": harness_result["total_stages"],
+            "last_checkpoint": harness_result["last_checkpoint"],
+            "execution_policy": harness_result["execution_policy"],
+            "harness": {
+                "state_persistence": True,
+                "execution_boundaries": {
+                    "stage_timeout_seconds": prepared["timeout_seconds"],
+                    "continue_on_error": request.continue_on_error,
+                },
+                "audit_traceability": True,
+            },
+            "intent": prepared["intent"].model_dump()
+            if hasattr(prepared["intent"], "model_dump")
+            else prepared["intent"].dict(),
+            "plan": prepared["plan"].model_dump()
+            if hasattr(prepared["plan"], "model_dump")
+            else prepared["plan"].dict(),
+            "cached": False,
+        }
+        if response["success"]:
+            _set_cached_bio_workflow_result(
+                cache_key,
+                {
+                    "success": response["success"],
+                    "status": response["status"],
+                    "workflow": response["workflow"],
+                    "scope_id": response["scope_id"],
+                    "provider_id": response["provider_id"],
+                    "provider_fallback": response["provider_fallback"],
+                    "response": response["response"],
+                    "stage_results": response["stage_results"],
+                    "failed_stages": response["failed_stages"],
+                    "total_stages": response["total_stages"],
+                    "last_checkpoint": response["last_checkpoint"],
+                    "execution_policy": response["execution_policy"],
+                    "harness": response["harness"],
+                    "intent": response["intent"],
+                    "plan": response["plan"],
+                    "cached": False,
+                },
+            )
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"🌐 [/bio/workflow] ❌ 错误 | trace_id={trace_id} | {type(e).__name__}: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _prepare_bio_workflow_request(
+    request: BioWorkflowRequest, trace_id: str, chat_log
+):
+    orch = state._get_orchestrator()
+    if not orch:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    if request.provider_id:
+        try:
+            _ = state.provider_registry.get(request.provider_id)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid provider_id: {e}")
+
+    requested_provider_id = request.provider_id or state.provider_registry.active_id
+    target_provider_id = requested_provider_id
+    provider_healthy = await state.provider_registry.health_check(target_provider_id)
+    if not provider_healthy:
+        target_provider_id = await state.provider_registry.get_best_available(
+            preferred_id=request.provider_id
+        )
+        chat_log.warning(
+            f"bio_workflow_provider_fallback trace_id={trace_id} requested={requested_provider_id} fallback={target_provider_id}"
+        )
+
+    dataset_desc = request.dataset or "unspecified"
+    scope_id = request.scope_id or f"bio::{dataset_desc}"
+    session_id = request.session_id or state.session_manager.new_session(
+        title=f"bio:{request.goal[:30]}"
+    )
+    timeout_seconds = max(10, min(request.stage_timeout_seconds, 600))
+    normalized_intent = _normalize_workflow_intent(
+        goal=request.goal,
+        dataset=request.dataset,
+        intent=request.intent,
+    )
+    dataset_desc = normalized_intent.dataset or dataset_desc
+    if request.plan and request.plan.stages:
+        workflow_plan = request.plan
+    elif request.intent:
+        workflow_plan = _generate_workflow_plan(
+            normalized_intent,
+            timeout_seconds=timeout_seconds,
+        )
+    else:
+        workflow_plan = WorkflowPlanSpec(
+            plan_id=str(uuid.uuid4()),
+            intent_id=normalized_intent.request_id,
+            workflow_family="bioinformatics-mvp",
+            stages=_default_dynamic_stage_templates(timeout_seconds),
+        )
+
+    stage_specs = (
+        _stage_specs_from_plan(workflow_plan, timeout_seconds)
+        if workflow_plan.stages
+        else _fallback_stage_specs(timeout_seconds)
+    )
+
+    return {
+        "orch": orch,
+        "requested_provider_id": requested_provider_id,
+        "target_provider_id": target_provider_id,
+        "dataset_desc": dataset_desc,
+        "scope_id": scope_id,
+        "session_id": session_id,
+        "timeout_seconds": timeout_seconds,
+        "stage_specs": stage_specs,
+        "intent": normalized_intent,
+        "plan": workflow_plan,
+    }
+
+
+def _bio_workflow_cache_key(
+    goal: str,
+    dataset: str,
+    scope_id: str,
+    provider_id: str,
+) -> str:
+    payload = f"{goal}|{dataset}|{scope_id}|{provider_id}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _get_cached_bio_workflow_result(cache_key: str) -> Optional[dict]:
+    cached = state._bio_workflow_cache.get(cache_key)
+    if not cached:
+        return None
+    if time.time() - cached["cached_at"] > 900:
+        state._bio_workflow_cache.pop(cache_key, None)
+        return None
+    return cached["result"]
+
+
+def _set_cached_bio_workflow_result(cache_key: str, result: dict) -> None:
+    state._bio_workflow_cache[cache_key] = {
+        "cached_at": time.time(),
+        "result": result,
+    }
+
+
+async def _bio_stream_generator(
+    request: BioWorkflowRequest,
+    trace_id: str,
+    chat_log,
+):
+    """SSE generator for streaming bio workflow stage events."""
+    event_queue = asyncio.Queue()
+
+    async def emit_to_queue(payload: Any):
+        await event_queue.put(payload)
+
+    yield {
+        "event": "bio_workflow_start",
+        "data": json.dumps(
+            {
+                "session_id": request.session_id or "pending",
+                "trace_id": trace_id,
+                "goal": request.goal,
+                "scope_id": request.scope_id
+                or (f"bio::{request.dataset or 'unspecified'}"),
+                "provider_id": request.provider_id or state.provider_registry.active_id,
+            }
+        ),
+        "id": str(uuid.uuid4())[:8],
+    }
+
+    try:
+        prepared = await _prepare_bio_workflow_request(request, trace_id, chat_log)
+    except Exception as e:
+        message = str(e.detail) if isinstance(e, HTTPException) else str(e)
+        yield {
+            "event": "error",
+            "data": json.dumps({"message": message, "trace_id": trace_id}),
+            "id": str(uuid.uuid4())[:8],
+        }
+        yield {
+            "event": "bio_workflow_final",
+            "data": json.dumps(
+                {
+                    "success": False,
+                    "status": "partial_failure",
+                    "trace_id": trace_id,
+                    "session_id": request.session_id or "pending",
+                    "scope_id": request.scope_id
+                    or (f"bio::{request.dataset or 'unspecified'}"),
+                    "provider_id": request.provider_id
+                    or state.provider_registry.active_id,
+                    "response": message,
+                    "stage_results": [],
+                    "failed_stages": 1,
+                    "total_stages": 0,
+                    "execution_policy": {},
+                }
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+        return
+
+    cache_key = _bio_workflow_cache_key(
+        request.goal,
+        prepared["dataset_desc"],
+        prepared["scope_id"],
+        prepared["target_provider_id"],
+    )
+    cached_result = _get_cached_bio_workflow_result(cache_key)
+    if cached_result:
+        yield {
+            "event": "bio_workflow_done",
+            "data": json.dumps(
+                {
+                    "session_id": prepared["session_id"],
+                    "trace_id": trace_id,
+                    "success": cached_result["success"],
+                    "status": cached_result["status"],
+                    "total_stages": cached_result["total_stages"],
+                    "failed_stages": cached_result["failed_stages"],
+                    "cached": True,
+                }
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+        yield {
+            "event": "bio_workflow_final",
+            "data": json.dumps(
+                {
+                    **cached_result,
+                    "trace_id": trace_id,
+                    "session_id": prepared["session_id"],
+                    "cached": True,
+                }
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+        return
+    orch = prepared["orch"]
+    session_id = prepared["session_id"]
+    dataset = prepared["dataset_desc"]
+    stage_specs = prepared["stage_specs"]
+    scope_id = prepared["scope_id"]
+    provider_id = prepared["target_provider_id"]
+    stage_trace_ids = [
+        f"{trace_id}-{idx}" for idx, _ in enumerate(stage_specs, start=1)
+    ]
+    subscribed_trace_ids = [trace_id, *stage_trace_ids]
+
+    previous_emitters = []
+    for agent in state._all_agents:
+        previous_emitters.append(agent)
+        if hasattr(agent, "register_trace_emitter"):
+            for subscribed_trace_id in subscribed_trace_ids:
+                agent.register_trace_emitter(subscribed_trace_id, emit_to_queue)
+
+    for subscribed_trace_id in subscribed_trace_ids:
+        orch.set_event_callback(subscribed_trace_id, emit_to_queue)
+
+    harness = BioWorkflowHarness(
+        session_manager=state.session_manager,
+        logger=chat_log,
+        event_emitter=emit_to_queue,
+        vector_store=state.vector_store,
+        knowledge_base=state.knowledge_base,
+    )
+
+    task = asyncio.create_task(
+        harness.run(
+            orchestrator=orch,
+            session_id=session_id,
+            trace_id=trace_id,
+            goal=request.goal,
+            dataset=dataset,
+            stage_specs=stage_specs,
+            continue_on_error=request.continue_on_error,
+            scope_id=scope_id,
+            provider_id=provider_id,
+        )
+    )
+
+    HEARTBEAT_INTERVAL = 15
+    last_heartbeat = time.time()
+
+    while not task.done() or not event_queue.empty():
+        try:
+            remaining = HEARTBEAT_INTERVAL - (time.time() - last_heartbeat)
+            if remaining <= 0:
+                yield {
+                    "event": "heartbeat",
+                    "data": "keepalive",
+                    "id": str(uuid.uuid4())[:8],
+                }
+                last_heartbeat = time.time()
+            remaining = HEARTBEAT_INTERVAL
+
+            payload = await asyncio.wait_for(event_queue.get(), timeout=remaining)
+            if hasattr(payload, "to_dict"):
+                payload_dict = payload.to_dict()
+                event_type = payload_dict.get("type", "agent_event")
+                yield {
+                    "event": event_type,
+                    "data": json.dumps(payload_dict),
+                    "id": payload_dict.get("event_id") or str(uuid.uuid4())[:8],
+                }
+            else:
+                event_type = payload.pop("event", "bio_stage")
+                yield {
+                    "event": event_type,
+                    "data": json.dumps(payload),
+                    "id": str(uuid.uuid4())[:8],
+                }
+        except asyncio.TimeoutError:
+            yield {
+                "event": "heartbeat",
+                "data": "keepalive",
+                "id": str(uuid.uuid4())[:8],
+            }
+            last_heartbeat = time.time()
+            continue
+        except Exception as e:
+            yield {"event": "error", "data": str(e), "id": str(uuid.uuid4())[:8]}
+            break
+
+    try:
+        result = await task
+        if result["success"]:
+            _set_cached_bio_workflow_result(
+                cache_key,
+                {
+                    "success": result["success"],
+                    "status": result["status"],
+                    "workflow": "bioinformatics-mvp",
+                    "intent": prepared["intent"].model_dump()
+                    if hasattr(prepared["intent"], "model_dump")
+                    else prepared["intent"].dict(),
+                    "plan": prepared["plan"].model_dump()
+                    if hasattr(prepared["plan"], "model_dump")
+                    else prepared["plan"].dict(),
+                    "scope_id": scope_id,
+                    "provider_id": provider_id or state.provider_registry.active_id,
+                    "provider_fallback": provider_id
+                    != prepared["requested_provider_id"],
+                    "response": result["response"],
+                    "stage_results": result["stage_results"],
+                    "failed_stages": result["failed_stages"],
+                    "total_stages": result["total_stages"],
+                    "execution_policy": result["execution_policy"],
+                    "cached": False,
+                },
+            )
+        yield {
+            "event": "bio_workflow_final",
+            "data": json.dumps(
+                {
+                    "success": result["success"],
+                    "status": result["status"],
+                    "workflow": prepared["plan"].workflow_family,
+                    "trace_id": trace_id,
+                    "session_id": session_id,
+                    "scope_id": scope_id,
+                    "provider_id": provider_id or state.provider_registry.active_id,
+                    "response": result["response"],
+                    "stage_results": result["stage_results"],
+                    "failed_stages": result["failed_stages"],
+                    "total_stages": result["total_stages"],
+                    "execution_policy": result["execution_policy"],
+                    "provider_fallback": provider_id
+                    != prepared["requested_provider_id"],
+                    "intent": prepared["intent"].model_dump()
+                    if hasattr(prepared["intent"], "model_dump")
+                    else prepared["intent"].dict(),
+                    "plan": prepared["plan"].model_dump()
+                    if hasattr(prepared["plan"], "model_dump")
+                    else prepared["plan"].dict(),
+                    "cached": False,
+                }
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+    finally:
+        for agent in previous_emitters:
+            if hasattr(agent, "clear_trace_emitter"):
+                for subscribed_trace_id in subscribed_trace_ids:
+                    agent.clear_trace_emitter(subscribed_trace_id, emit_to_queue)
+        for subscribed_trace_id in subscribed_trace_ids:
+            orch.clear_event_queue(subscribed_trace_id)
+
+
 @app.post("/chat/stream")
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest, last_event_id: str = None):
@@ -679,15 +1645,10 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                 await event_queue.put((event_id, event))
 
             for agent in state._all_agents:
-                if hasattr(agent, "set_event_emitter"):
-                    agent.set_event_emitter(emit_to_queue)
-                if hasattr(agent, "_current_trace_id"):
-                    agent._current_trace_id = trace_id
-                if hasattr(agent, "_current_session_id"):
-                    agent._current_session_id = session_id
+                if hasattr(agent, "register_trace_emitter"):
+                    agent.register_trace_emitter(trace_id, emit_to_queue)
 
-            orch._current_trace_id = trace_id
-            orch.set_event_emitter(emit_to_queue)
+            orch.set_event_callback(trace_id, emit_to_queue)
 
             logger.info(f"🌐 [/chat/stream:{trace_id}] 🚀 启动 orchestrator.run()")
 
@@ -790,6 +1751,11 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
                 f"chat_stream_error trace_id={trace_id} error={type(e).__name__}: {e} provider={state.provider_registry.active_id}"
             )
             yield {"event": "error", "data": str(e)}
+        finally:
+            for agent in state._all_agents:
+                if hasattr(agent, "clear_trace_emitter"):
+                    agent.clear_trace_emitter(trace_id, emit_to_queue)
+            orch.clear_event_queue(trace_id)
 
     return EventSourceResponse(
         event_generator(),
@@ -963,6 +1929,22 @@ async def get_current_provider():
             "id": pr.active_id,
             "name": pr.active_name,
             "model": pr.active_model,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/providers/health")
+@app.get("/api/providers/health")
+async def get_provider_health(provider_id: Optional[str] = None):
+    """获取 Provider 健康状态"""
+    try:
+        healthy = await state.provider_registry.health_check(provider_id)
+        pid = provider_id or state.provider_registry.active_id
+        return {
+            "provider_id": pid,
+            "healthy": healthy,
+            "active": pid == state.provider_registry.active_id,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1231,6 +2213,14 @@ async def debug_agents():
                     "description": getattr(a, "description", ""),
                     "skills": getattr(a, "skills", []),
                     "running": getattr(a, "_running", False),
+                    "role": getattr(a, "config", {}).get("role", ""),
+                    "name": getattr(a, "config", {}).get("name", ""),
+                    "system_prompt": getattr(a, "config", {})
+                    .get("llm", {})
+                    .get("system_prompt", ""),
+                    "has_soul_body": bool(
+                        getattr(a, "config", {}).get("_soul_body", "")
+                    ),
                 }
                 for a in state.all_agents
             ],

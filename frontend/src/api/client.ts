@@ -2,6 +2,23 @@ import axios from 'axios'
 
 const API_BASE = '/api'
 
+export function getDirectApiBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'http://localhost:8000/api'
+  }
+
+  const { protocol, hostname, port, origin } = window.location
+  if (port === '8000') {
+    return `${origin}/api`
+  }
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8000/api`
+  }
+
+  return `${origin}/api`
+}
+
 const client = axios.create({
   baseURL: API_BASE,
   headers: {

@@ -119,6 +119,7 @@ class ProviderRegistry:
                 logger.info(f"🔧 正在加载 Provider [{pid}]")
                 provider = self._build_provider(profile)
                 self._providers[pid] = provider
+                self._profiles[pid] = dict(profile)
                 logger.info(f"✅ Provider [{pid}] 已加载")
             except Exception as e:
                 logger.error(f"Provider [{pid}] 加载失败: {e}")
@@ -242,6 +243,33 @@ class ProviderRegistry:
                 logger.warning(f"Provider [{pid}] health check failed: {e}")
                 results[pid] = False
         return results
+
+    async def health_check(self, profile_id: str = None) -> bool:
+        """检查单个 Provider 健康状态"""
+        pid = profile_id or self._active
+        provider = self.get(pid)
+        try:
+            return await asyncio.wait_for(provider.health_check(), timeout=5.0)
+        except Exception as e:
+            logger.warning(f"Provider [{pid}] health check failed: {e}")
+            return False
+
+    async def health_snapshot(self) -> Dict[str, bool]:
+        """返回所有 Provider 的健康快照"""
+        return await self.health_check_all()
+
+    async def get_best_available(self, preferred_id: str = None) -> str:
+        """返回首个健康 Provider，优先 preferred/active"""
+        candidates = []
+        for pid in [preferred_id, self._active, *self._providers.keys()]:
+            if pid and pid not in candidates:
+                candidates.append(pid)
+
+        for pid in candidates:
+            if pid in self._providers and await self.health_check(pid):
+                return pid
+
+        raise ValueError("No healthy provider available")
 
     @property
     def active_id(self) -> str:

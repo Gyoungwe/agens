@@ -1,6 +1,7 @@
 # providers/openai_provider.py
 
 import os
+import time
 from typing import AsyncIterator, List
 from openai import AsyncOpenAI
 from providers.base_provider import (
@@ -9,6 +10,7 @@ from providers.base_provider import (
     ProviderResponse,
     UsageInfo,
 )
+from utils.retry import retry_with_backoff
 
 
 class OpenAIProvider(BaseProvider):
@@ -25,7 +27,7 @@ class OpenAIProvider(BaseProvider):
         api_key: str = None,
         model: str = "gpt-4o",
         base_url: str = None,
-        max_retries: int = 1,
+        max_retries: int = 3,
         timeout: float = 120.0,
     ):
         self.model = model
@@ -48,10 +50,20 @@ class OpenAIProvider(BaseProvider):
             msgs.append({"role": "system", "content": system})
         msgs += [{"role": m.role, "content": m.content} for m in messages]
 
-        resp = await self.client.chat.completions.create(
-            model=self.model,
-            messages=msgs,
-            max_tokens=max_tokens,
+        start = time.time()
+
+        async def do_request():
+            return await self.client.chat.completions.create(
+                model=self.model,
+                messages=msgs,
+                max_tokens=max_tokens,
+            )
+
+        resp = await retry_with_backoff(
+            do_request,
+            max_retries=3,
+            base_delay=0.5,
+            max_delay=5.0,
         )
         usage = resp.usage
         return ProviderResponse(
@@ -63,6 +75,7 @@ class OpenAIProvider(BaseProvider):
                 output_tokens=usage.completion_tokens if usage else 0,
                 total_tokens=usage.total_tokens if usage else 0,
             ),
+            latency_ms=int((time.time() - start) * 1000),
             provider=self.provider_id,
         )
 
@@ -79,11 +92,19 @@ class OpenAIProvider(BaseProvider):
             msgs.append({"role": "system", "content": system})
         msgs += [{"role": m.role, "content": m.content} for m in messages]
 
-        stream = await self.client.chat.completions.create(
-            model=self.model,
-            messages=msgs,
-            max_tokens=max_tokens,
-            stream=True,
+        async def do_stream_request():
+            return await self.client.chat.completions.create(
+                model=self.model,
+                messages=msgs,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+
+        stream = await retry_with_backoff(
+            do_stream_request,
+            max_retries=3,
+            base_delay=0.5,
+            max_delay=5.0,
         )
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:

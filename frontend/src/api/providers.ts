@@ -7,6 +7,12 @@ export interface Provider {
   active: boolean
 }
 
+export interface ProviderHealth {
+  provider_id: string
+  healthy: boolean
+  active: boolean
+}
+
 export interface AddProviderRequest {
   id: string
   name: string
@@ -28,6 +34,11 @@ export const providersApi = {
 
   getCurrentProvider: () =>
     client.get<{ id: string; name: string; model: string }>('/providers/current'),
+
+  getHealth: (providerId?: string) =>
+    client.get<ProviderHealth>('/providers/health', {
+      params: providerId ? { provider_id: providerId } : undefined,
+    }),
 
   switchProvider: (providerId: string) =>
     client.post<{ success: boolean; provider: string }>(`/providers/${providerId}/use`),

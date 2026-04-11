@@ -5,7 +5,7 @@ import logging
 import sqlite3
 import json
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException
@@ -166,6 +166,20 @@ class EvolutionStore:
 
 
 _store: Optional[EvolutionStore] = None
+_kb_inject: Optional[Any] = None  # injected knowledge_base from main app
+
+
+def set_knowledge_base(kb) -> None:
+    global _kb_inject
+    _kb_inject = kb
+
+
+def _get_kb():
+    if _kb_inject is not None:
+        return _kb_inject
+    from knowledge.knowledge_base import KnowledgeBase
+
+    return KnowledgeBase(db_path="./data/knowledge")
 
 
 def get_store() -> EvolutionStore:
@@ -265,6 +279,40 @@ async def approve_evolution(request_id: str, comment: Optional[str] = None):
 
         store.update_status(request_id, "approved", "admin", comment)
         updated = store.get(request_id)
+
+        # After approval: apply changes to knowledge base
+        try:
+            kb = _get_kb()
+            changes = approval.changes
+            kind = changes.get("kind", "")
+            if kind == "workflow_retrospective" and kb is not None:
+                text = (
+                    f"Workflow retrospective for goal={changes.get('goal', '')}; "
+                    f"dataset={changes.get('dataset', '')}; "
+                    f"provider={changes.get('provider_id', 'default')}; "
+                    f"trace_id={changes.get('workflow_trace_id', '')}.\n\n"
+                    f"{changes.get('summary', '')}"
+                )
+                await kb.add(
+                    text=text,
+                    agent_ids=["bio_evolution_agent", "bio_planner_agent"],
+                    topic="planning",
+                    source="bio_workflow_evolution_approved",
+                    owner="bio_evolution_agent",
+                    metadata={
+                        "workflow_trace_id": changes.get("workflow_trace_id", ""),
+                        "session_id": changes.get("session_id", ""),
+                        "dataset": changes.get("dataset", ""),
+                        "goal": changes.get("goal", ""),
+                        "kind": "workflow_retrospective_approved",
+                    },
+                    scope_id=changes.get("scope_id"),
+                )
+                logger.info(f"evolution_approved_and_stored request_id={request_id}")
+        except Exception as kb_e:
+            logger.warning(
+                f"approve_kb_store_failed request_id={request_id} error={kb_e}"
+            )
 
         return {
             "success": True,

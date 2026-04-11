@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 
 from core.base_agent import BaseAgent
 
@@ -21,7 +22,7 @@ class ResearchAgent(BaseAgent):
         super().__init__(
             agent_id="research_agent",
             bus=bus,
-            skills=["web_search", "summarize"],
+            skills=["web_search", "summarize", "langchain_search"],
             description="负责信息搜集、分析、调研",
             registry=registry,
             knowledge=knowledge,
@@ -30,19 +31,61 @@ class ResearchAgent(BaseAgent):
             auto_installer=auto_installer,
         )
 
+    def _needs_search(self, query: str) -> bool:
+        search_patterns = [
+            r"天气",
+            r"搜索",
+            r"查询",
+            r"最新",
+            r"新闻",
+            r"今天",
+            r"search",
+            r"weather",
+            r"news",
+            r"latest",
+            r"find",
+            r"什么是",
+            r"how to",
+            r"what is",
+            r"why",
+            r"who",
+            r"哪个",
+            r"怎么样",
+            r"如何",
+            r"哪款",
+            r"哪个好",
+            r"多少",
+            r"哪里",
+            r"\?",
+        ]
+        return any(re.search(p, query.lower()) for p in search_patterns)
+
     async def execute(self, instruction: str, context: dict) -> str:
         merged_context = dict(context or {})
 
-        if os.getenv("ENABLE_LANGCHAIN_TOOL_BRIDGE", "false").lower() == "true":
+        if self._needs_search(instruction) and self.registry:
             try:
+                skill_to_use = (
+                    "langchain_search"
+                    if os.getenv("ENABLE_LANGCHAIN_TOOL_BRIDGE", "false").lower()
+                    == "true"
+                    else "web_search"
+                )
+
                 skill_output = await self.use_skill(
-                    "langchain_search",
+                    skill_to_use,
                     instruction=instruction,
                     context={"query": instruction, "max_results": 5},
                 )
-                if getattr(skill_output, "success", False):
-                    merged_context["langchain_search"] = skill_output.result
+                if skill_output:
+                    merged_context["search_result"] = skill_output
+                    logger.info(
+                        f"[research_agent] Search skill [{skill_to_use}] returned result"
+                    )
             except Exception as e:
-                logger.warning(f"[research_agent] langchain_search degraded: {e}")
+                logger.warning(
+                    f"[research_agent] {skill_to_use} failed: {e}, falling back to LLM only"
+                )
 
-        return await self._execute_with_llm(instruction, merged_context)
+        result = await self._execute_with_llm(instruction, merged_context)
+        return result

@@ -1,6 +1,8 @@
 # core/base_agent.py
 
 import asyncio
+import collections
+import json
 import logging
 import yaml
 from abc import ABC, abstractmethod
@@ -15,6 +17,25 @@ from bus.message_bus import MessageBus
 from utils.retry import retry_with_backoff, RetryError
 
 logger = logging.getLogger(__name__)
+
+
+def _stringify_context(context: dict) -> str:
+    if not context:
+        return ""
+
+    normalized = {}
+    for key, value in context.items():
+        if hasattr(value, "to_dict"):
+            normalized[key] = value.to_dict()
+        elif hasattr(value, "model_dump"):
+            normalized[key] = value.model_dump()
+        else:
+            normalized[key] = value
+
+    try:
+        return json.dumps(normalized, ensure_ascii=False, indent=2, default=str)
+    except Exception:
+        return str(normalized)
 
 
 class LLMConfig(BaseModel):
@@ -78,27 +99,30 @@ class BaseAgent(ABC):
         bus: MessageBus,
         skills: List[str] = None,
         description: str = "",
-        config: dict = {},
+        config: Optional[dict] = None,
         registry=None,  # SkillRegistry
         knowledge=None,  # KnowledgeBase
         provider=None,  # BaseProvider
         provider_registry=None,  # ProviderRegistry（优先使用，支持动态切换）
         auto_installer=None,  # AutoInstaller（自我进化）
+        memory_store=None,  # VectorStore（Agent 独立记忆）
     ):
         self.agent_id = agent_id
         self.bus = bus
         self.skills = skills or []
         self.description = description
-        self.config = config
+        self.config = dict(config or {})
         self.registry = registry
         self.knowledge = knowledge
         self.provider = provider
         self.provider_registry = provider_registry
         self.auto_installer = auto_installer
+        self.memory_store = memory_store
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._hook_registry = None
         self._event_emitter = None  # 事件发射回调 (emit_fn)
+        self._trace_emitters = collections.defaultdict(list)
         self._current_trace_id = None
         self._current_session_id = None
 
@@ -107,21 +131,48 @@ class BaseAgent(ABC):
         logger.info(f"🎯 [{self.agent_id}] set_event_emitter 设置了事件回调")
         self._event_emitter = emit_fn
 
+    def register_trace_emitter(self, trace_id: str, emit_fn):
+        """为指定 trace 注册事件回调，避免不同流互相覆盖"""
+        if trace_id and emit_fn:
+            self._trace_emitters[trace_id].append(emit_fn)
+
+    def clear_trace_emitter(self, trace_id: str, emit_fn=None):
+        """清理指定 trace 的事件回调"""
+        if trace_id not in self._trace_emitters:
+            return
+        if emit_fn is None:
+            self._trace_emitters.pop(trace_id, None)
+            return
+        self._trace_emitters[trace_id] = [
+            cb for cb in self._trace_emitters[trace_id] if cb != emit_fn
+        ]
+        if not self._trace_emitters[trace_id]:
+            self._trace_emitters.pop(trace_id, None)
+
     def _emit(self, event):
         """发射事件到回调"""
         event_type = getattr(event, "type", None) or (
             event.event_type.value if hasattr(event, "event_type") else "unknown"
         )
+        trace_id = (
+            getattr(event, "task_id", None)
+            or getattr(event, "trace_id", None)
+            or getattr(event, "correlation_id", None)
+            or ""
+        )
+        emitters = []
         if self._event_emitter and callable(self._event_emitter):
+            emitters.append(self._event_emitter)
+        emitters.extend(self._trace_emitters.get(trace_id, []))
+
+        if emitters:
             logger.info(f"📤 [{self.agent_id}] _emit type={event_type}")
             try:
-                import asyncio
-
-                cb = self._event_emitter
-                if asyncio.iscoroutinefunction(cb):
-                    asyncio.create_task(cb(event))
-                else:
-                    cb(event)
+                for cb in emitters:
+                    if asyncio.iscoroutinefunction(cb):
+                        asyncio.create_task(cb(event))
+                    else:
+                        cb(event)
             except Exception:
                 pass
         else:
@@ -129,9 +180,14 @@ class BaseAgent(ABC):
                 f"📤 [{self.agent_id}] _emit type={event_type} 但无回调（丢弃）"
             )
 
-    def get_provider(self):
+    def get_provider(self, context: Optional[dict] = None):
         """获取当前活跃的 Provider，优先从 provider_registry 取"""
         if self.provider_registry:
+            provider_id = None
+            if context:
+                provider_id = context.get("provider_id")
+            if provider_id:
+                return self.provider_registry.get(provider_id)
             return self.provider_registry.get()
         return self.provider
 
@@ -165,6 +221,7 @@ class BaseAgent(ABC):
             provider=provider,
             provider_registry=provider_registry,
             auto_installer=auto_installer,
+            memory_store=None,
         )
         if hook_registry:
             instance.set_hook_registry(hook_registry)
@@ -225,7 +282,10 @@ class BaseAgent(ABC):
         task = TaskPayload(**message.payload)
         logger.info(f"🎯 [{self.agent_id}] 收到任务: {task.instruction[:60]}...")
 
+        previous_trace_id = self._current_trace_id
+        previous_session_id = self._current_session_id
         self._current_trace_id = message.trace_id
+        self._current_session_id = message.session_id or task.context.get("session_id")
 
         self._emit(
             EventEnvelope.agent_start(
@@ -282,6 +342,7 @@ class BaseAgent(ABC):
                         recipient=message.sender,
                         type="error",
                         trace_id=message.trace_id,
+                        session_id=self._current_session_id,
                         payload=ErrorPayload(
                             error_type="HookDenied",
                             message=f"Hook 阻止执行: {pre_result.error_message}",
@@ -289,6 +350,8 @@ class BaseAgent(ABC):
                         ).model_dump(),
                     )
                 )
+                self._current_trace_id = previous_trace_id
+                self._current_session_id = previous_session_id
                 return
 
         import time
@@ -334,6 +397,7 @@ class BaseAgent(ABC):
                     recipient=message.sender,
                     type="result",
                     trace_id=message.trace_id,
+                    session_id=self._current_session_id,
                     payload=ResultPayload(
                         success=True,
                         output=result,
@@ -369,6 +433,7 @@ class BaseAgent(ABC):
                     recipient=message.sender,
                     type="error",
                     trace_id=message.trace_id,
+                    session_id=self._current_session_id,
                     payload=ErrorPayload(
                         error_type="RetryExhausted",
                         message=f"执行失败，重试 {e.attempts} 次后仍失败: {e.last_error}",
@@ -394,6 +459,7 @@ class BaseAgent(ABC):
                     recipient=message.sender,
                     type="error",
                     trace_id=message.trace_id,
+                    session_id=self._current_session_id,
                     payload=ErrorPayload(
                         error_type=type(e).__name__,
                         message=str(e),
@@ -401,6 +467,9 @@ class BaseAgent(ABC):
                     ).model_dump(),
                 )
             )
+
+        self._current_trace_id = previous_trace_id
+        self._current_session_id = previous_session_id
 
     async def _handle_status(self, message: Message):
         """处理状态消息（默认忽略，子类可覆盖）"""
@@ -414,6 +483,7 @@ class BaseAgent(ABC):
                 recipient="orchestrator",
                 type="status",
                 trace_id=trace_id,
+                session_id=self._current_session_id,
                 payload={"status": status, "agent_id": self.agent_id},
             )
         )
@@ -432,6 +502,7 @@ class BaseAgent(ABC):
             sender=self.agent_id,
             recipient=recipient,
             type="task",
+            session_id=self._current_session_id,
             payload=TaskPayload(
                 instruction=instruction,
                 context=context,
@@ -450,6 +521,8 @@ class BaseAgent(ABC):
 
     async def use_skill(self, skill_id: str, instruction: str, context: dict = {}):
         """Agent 调用技能的统一入口（带 Pre/Post Hooks）"""
+        previous_trace_id = self._current_trace_id
+        previous_session_id = self._current_session_id
         if self.registry is None:
             raise RuntimeError("SkillRegistry 未注入")
 
@@ -550,6 +623,9 @@ class BaseAgent(ABC):
                 )
                 await hook_registry.run_error_hooks(error_event, e)
             raise
+        finally:
+            self._current_trace_id = previous_trace_id
+            self._current_session_id = previous_session_id
 
     # ── 知识库检索 ───────────────────────────────
 
@@ -558,6 +634,7 @@ class BaseAgent(ABC):
         query: str,
         topic: str = None,
         top_k: int = 3,
+        scope_id: str = None,
     ) -> str:
         """执行前自动检索相关知识，KB 不可用时静默跳过"""
         if self.knowledge is None:
@@ -571,11 +648,40 @@ class BaseAgent(ABC):
                 agent_id=self.agent_id,
                 topic=topic,
                 top_k=top_k,
+                scope_id=scope_id,
             )
         except RuntimeError as e:
             if "未初始化" in str(e) or "连接失败" in str(e):
                 return ""
             raise
+
+    async def retrieve_memory_context(
+        self,
+        query: str,
+        top_k: int = 3,
+        scope_id: str = None,
+    ) -> str:
+        """检索 Agent 独立记忆，KB 不可用时静默跳过"""
+        if self.memory_store is None:
+            return ""
+        try:
+            memories = await self.memory_store.search(
+                query=query,
+                owner=self.agent_id,
+                top_k=top_k,
+                scope_id=scope_id,
+            )
+        except Exception as e:
+            logger.warning(f"[{self.agent_id}] memory retrieval failed: {e}")
+            return ""
+
+        if not memories:
+            return ""
+
+        lines = ["【相关Agent记忆】"]
+        for i, item in enumerate(memories, 1):
+            lines.append(f"{i}. {item.get('text', '')}")
+        return "\n".join(lines)
 
     # ── LLM 调用 ─────────────────────────────────
 
@@ -596,13 +702,37 @@ class BaseAgent(ABC):
             )
         )
 
-        knowledge_ctx = await self.retrieve_context(instruction, top_k=3)
+        scope_id = context.get("scope_id") if context else None
+        knowledge_topic = context.get("knowledge_topic") if context else None
+        knowledge_ctx = await self.retrieve_context(
+            instruction,
+            topic=knowledge_topic,
+            top_k=3,
+            scope_id=scope_id,
+        )
+        memory_ctx = await self.retrieve_memory_context(
+            instruction,
+            top_k=3,
+            scope_id=scope_id,
+        )
 
         prompt_system = system or self.get_system_prompt()
         if knowledge_ctx:
             prompt_system += "\n\n" + knowledge_ctx
+        if memory_ctx:
+            prompt_system += "\n\n" + memory_ctx
 
-        prov = self.get_provider()
+        context_str = _stringify_context(context)
+        if context_str:
+            prompt_system += (
+                "\n\n## Runtime Context\n"
+                "Use the following runtime context as the freshest available information. "
+                "If search/tool results are present, prefer them over model prior knowledge. "
+                "Do not output pseudo tool calls, XML tags, or instructions to yourself; answer directly for the user.\n"
+                f"{context_str}"
+            )
+
+        prov = self.get_provider(context)
         if not prov:
             raise RuntimeError("没有可用 LLM Provider")
 
@@ -647,13 +777,37 @@ class BaseAgent(ABC):
         system: str = None,
     ) -> AsyncIterator[str]:
         """流式 LLM 调用，返回异步生成器"""
-        knowledge_ctx = await self.retrieve_context(instruction, top_k=3)
+        scope_id = context.get("scope_id") if context else None
+        knowledge_topic = context.get("knowledge_topic") if context else None
+        knowledge_ctx = await self.retrieve_context(
+            instruction,
+            topic=knowledge_topic,
+            top_k=3,
+            scope_id=scope_id,
+        )
+        memory_ctx = await self.retrieve_memory_context(
+            instruction,
+            top_k=3,
+            scope_id=scope_id,
+        )
 
         prompt_system = system or self.get_system_prompt()
         if knowledge_ctx:
             prompt_system += "\n\n" + knowledge_ctx
+        if memory_ctx:
+            prompt_system += "\n\n" + memory_ctx
 
-        prov = self.get_provider()
+        context_str = _stringify_context(context)
+        if context_str:
+            prompt_system += (
+                "\n\n## Runtime Context\n"
+                "Use the following runtime context as the freshest available information. "
+                "If search/tool results are present, prefer them over model prior knowledge. "
+                "Do not output pseudo tool calls, XML tags, or instructions to yourself; answer directly for the user.\n"
+                f"{context_str}"
+            )
+
+        prov = self.get_provider(context)
         if not prov:
             raise RuntimeError("没有可用 LLM Provider")
 
@@ -687,7 +841,23 @@ class BaseAgent(ABC):
     # ── 配置辅助 ─────────────────────────────────
 
     def get_system_prompt(self) -> str:
-        """从配置里取 system_prompt，没有就用默认"""
-        return self.config.get("llm", {}).get(
-            "system_prompt", f"你是 {self.agent_id}，请完成分配的任务。"
+        """从 soul.md 配置构建完整的 system prompt"""
+        base_prompt = self.config.get("llm", {}).get(
+            "system_prompt", f"你是 {self.agent_id}。"
         )
+
+        parts = [base_prompt]
+
+        if self.skills:
+            skills_list = ", ".join(self.skills)
+            parts.append(f"\n\n## 可用技能\n你有以下技能可用：{skills_list}")
+
+        soul_body = self.config.get("_soul_body", "")
+        if soul_body:
+            parts.append(f"\n\n## 角色说明\n{soul_body}")
+
+        agent_desc = self.description
+        if agent_desc:
+            parts.append(f"\n\n## 职责\n{agent_desc}")
+
+        return "\n".join(parts)

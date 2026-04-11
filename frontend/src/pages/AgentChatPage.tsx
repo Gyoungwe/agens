@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import ReactMarkdown from 'react-markdown'
 import { Header } from '@/components/layout'
 import { agentsApi } from '@/api'
 import { Bot, Send, User } from 'lucide-react'
@@ -87,7 +88,9 @@ export function AgentChatPage() {
                   </div>
                 )}
                 <div className={`max-w-[80%] px-4 py-2 rounded-xl text-sm ${m.role === 'user' ? 'bg-primary text-white' : 'bg-card border border-border'}`}>
-                  {m.content}
+                  {m.role === 'user' ? m.content : (
+                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  )}
                 </div>
                 {m.role === 'user' && (
                   <div className="w-8 h-8 rounded-lg bg-primary/80 text-white flex items-center justify-center">

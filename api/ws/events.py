@@ -176,6 +176,109 @@ async def publish_session_updated(session_id: str, event: str):
     )
 
 
+# ─── Bio Workflow Stage Events ───────────────────────────────────────────────
+
+
+async def publish_bio_stage_pending(
+    stage: str,
+    agent_id: str,
+    trace_id: str,
+    session_id: str,
+):
+    """Publish a bio workflow stage is about to start"""
+    await event_bus.publish(
+        "bio_stage_pending",
+        {
+            "stage": stage,
+            "agent_id": agent_id,
+            "trace_id": trace_id,
+            "session_id": session_id,
+        },
+    )
+
+
+async def publish_bio_stage_running(
+    stage: str,
+    agent_id: str,
+    trace_id: str,
+    session_id: str,
+):
+    """Publish a bio workflow stage is running"""
+    await event_bus.publish(
+        "bio_stage_running",
+        {
+            "stage": stage,
+            "agent_id": agent_id,
+            "trace_id": trace_id,
+            "session_id": session_id,
+        },
+    )
+
+
+async def publish_bio_stage_done(
+    stage: str,
+    agent_id: str,
+    trace_id: str,
+    session_id: str,
+    status: str,
+    elapsed_ms: int,
+    output: str,
+    error: str = None,
+):
+    """Publish a bio workflow stage has completed"""
+    await event_bus.publish(
+        "bio_stage_done",
+        {
+            "stage": stage,
+            "agent_id": agent_id,
+            "trace_id": trace_id,
+            "session_id": session_id,
+            "status": status,
+            "elapsed_ms": elapsed_ms,
+            "output": output,
+            "error": error,
+        },
+    )
+
+
+async def publish_bio_workflow_start(
+    session_id: str,
+    trace_id: str,
+    goal: str,
+):
+    """Publish bio workflow has started"""
+    await event_bus.publish(
+        "bio_workflow_start",
+        {
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "goal": goal,
+        },
+    )
+
+
+async def publish_bio_workflow_done(
+    session_id: str,
+    trace_id: str,
+    success: bool,
+    status: str,
+    total_stages: int,
+    failed_stages: int,
+):
+    """Publish bio workflow has finished"""
+    await event_bus.publish(
+        "bio_workflow_done",
+        {
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "success": success,
+            "status": status,
+            "total_stages": total_stages,
+            "failed_stages": failed_stages,
+        },
+    )
+
+
 async def websocket_endpoint(websocket: WebSocket):
     """
     WebSocket endpoint for real-time event streaming.

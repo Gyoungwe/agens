@@ -4,6 +4,34 @@ export interface SSEEvent {
   raw: string
 }
 
+function normalizeLines(chunk: string): string[] {
+  return chunk
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function parseChunk(chunk: string): SSEEvent | null {
+  const lines = normalizeLines(chunk)
+  const eventLine = lines.find((line) => line.startsWith('event: '))
+  const sseEvent = eventLine ? eventLine.slice(7).trim() : ''
+  const dataLines = lines.filter((line) => line.startsWith('data: '))
+  if (dataLines.length === 0) return null
+
+  const raw = dataLines.map((line) => line.slice(6)).join('\n')
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const eventType = String(parsed.event || parsed.type || sseEvent || 'message')
+    return { eventType, data: parsed, raw }
+  } catch {
+    if (sseEvent === 'heartbeat' || raw === 'keepalive') {
+      return { eventType: 'heartbeat', data: {}, raw }
+    }
+    return null
+  }
+}
+
 export function parseSSELines(
   buffer: string,
   lines: string[],
@@ -12,24 +40,12 @@ export function parseSSELines(
 
   for (const chunk of lines) {
     if (!chunk.trim()) continue
-
-    const lineStr = chunk.trim()
-    const lines_inner = lineStr.split('\r\n').map((l) => l.trim())
-    const eventLine = lines_inner.find((l) => l.startsWith('event: '))
-    const sseEvent = eventLine ? eventLine.slice(7).trim() : ''
-    const dataLine = lines_inner.find((l) => l.startsWith('data: '))
-    if (!dataLine) continue
-
-    const raw = dataLine.slice(6)
-    try {
-      const parsed = JSON.parse(raw)
-      const eventType = parsed.event || parsed.type || sseEvent
+    const event = parseChunk(chunk)
+    if (event) {
       return {
-        event: { eventType, data: parsed, raw },
+        event,
         remainingBuffer,
       }
-    } catch {
-      // non-JSON SSE payload (e.g., heartbeat)
     }
   }
 
@@ -47,24 +63,21 @@ export async function* parseSSEStream(
     if (done) break
 
     buffer += decoder.decode(value, { stream: true })
-    const chunks = buffer.split('\r\n\r\n')
+    const chunks = buffer.split(/\r?\n\r?\n/)
     buffer = chunks.pop() || ''
 
     for (const chunk of chunks) {
-      const lines_inner = chunk.split('\r\n').map((l) => l.trim())
-      const eventLine = lines_inner.find((l) => l.startsWith('event: '))
-      const sseEvent = eventLine ? eventLine.slice(7).trim() : ''
-      const dataLine = lines_inner.find((l) => l.startsWith('data: '))
-      if (!dataLine) continue
-
-      const raw = dataLine.slice(6)
-      try {
-        const parsed = JSON.parse(raw)
-        const eventType = parsed.event || parsed.type || sseEvent
-        yield { eventType, data: parsed, raw }
-      } catch {
-        // non-JSON SSE payload
+      const event = parseChunk(chunk)
+      if (event) {
+        yield event
       }
+    }
+  }
+
+  if (buffer.trim()) {
+    const event = parseChunk(buffer)
+    if (event) {
+      yield event
     }
   }
 }

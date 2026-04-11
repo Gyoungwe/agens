@@ -13,10 +13,12 @@
 import logging
 import os
 import random
+import json
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from datetime import datetime
 import pyarrow as pa
+from utils.retry import retry_with_backoff, RetryError
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,7 @@ class KnowledgeBase:
         self._lance_table = None
         self._in_memory = []
         self._ready = False
+        self._last_embedding_status = "unknown"
         self._init_lance()
 
     def _init_lance(self):
@@ -118,6 +121,7 @@ class KnowledgeBase:
         owner: str = None,
         version: str = None,
         metadata: dict = None,
+        scope_id: str = None,
     ) -> str:
         """
         写入一条知识，返回 point_id
@@ -146,6 +150,8 @@ class KnowledgeBase:
         _version = version or self.DEFAULT_VERSION
 
         full_metadata = {"agent_ids": agent_ids, "topic": topic, **(metadata or {})}
+        if scope_id:
+            full_metadata["scope_id"] = scope_id
 
         if self._lance_table is not None:
             arrays = [
@@ -206,6 +212,7 @@ class KnowledgeBase:
                 owner=item.get("owner"),
                 version=item.get("version"),
                 metadata=item.get("metadata", {}),
+                scope_id=item.get("scope_id"),
             )
             ids.append(point_id)
         logger.info(f"📦 Batch wrote {len(ids)} knowledge entries")
@@ -218,6 +225,7 @@ class KnowledgeBase:
         topic: str = None,
         top_k: int = 5,
         min_score: float = 0.6,
+        scope_id: str = None,
     ) -> list:
         """
         语义检索
@@ -237,12 +245,22 @@ class KnowledgeBase:
             return []
 
         if self._lance_table is not None:
-            return await self._search_lance(vector, agent_id, topic, top_k, min_score)
+            return await self._search_lance(
+                vector, agent_id, topic, top_k, min_score, scope_id
+            )
         else:
-            return self._search_in_memory(vector, agent_id, topic, top_k, min_score)
+            return self._search_in_memory(
+                vector, agent_id, topic, top_k, min_score, scope_id
+            )
 
     async def _search_lance(
-        self, vector, agent_id: str, topic: str, top_k: int, min_score: float
+        self,
+        vector,
+        agent_id: str,
+        topic: str,
+        top_k: int,
+        min_score: float,
+        scope_id: str = None,
     ) -> list:
         try:
             import json
@@ -286,6 +304,9 @@ class KnowledgeBase:
                 except Exception:
                     meta = {}
 
+                if scope_id and meta.get("scope_id") not in (None, "", scope_id):
+                    continue
+
                 filtered.append(
                     {
                         "id": r.get("id"),
@@ -307,7 +328,13 @@ class KnowledgeBase:
             return []
 
     def _search_in_memory(
-        self, vector, agent_id: str, topic: str, top_k: int, min_score: float
+        self,
+        vector,
+        agent_id: str,
+        topic: str,
+        top_k: int,
+        min_score: float,
+        scope_id: str = None,
     ) -> list:
         import numpy as np
 
@@ -338,6 +365,10 @@ class KnowledgeBase:
                 and "global" not in r_agent_ids
                 and agent_id not in r_agent_ids
             ):
+                continue
+
+            metadata = item.get("metadata") or {}
+            if scope_id and metadata.get("scope_id") not in (None, "", scope_id):
                 continue
 
             score = cosine_sim(vector, item["vector"])
@@ -381,13 +412,42 @@ class KnowledgeBase:
     async def _embed(self, text: str) -> list:
         """生成向量"""
         if self._embed_provider:
-            resp = await self._embed_provider.embeddings.create(
-                model="BAAI/bge-m3",
-                input=text,
-            )
-            return resp.data[0].embedding
+            try:
+                resp = await retry_with_backoff(
+                    self._embed_provider.embeddings.create,
+                    model="BAAI/bge-m3",
+                    input=text,
+                    max_retries=3,
+                    base_delay=0.5,
+                    max_delay=5.0,
+                )
+                self._last_embedding_status = "provider"
+                return resp.data[0].embedding
+            except RetryError as e:
+                logger.warning(f"Knowledge embedding retry exhausted: {e}")
+            except Exception as e:
+                logger.warning(f"Knowledge embedding provider failed: {e}")
 
+        self._last_embedding_status = "fallback_random"
         logger.warning("⚠️ Using random vector (development mode)")
         vec = [random.gauss(0, 1) for _ in range(VECTOR_SIZE)]
         norm = sum(x**2 for x in vec) ** 0.5
         return [x / norm for x in vec]
+
+    async def health_check(self) -> dict:
+        """知识库健康检查"""
+        try:
+            test_vector = await self._embed("knowledge health check")
+            is_random = len([x for x in test_vector if x == 0]) > VECTOR_SIZE // 2
+            return {
+                "status": "healthy" if self._ready and not is_random else "degraded",
+                "storage": "lancedb" if self._lance_table is not None else "in_memory",
+                "embedding_status": self._last_embedding_status,
+                "total_documents": await self.count(),
+            }
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "storage": "lancedb" if self._lance_table is not None else "in_memory",
+                "error": str(e),
+            }

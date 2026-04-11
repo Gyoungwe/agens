@@ -11,17 +11,19 @@ class Retriever:
 
     async def get_context(
         self,
-        query:    str,
+        query: str,
         agent_id: str,
-        topic:    str = None,
-        top_k:    int = 3,
+        topic: str = None,
+        top_k: int = 3,
+        scope_id: str = None,
     ) -> str:
         """检索并格式化为可直接拼入 prompt 的字符串"""
         results = await self.kb.search(
-            query    = query,
-            agent_id = agent_id,
-            topic    = topic,
-            top_k    = top_k,
+            query=query,
+            agent_id=agent_id,
+            topic=topic,
+            top_k=top_k,
+            scope_id=scope_id,
         )
 
         if not results:
