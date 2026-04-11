@@ -10,7 +10,7 @@ import { providersApi } from '@/api/providers'
 
 export function ChatPage() {
   const [splitPosition, setSplitPosition] = useState(60)
-  const [chatMode, setChatMode] = useState<'auto' | 'chat' | 'bio_workflow'>('auto')
+  const [chatMode, setChatMode] = useState<'auto' | 'chat'>('auto')
   const containerRef = useRef<HTMLDivElement>(null)
   const { messages, isStreaming, currentSessionId, setSessions, setCurrentSession, addMessage, updateMessage, setStreaming } = useChatStore()
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
@@ -18,6 +18,8 @@ export function ChatPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [providerInfo, setProviderInfo] = useState<{ id: string; name: string; model: string } | null>(null)
   const [memoryScope, setMemoryScope] = useState<'session' | 'global'>('session')
+  const [pendingWorkflowTraceId, setPendingWorkflowTraceId] = useState<string | null>(null)
+  const [pendingWorkflowFields, setPendingWorkflowFields] = useState<string[]>([])
 
   const classifyTaskType = (text: string): 'chat' | 'bio_workflow' | 'uncertain' => {
     const t = text.trim().toLowerCase()
@@ -153,6 +155,13 @@ export function ChatPage() {
             dataset: 'chat-session',
             session_id: currentSessionId,
             continue_on_error: true,
+            user_input_payload: pendingWorkflowTraceId
+              ? {
+                  user_answer: message,
+                  provided_fields: pendingWorkflowFields,
+                }
+              : undefined,
+            resume_from_trace_id: pendingWorkflowTraceId || undefined,
           }
         : {
             message: selectedImage ? `${message}\n\n[image_attached:${selectedImage.name}]` : message,
@@ -248,6 +257,8 @@ export function ChatPage() {
           } else if (sseEvent.eventType === 'bio_workflow_needs_input') {
             const q = String(eventData.user_question || 'Need more user input')
             const fields = Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]).join(', ') : ''
+            setPendingWorkflowTraceId(String(eventData.trace_id || traceId || ''))
+            setPendingWorkflowFields(Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]) : [])
             finalResponse = `${renderBioProgress()}\n\n流程已暂停：需要你补充信息后才能继续。\n\n问题：${q}${fields ? `\n建议补充字段：${fields}` : ''}`
           } else if (sseEvent.eventType === 'bio_workflow_final') {
             const workflowSummary = String(eventData.response || '')
@@ -258,6 +269,8 @@ export function ChatPage() {
                 ? '流程暂停，等待你的输入'
                 : '流程已结束，但有部分步骤失败'
             finalResponse = `${renderBioProgress()}\n\n最终结论：${statusCn}\n\n${workflowSummary || '系统已完成执行，但没有返回额外摘要。'}`
+            setPendingWorkflowTraceId(null)
+            setPendingWorkflowFields([])
           } else if (sseEvent.eventType === 'error') {
             throw new Error((eventData.message as string) || (eventData.error as string) || 'workflow stream error')
           }
@@ -304,6 +317,8 @@ export function ChatPage() {
       useChatStore.getState().setMessages([])
       setTraceEvents([])
       setSelectedImage(null)
+      setPendingWorkflowTraceId(null)
+      setPendingWorkflowFields([])
 
       const sessionsRes = await fetch('/api/sessions')
       const sessionsData = await sessionsRes.json()
@@ -382,12 +397,6 @@ export function ChatPage() {
           className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'chat' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
         >
           Normal Chat
-        </button>
-        <button
-          onClick={() => setChatMode('bio_workflow')}
-          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'bio_workflow' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
-        >
-          Bio Workflow Mode
         </button>
       </div>
 
