@@ -52,6 +52,7 @@ const EVENT_LABELS: Record<string, string> = {
   task_failed: 'Task Failed',
   task_timeout: 'Timeout',
   error: 'Error',
+  routing_decision: 'Routing Decision',
 }
 
 function formatTime(timestamp: number): string {
@@ -69,7 +70,16 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
   const [expanded, setExpanded] = useState(false)
   const icon = EVENT_ICONS[event.type] || <Sparkles size={14} className="text-gray-500" />
   const colorClass = EVENT_COLORS[event.type] || 'border-l-gray-400 bg-gray-50/30'
-  const label = EVENT_LABELS[event.type] || event.type
+  let innerEvent = String(event.data?.event || '')
+  if (!innerEvent && typeof event.data?.output === 'string') {
+    try {
+      const parsed = JSON.parse(event.data.output)
+      innerEvent = String((parsed as Record<string, unknown>)?.event || '')
+    } catch {
+      innerEvent = ''
+    }
+  }
+  const label = EVENT_LABELS[innerEvent] || EVENT_LABELS[event.type] || event.type
   const duration = prevEvent ? formatDuration(prevEvent.created_at, event.created_at) : null
 
   const renderContent = () => {
@@ -82,6 +92,26 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
       case 'agent_file_read':
         return <span className="text-green-700">{String(data.file_path || '')}</span>
       case 'agent_output':
+        let routingObj: Record<string, unknown> | null = null
+        if (typeof data.output === 'string') {
+          try {
+            const parsed = JSON.parse(data.output)
+            if (parsed && typeof parsed === 'object' && String((parsed as Record<string, unknown>).event || '') === 'routing_decision') {
+              routingObj = parsed as Record<string, unknown>
+            }
+          } catch {
+            routingObj = null
+          }
+        }
+        if (String(data.event || '') === 'routing_decision' || routingObj) {
+          const source = routingObj || data
+          return (
+            <span className="text-cyan-700 block max-w-xs">
+              mode={String(source.mode || '')} · agents={Array.isArray(source.selected_agents) ? (source.selected_agents as unknown[]).join(', ') : 'none'}
+              {source.reason ? ` · ${String(source.reason)}` : ''}
+            </span>
+          )
+        }
         return <span className="text-cyan-700 truncate block max-w-xs">{String(data.summary || data.output || '')}</span>
       case 'agent_done':
         return <span className="text-green-700 truncate block max-w-xs">{String(data.result || '')}</span>

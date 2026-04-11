@@ -40,7 +40,7 @@ def _default_parallel_plan(user_input: str, available_agents: List[str]) -> List
 def _select_candidate_agents(
     user_input: str,
     available_agents: List[str],
-) -> tuple[List[str], Optional[str]]:
+) -> tuple[List[str], Optional[str], str]:
     """根据用户输入选择最小必要 agent 子集，并给出补充建议。"""
     text = (user_input or "").lower()
 
@@ -87,10 +87,18 @@ def _select_candidate_agents(
     has_chat = any(k in text for k in chat_keywords)
 
     if has_chat and not has_bio:
-        return [], None
+        return (
+            [],
+            None,
+            "Detected general conversational intent; no multi-agent collaboration needed.",
+        )
 
     if not has_bio:
-        return [], None
+        return (
+            [],
+            None,
+            "No explicit workflow/bioinformatics intent detected; defaulting to direct chat response.",
+        )
 
     selected: List[str] = []
     recommendation: Optional[str] = None
@@ -120,7 +128,11 @@ def _select_candidate_agents(
             "这样我可以调度更精准的 agent 协作。"
         )
 
-    return selected, recommendation
+    return (
+        selected,
+        recommendation,
+        "Bioinformatics workflow intent detected; selecting minimal relevant agents.",
+    )
 
 
 def _load_agents_config() -> dict:
@@ -590,10 +602,37 @@ class Orchestrator(BaseAgent):
             a for a in self.bus.registered_agents if a != "orchestrator"
         ]
 
-        selected_agents, recommendation = _select_candidate_agents(
+        selected_agents, recommendation, decision_reason = _select_candidate_agents(
             user_input=user_input,
             available_agents=available_agents,
         )
+
+        try:
+            if self._current_trace_id:
+                decision_payload = json.dumps(
+                    {
+                        "event": "routing_decision",
+                        "mode": "direct_chat"
+                        if not selected_agents
+                        else "selective_collaboration",
+                        "selected_agents": selected_agents,
+                        "reason": decision_reason,
+                        "recommendation": recommendation,
+                    },
+                    ensure_ascii=False,
+                )
+                asyncio.create_task(
+                    self._emit_event(
+                        EventEnvelope.agent_output(
+                            agent_id=self.agent_id,
+                            trace_id=self._current_trace_id,
+                            output=decision_payload,
+                            summary="routing_decision",
+                        )
+                    )
+                )
+        except Exception:
+            pass
 
         if not selected_agents:
             logger.info("任务识别为普通对话，跳过多 Agent 协作调度")
