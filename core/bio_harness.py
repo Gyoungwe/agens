@@ -483,19 +483,24 @@ class BioWorkflowHarness:
         continue_on_error: bool,
         scope_id: Optional[str] = None,
         provider_id: Optional[str] = None,
+        resume_stage_results: Optional[List[HarnessStageResult]] = None,
     ) -> Dict[str, Any]:
-        stage_results: List[HarnessStageResult] = []
+        stage_results: List[HarnessStageResult] = list(resume_stage_results or [])
         critical_failures = 0
         qc_gate_failures = 0
         needs_input_failures = 0
         stopped_by_policy = False
         workflow_user_question: Optional[str] = None
         workflow_required_fields: List[str] = []
-        stage_result_map: Dict[str, HarnessStageResult] = {}
+        stage_result_map: Dict[str, HarnessStageResult] = {
+            r.stage: r for r in stage_results
+        }
         stage_index_map = {
             spec.name: idx for idx, spec in enumerate(stage_specs, start=1)
         }
-        pending_specs = {spec.name: spec for spec in stage_specs}
+        pending_specs = {
+            spec.name: spec for spec in stage_specs if spec.name not in stage_result_map
+        }
         running_tasks: Dict[str, asyncio.Task] = {}
 
         await self._emit(

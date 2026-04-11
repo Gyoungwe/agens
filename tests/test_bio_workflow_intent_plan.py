@@ -554,6 +554,109 @@ async def test_workflow_pauses_when_stage_requests_user_input():
     assert skipped_codegen[0]["status"] in ("ok", "error")
 
 
+@pytest.mark.asyncio
+async def test_harness_resume_skips_completed_stages():
+    from core.bio_harness import (
+        BioWorkflowHarness,
+        HarnessStageSpec,
+        HarnessStageResult,
+    )
+
+    class FakeStore:
+        def __init__(self):
+            self.rows = []
+
+        def save_result(self, session_id, trace_id, agent_id, result, status="ok"):
+            self.rows.append(
+                {
+                    "session_id": session_id,
+                    "trace_id": trace_id,
+                    "agent_id": agent_id,
+                    "result": result,
+                    "status": status,
+                }
+            )
+
+        def get_results(self, session_id):
+            return [r for r in self.rows if r["session_id"] == session_id]
+
+    class FakeSessionManager:
+        def __init__(self):
+            self.store = FakeStore()
+
+    class FakeVectorStore:
+        async def add(self, **kwargs):
+            return "mem-1"
+
+    class FakeKnowledgeBase:
+        async def add(self, **kwargs):
+            return "kb-1"
+
+    class FakeLogger:
+        def info(self, msg):
+            pass
+
+        def warning(self, msg):
+            pass
+
+    harness = BioWorkflowHarness(
+        session_manager=FakeSessionManager(),
+        logger=FakeLogger(),
+        vector_store=FakeVectorStore(),
+        knowledge_base=FakeKnowledgeBase(),
+    )
+
+    calls = []
+
+    class StubOrchestrator:
+        async def run_single_agent(
+            self,
+            user_input,
+            agent_id,
+            session_id=None,
+            trace_id=None,
+            runtime_context=None,
+        ):
+            calls.append(agent_id)
+            return '{"status":"ok"}'
+
+    stage_specs = [
+        HarnessStageSpec(name="planning", agent_id="bio_planner_agent", prompt="plan"),
+        HarnessStageSpec(
+            name="codegen",
+            agent_id="bio_code_agent",
+            prompt="codegen",
+            depends_on=["planning"],
+        ),
+    ]
+    resumed = [
+        HarnessStageResult(
+            stage="planning",
+            agent_id="bio_planner_agent",
+            status="ok",
+            elapsed_ms=100,
+            trace_id="old-trace-1",
+            error=None,
+            output='{"status":"ok"}',
+        )
+    ]
+
+    result = await harness.run(
+        orchestrator=StubOrchestrator(),
+        session_id="sess-resume",
+        trace_id="trace-resume",
+        goal="resume",
+        dataset="test",
+        stage_specs=stage_specs,
+        continue_on_error=True,
+        resume_stage_results=resumed,
+    )
+
+    assert "bio_planner_agent" not in calls
+    assert "bio_code_agent" in calls
+    assert result["total_stages"] == 2
+
+
 def test_stage_specs_from_plan_preserves_depends_on_and_qc_gate():
     from api.main import _stage_specs_from_plan
     from core.bio_harness import HarnessStageSpec

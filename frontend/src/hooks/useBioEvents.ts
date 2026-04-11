@@ -28,6 +28,7 @@ export function useBioEvents() {
     continue_on_error = true,
     plan?: any,
     user_input_payload?: Record<string, unknown>,
+    resume_from_trace_id?: string,
   ): Promise<BioWorkflowResponse | null> => {
     if (abortRef.current) {
       abortRef.current.abort()
@@ -70,7 +71,16 @@ export function useBioEvents() {
     const response = await fetch(`${getDirectApiBaseUrl()}/bio/workflow?stream=true`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ goal, dataset, scope_id, provider_id, continue_on_error, plan, user_input_payload }),
+      body: JSON.stringify({
+        goal,
+        dataset,
+        scope_id,
+        provider_id,
+        continue_on_error,
+        plan,
+        user_input_payload,
+        resume_from_trace_id,
+      }),
       signal: abortRef.current.signal,
     })
 

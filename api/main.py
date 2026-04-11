@@ -145,6 +145,7 @@ class BioWorkflowRequest(BaseModel):
     intent: Optional[WorkflowIntentSpec] = None
     plan: Optional[WorkflowPlanSpec] = None
     user_input_payload: Optional[Dict[str, Any]] = None
+    resume_from_trace_id: Optional[str] = None
 
 
 class WorkflowIntentConfirmRequest(BaseModel):
@@ -1177,6 +1178,10 @@ async def run_bio_workflow(request: BioWorkflowRequest, stream: bool = False):
             vector_store=state.vector_store,
             knowledge_base=state.knowledge_base,
         )
+        resume_stage_results = _resume_stage_results_from_trace(
+            session_id=prepared["session_id"],
+            resume_from_trace_id=request.resume_from_trace_id,
+        )
         harness_result = await harness.run(
             orchestrator=prepared["orch"],
             session_id=prepared["session_id"],
@@ -1187,6 +1192,7 @@ async def run_bio_workflow(request: BioWorkflowRequest, stream: bool = False):
             continue_on_error=request.continue_on_error,
             scope_id=prepared["scope_id"],
             provider_id=prepared["target_provider_id"],
+            resume_stage_results=resume_stage_results,
         )
 
         response = {
@@ -1355,6 +1361,55 @@ def _set_cached_bio_workflow_result(cache_key: str, result: dict) -> None:
     }
 
 
+def _resume_stage_results_from_trace(
+    session_id: str,
+    resume_from_trace_id: Optional[str],
+) -> List["HarnessStageResult"]:
+    if not resume_from_trace_id:
+        return []
+    if not state.session_manager or not hasattr(state.session_manager, "store"):
+        return []
+    rows = state.session_manager.store.get_results_by_trace(resume_from_trace_id)
+    resumed: List[HarnessStageResult] = []
+    for row in rows:
+        try:
+            if row.get("session_id") != session_id:
+                continue
+            result_raw = row.get("result")
+            if not result_raw:
+                continue
+            parsed = (
+                result_raw if isinstance(result_raw, dict) else json.loads(result_raw)
+            )
+            if not isinstance(parsed, dict):
+                continue
+            if not parsed.get("stage") or not parsed.get("status"):
+                continue
+            resumed.append(
+                HarnessStageResult(
+                    stage=str(parsed.get("stage")),
+                    agent_id=str(
+                        parsed.get("agent_id", row.get("agent_id", "unknown"))
+                    ),
+                    status=str(parsed.get("status", "error")),
+                    elapsed_ms=int(parsed.get("elapsed_ms", 0) or 0),
+                    trace_id=str(parsed.get("trace_id", resume_from_trace_id)),
+                    error=parsed.get("error"),
+                    output=str(parsed.get("output", "") or ""),
+                    provenance=parsed.get("provenance") or {},
+                    needs_user_input=bool(parsed.get("needs_user_input", False)),
+                    user_question=parsed.get("user_question"),
+                    required_fields=parsed.get("required_fields") or [],
+                )
+            )
+        except Exception:
+            continue
+    dedup: Dict[str, HarnessStageResult] = {}
+    for item in resumed:
+        dedup[item.stage] = item
+    return list(dedup.values())
+
+
 async def _bio_stream_generator(
     request: BioWorkflowRequest,
     trace_id: str,
@@ -1489,6 +1544,10 @@ async def _bio_stream_generator(
             continue_on_error=request.continue_on_error,
             scope_id=scope_id,
             provider_id=provider_id,
+            resume_stage_results=_resume_stage_results_from_trace(
+                session_id=session_id,
+                resume_from_trace_id=request.resume_from_trace_id,
+            ),
         )
     )
 

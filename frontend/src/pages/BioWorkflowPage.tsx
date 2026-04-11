@@ -402,6 +402,7 @@ export function BioWorkflowPage() {
           user_answer: userAnswer.trim(),
           provided_fields: finalResult.required_fields || [],
         },
+        finalResult.trace_id,
       )
       setFinalResult(result)
       setUserAnswer('')
