@@ -22,6 +22,22 @@ DB_PATH = Path("./data/sessions.db")
 MAX_TOKENS_BUDGET = 4096
 
 
+SESSION_NAMESPACE_BY_KIND = {
+    "chat": "chat_session",
+    "research": "research_session",
+    "workflow": "workflow_session",
+    "channel": "channel_session",
+}
+
+
+def _normalize_session_metadata(metadata: dict | None) -> dict:
+    data = dict(metadata or {})
+    kind = data.get("kind") or "chat"
+    data.setdefault("kind", kind)
+    data.setdefault("namespace", SESSION_NAMESPACE_BY_KIND.get(kind, f"{kind}_session"))
+    return data
+
+
 def estimate_tokens(text: str) -> int:
     """简单估算 token 数量（中英文混合）"""
     chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
@@ -94,7 +110,10 @@ class SessionStore:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def create_session(self, session_id: str, title: str = "", metadata: dict = {}):
+    def create_session(
+        self, session_id: str, title: str = "", metadata: dict | None = None
+    ):
+        metadata = _normalize_session_metadata(metadata)
         now = datetime.now().isoformat()
         with self._conn() as conn:
             conn.execute(
@@ -111,15 +130,38 @@ class SessionStore:
             row = conn.execute(
                 "SELECT * FROM sessions WHERE session_id=?", (session_id,)
             ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        out = dict(row)
+        try:
+            out["metadata"] = _normalize_session_metadata(
+                json.loads(out.get("metadata") or "{}")
+            )
+        except Exception:
+            out["metadata"] = _normalize_session_metadata({})
+        return out
 
-    def list_sessions(self, status: str = None, limit: int = 50) -> List[dict]:
+    def list_sessions(
+        self, status: str = None, limit: int = 50, kind: str | None = None
+    ) -> List[dict]:
         with self._conn() as conn:
-            if status:
+            if status and kind:
+                rows = conn.execute(
+                    """SELECT * FROM sessions WHERE status=? AND json_extract(metadata, '$.kind')=?
+                       ORDER BY updated_at DESC LIMIT ?""",
+                    (status, kind, limit),
+                ).fetchall()
+            elif status:
                 rows = conn.execute(
                     """SELECT * FROM sessions WHERE status=?
                        ORDER BY updated_at DESC LIMIT ?""",
                     (status, limit),
+                ).fetchall()
+            elif kind:
+                rows = conn.execute(
+                    """SELECT * FROM sessions WHERE json_extract(metadata, '$.kind')=?
+                       ORDER BY updated_at DESC LIMIT ?""",
+                    (kind, limit),
                 ).fetchall()
             else:
                 rows = conn.execute(
@@ -127,7 +169,18 @@ class SessionStore:
                        ORDER BY updated_at DESC LIMIT ?""",
                     (limit,),
                 ).fetchall()
-        return [dict(r) for r in rows]
+
+        sessions = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["metadata"] = _normalize_session_metadata(
+                    json.loads(item.get("metadata") or "{}")
+                )
+            except Exception:
+                item["metadata"] = _normalize_session_metadata({})
+            sessions.append(item)
+        return sessions
 
     def close_session(self, session_id: str):
         with self._conn() as conn:

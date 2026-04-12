@@ -10,6 +10,14 @@ from providers.base_provider import ChatMessage
 logger = logging.getLogger(__name__)
 
 
+SESSION_NAMESPACE_BY_KIND = {
+    "chat": "chat_session",
+    "research": "research_session",
+    "workflow": "workflow_session",
+    "channel": "channel_session",
+}
+
+
 class SessionManager:
     """
     会话管理器，支持会话创建、恢复和历史管理。
@@ -32,11 +40,18 @@ class SessionManager:
         self._memory = memory
         logger.info("✅ SessionManager 已集成 Memory")
 
-    def new_session(self, title: str = "") -> str:
+    def new_session(self, title: str = "", kind: str = "chat") -> str:
         session_id = str(uuid.uuid4())
-        self.store.create_session(session_id, title=title)
+        namespace = SESSION_NAMESPACE_BY_KIND.get(kind, f"{kind}_session")
+        self.store.create_session(
+            session_id,
+            title=title,
+            metadata={"kind": kind, "namespace": namespace},
+        )
         self._current_session_id = session_id
-        logger.info(f"🆕 新会话: {session_id[:8]}... [{title}]")
+        logger.info(
+            f"🆕 新会话: {session_id[:8]}... [{title}] kind={kind} namespace={namespace}"
+        )
         return session_id
 
     def resume_session(self, session_id: str) -> list[ChatMessage]:
@@ -107,8 +122,8 @@ class SessionManager:
         raw = self.store.get_messages(self._current_session_id)
         return [ChatMessage(role=m["role"], content=m["content"]) for m in raw]
 
-    def list_sessions(self) -> list[dict]:
-        return self.store.list_sessions()
+    def list_sessions(self, kind: str | None = None) -> list[dict]:
+        return self.store.list_sessions(kind=kind)
 
     def get_session(self, session_id: str) -> Optional[dict]:
         return self.store.get_session(session_id)
