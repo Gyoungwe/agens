@@ -5,6 +5,8 @@ from typing import Any, Literal, Dict, Optional
 from datetime import datetime
 import uuid
 
+from core.runtime_contract import RUNTIME_CONTRACT_VERSION
+
 
 class Message(BaseModel):
     """
@@ -12,6 +14,7 @@ class Message(BaseModel):
     所有通信都通过这个结构体，不允许直接调用。
     """
 
+    contract_version: str = RUNTIME_CONTRACT_VERSION
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
@@ -34,11 +37,13 @@ class Message(BaseModel):
     trace_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: Optional[str] = None
     correlation_id: str = ""
+    namespace: Optional[str] = None
 
 
 class TaskPayload(BaseModel):
     """type=task 时的 payload 结构"""
 
+    contract_version: str = RUNTIME_CONTRACT_VERSION
     instruction: str  # 给 Agent 的具体指令
     context: dict = {}  # 上下文数据（前序结果等）
     priority: int = 5  # 1=最高, 10=最低
@@ -47,6 +52,7 @@ class TaskPayload(BaseModel):
 class ResultPayload(BaseModel):
     """type=result 时的 payload 结构"""
 
+    contract_version: str = RUNTIME_CONTRACT_VERSION
     success: bool
     output: Any  # Agent 的输出内容
     summary: str = ""  # 一句话摘要
@@ -56,6 +62,7 @@ class ResultPayload(BaseModel):
 class ErrorPayload(BaseModel):
     """type=error 时的 payload 结构"""
 
+    contract_version: str = RUNTIME_CONTRACT_VERSION
     error_type: str
     message: str
     retryable: bool = False  # 是否可以重试

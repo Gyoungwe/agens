@@ -24,6 +24,13 @@ RuntimeNamespace = Literal[
     "system_runtime",
 ]
 
+DelegationMode = Literal[
+    "direct_chat",
+    "research",
+    "clarify_first",
+    "multi_agent",
+]
+
 RuntimeMessageType = Literal["task", "result", "error", "status"]
 RuntimeContentFormat = Literal["text", "markdown", "json"]
 RuntimeOutputType = Literal["final", "partial", "report", "error"]
@@ -127,3 +134,13 @@ class RuntimeWorkflowBoundaryContract(BaseModel):
     stage_contract: str = "WorkflowStageSpec"
     report_contract: str = "ReportSpec"
     evolution_contract: str = "EvolutionSpec"
+
+
+class RuntimeDelegationDecisionContract(BaseModel):
+    contract_version: str = RUNTIME_CONTRACT_VERSION
+    mode: DelegationMode
+    selected_agents: List[str] = Field(default_factory=list)
+    reason: str = ""
+    recommendation: str = ""
+    clarification_question: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
