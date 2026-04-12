@@ -1,39 +1,34 @@
 import { NavLink } from 'react-router-dom'
-import { useApprovalStore, useLanguageStore } from '@/store'
+import { useLanguageStore } from '@/store'
 import { t } from '@/i18n'
 import {
   BarChart3,
   Wrench,
   BookOpen,
-  CheckCircle,
   ScrollText,
   Bot,
   SlidersHorizontal,
   Sparkles,
   MessageSquare,
   Microscope,
-  Radio,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/chat', icon: MessageSquare, labelKey: 'chat' as const },
   { to: '/research', icon: Microscope, labelKey: 'research' as const },
-  { to: '/channels', icon: Radio, labelKey: 'channels' as const },
   { to: '/dashboard', icon: BarChart3, labelKey: 'dashboard' as const },
   { to: '/providers', icon: Bot, labelKey: 'models' as const },
   { to: '/skills', icon: Wrench, labelKey: 'skills' as const },
   { to: '/knowledge', icon: BookOpen, labelKey: 'knowledge' as const },
-  { to: '/approvals', icon: CheckCircle, labelKey: 'approvals' as const, badge: true },
   { to: '/sessions', icon: ScrollText, labelKey: 'sessions' as const },
-  { to: '/agent-settings', icon: SlidersHorizontal, labelKey: 'agentSettings' as const },
+  { to: '/settings', icon: SlidersHorizontal, labelKey: 'settings' as const },
 ]
 
 export function Sidebar() {
-  const { pendingCount } = useApprovalStore()
   useLanguageStore((s) => s.language)
 
   return (
-    <aside className="w-64 bg-card border-r border-border flex flex-col h-full">
+    <aside className="w-64 bg-card border-r border-border flex flex-col h-full" aria-label="Primary navigation sidebar">
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-cta flex items-center justify-center shadow-lg shadow-primary/25">
@@ -47,11 +42,12 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
-        {navItems.map(({ to, icon: Icon, labelKey, badge }) => (
+        {navItems.map(({ to, icon: Icon, labelKey }) => (
           <NavLink
             key={to}
             to={to}
             end
+            aria-label={t(labelKey)}
             className={({ isActive }) =>
               `group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
                 isActive
@@ -64,11 +60,6 @@ export function Sidebar() {
               <>
                 <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`} />
                 <span className="flex-1">{t(labelKey)}</span>
-                {badge && pendingCount > 0 && (
-                  <span className="bg-cta text-cta-foreground text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
-                    {pendingCount}
-                  </span>
-                )}
                 {isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-cta rounded-r-full" />
                 )}

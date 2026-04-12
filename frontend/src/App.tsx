@@ -14,6 +14,7 @@ import {
   ChatPage,
   ResearchPage,
   ChannelsPage,
+  SettingsPage,
   LoginPage,
 } from '@/pages'
 
@@ -65,6 +66,7 @@ function App() {
         <Route path="chat" element={<ChatPage />} />
         <Route path="research" element={<ResearchPage />} />
         <Route path="channels" element={<ChannelsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="bio-workflow" element={<BioWorkflowPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/chat" replace />} />
