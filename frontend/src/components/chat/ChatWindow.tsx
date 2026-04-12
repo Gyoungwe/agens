@@ -6,14 +6,17 @@ import type { Message } from '@/types'
 interface ChatWindowProps {
   messages: Message[]
   isStreaming: boolean
+  streamStageLabel?: string
   onSendMessage: (message: string) => void
   onSelectImage?: (file: File | null) => void
   selectedImage?: { name: string; size: number } | null
 }
 
-export function ChatWindow({ messages, isStreaming, onSendMessage, onSelectImage, selectedImage }: ChatWindowProps) {
+export function ChatWindow({ messages, isStreaming, streamStageLabel, onSendMessage, onSelectImage, selectedImage }: ChatWindowProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content || ''
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -31,13 +34,14 @@ export function ChatWindow({ messages, isStreaming, onSendMessage, onSelectImage
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/20">
-      <MessageList messages={messages} isStreaming={isStreaming} />
+    <div className="h-full min-w-0 overflow-hidden flex flex-col bg-gradient-to-b from-background to-secondary/20">
+      <MessageList messages={messages} isStreaming={isStreaming} streamStageLabel={streamStageLabel} />
       <div ref={messagesEndRef} />
       <InputBar
         value={input}
         onChange={setInput}
         onSend={handleSend}
+        lastUserMessage={lastUserMessage}
         onSelectImage={onSelectImage}
         selectedImage={selectedImage}
         disabled={isStreaming}

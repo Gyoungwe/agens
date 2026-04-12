@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronRight, Bot, Sparkles, FileText, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { MarkdownBlock } from '@/components/shared'
 
 export interface TraceEvent {
   event_id: string
@@ -128,9 +129,9 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
   }
 
   return (
-    <div
-      className={`border-l-2 ${colorClass} pl-3 py-1.5 rounded-r pr-2 mb-1 transition-all hover:shadow-sm`}
-    >
+      <div
+        className={`border-l-2 ${colorClass} pl-3 py-1.5 rounded-r pr-2 mb-1 transition-all hover:shadow-sm hover:-translate-y-0.5`}
+      >
       <div className="flex items-center gap-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         {expanded ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
         {icon}
@@ -147,6 +148,11 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
               {JSON.stringify(event.data, null, 2)}
             </pre>
           )}
+          {(event.type === 'agent_output' || event.type === 'final_response') && (
+            <div className="mt-2 rounded-lg border border-border bg-background/70 p-2">
+              <MarkdownBlock content={String((event.data?.summary as string) || (event.data?.output as string) || (event.data?.response as string) || '')} className="prose-p:my-1 prose-li:my-0.5" />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -155,6 +161,8 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
 
 export function InvocationTrace({ events, isStreaming }: InvocationTraceProps) {
   const [autoScroll, setAutoScroll] = useState(true)
+  const [agentFilter, setAgentFilter] = useState<string>('all')
+  const [eventFilter, setEventFilter] = useState<string>('all')
 
   useEffect(() => {
     if (autoScroll) {
@@ -174,11 +182,19 @@ export function InvocationTrace({ events, isStreaming }: InvocationTraceProps) {
     return acc
   }, {} as Record<string, { start: number; end: number; count: number }>)
 
+  const agentOptions = ['all', ...Object.keys(agentStats)]
+  const eventOptions = ['all', ...Array.from(new Set(events.map((e) => e.type)))]
+  const filteredEvents = events.filter((e) => {
+    const byAgent = agentFilter === 'all' || e.agent === agentFilter
+    const byType = eventFilter === 'all' || e.type === eventFilter
+    return byAgent && byType
+  })
+
   return (
     <div className="h-full flex flex-col bg-background border-l">
-      <div className="px-3 py-2 border-b bg-muted/30">
+      <div className="px-3 py-2 border-b bg-gradient-to-r from-muted/40 via-primary/5 to-cta/5">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Invocation Trace</h3>
+          <h3 className="text-sm font-semibold text-foreground tracking-wide">✨ Invocation Trace</h3>
           <div className="flex items-center gap-2">
             {isStreaming && (
               <span className="flex items-center gap-1 text-xs text-green-600">
@@ -203,6 +219,29 @@ export function InvocationTrace({ events, isStreaming }: InvocationTraceProps) {
             ))}
           </div>
         )}
+
+        <div className="flex items-center gap-2 mt-2">
+          <select
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded border border-border bg-background"
+            title="Filter by agent"
+          >
+            {agentOptions.map((a) => (
+              <option key={a} value={a}>{a === 'all' ? 'All Agents' : a}</option>
+            ))}
+          </select>
+          <select
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded border border-border bg-background"
+            title="Filter by event"
+          >
+            {eventOptions.map((et) => (
+              <option key={et} value={et}>{et === 'all' ? 'All Events' : et}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div
@@ -214,17 +253,17 @@ export function InvocationTrace({ events, isStreaming }: InvocationTraceProps) {
           setAutoScroll(atBottom)
         }}
       >
-        {events.length === 0 ? (
+        {filteredEvents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Bot size={32} className="mb-2 opacity-20" />
-            <p className="text-sm">Send a message to see the invocation trace</p>
+            <p className="text-sm">No trace events match current filters</p>
           </div>
         ) : (
-          events.map((event, index) => (
+          filteredEvents.map((event, index) => (
             <TraceItem
               key={event.event_id}
               event={event}
-              prevEvent={index > 0 ? events[index - 1] : undefined}
+              prevEvent={index > 0 ? filteredEvents[index - 1] : undefined}
             />
           ))
         )}

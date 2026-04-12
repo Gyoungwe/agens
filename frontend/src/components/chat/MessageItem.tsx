@@ -8,6 +8,7 @@ interface MessageItemProps {
 
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user'
+  const isSystem = message.role === 'system'
 
   return (
     <div className={`flex gap-4 ${isUser ? 'flex-row-reverse' : ''} animate-slide-up`}>
@@ -15,6 +16,8 @@ export function MessageItem({ message }: MessageItemProps) {
         className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg transition-transform duration-200 hover:scale-105 ${
           isUser 
             ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground' 
+            : isSystem
+              ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white'
             : 'bg-gradient-to-br from-primary to-cta text-white'
         }`}
       >
@@ -22,9 +25,11 @@ export function MessageItem({ message }: MessageItemProps) {
       </div>
 
       <div
-        className={`max-w-[75%] rounded-2xl px-5 py-3 transition-all duration-200 ${
+        className={`min-w-0 max-w-[75%] break-words rounded-2xl px-5 py-3 transition-all duration-200 ${
           isUser
             ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-lg shadow-primary/20'
+            : isSystem
+              ? 'bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-400/30 rounded-tl-sm shadow-lg shadow-amber-500/10'
             : 'bg-card border border-border/50 rounded-tl-sm shadow-lg'
         }`}
       >

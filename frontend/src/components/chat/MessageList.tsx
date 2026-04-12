@@ -5,9 +5,10 @@ import type { Message } from '@/types'
 interface MessageListProps {
   messages: Message[]
   isStreaming: boolean
+  streamStageLabel?: string
 }
 
-export function MessageList({ messages, isStreaming }: MessageListProps) {
+export function MessageList({ messages, isStreaming, streamStageLabel }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -26,7 +27,7 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {messages.map((message) => (
         <MessageItem key={message.id} message={message} />
       ))}
@@ -36,6 +37,9 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-lg border border-border/50">
+            <div className="text-[11px] text-muted-foreground mb-1">
+              {streamStageLabel || 'Assistant is thinking...'}
+            </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-primary animate-typing" />
               <div className="w-2 h-2 rounded-full bg-primary animate-typing [animation-delay:0.2s]" />

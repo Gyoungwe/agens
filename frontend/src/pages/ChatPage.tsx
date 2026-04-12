@@ -2,25 +2,31 @@ import { useState, useRef, useEffect } from 'react'
 import { Header } from '@/components/layout'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { InvocationTrace } from '@/components/chat/InvocationTrace'
-import { useChatStore } from '@/store'
+import { useChatStore, useChatPreferencesStore } from '@/store'
 import { parseSSEStream } from '@/utils/sse'
 import type { Message } from '@/types'
 import type { TraceEvent } from '@/components/chat/InvocationTrace'
 import { providersApi } from '@/api/providers'
+import { useNavigate } from 'react-router-dom'
 
 export function ChatPage() {
+  const navigate = useNavigate()
   const [splitPosition, setSplitPosition] = useState(60)
-  const [chatMode, setChatMode] = useState<'auto' | 'chat'>('auto')
   const containerRef = useRef<HTMLDivElement>(null)
   const { messages, isStreaming, currentSessionId, setSessions, setCurrentSession, addMessage, updateMessage, setStreaming } = useChatStore()
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
   const [sessionTraceMap, setSessionTraceMap] = useState<Record<string, TraceEvent[]>>({})
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [providerInfo, setProviderInfo] = useState<{ id: string; name: string; model: string } | null>(null)
-  const [memoryScope, setMemoryScope] = useState<'session' | 'global'>('session')
   const [pendingWorkflowTraceId, setPendingWorkflowTraceId] = useState<string | null>(null)
   const [pendingWorkflowFields, setPendingWorkflowFields] = useState<string[]>([])
   const [sessionList, setSessionList] = useState<Array<{ session_id: string; title?: string; updated_at?: string }>>([])
+  const [streamStageLabel, setStreamStageLabel] = useState<string>('')
+  const [userError, setUserError] = useState<string | null>(null)
+  const [lastSentMessage, setLastSentMessage] = useState<string>('')
+  const [mobileTraceOpen, setMobileTraceOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const { defaultChatMode, memoryScope, realtimeLogsEnabled } = useChatPreferencesStore()
 
   const classifyTaskType = (text: string): 'chat' | 'bio_workflow' | 'uncertain' => {
     const t = text.trim().toLowerCase()
@@ -45,7 +51,7 @@ export function ChatPage() {
   }
 
   useEffect(() => {
-    fetch('/api/sessions')
+    fetch('/api/sessions?kind=chat')
       .then((res) => res.json())
       .then((data) => {
         const sessions = Array.isArray(data) ? data : (data.sessions || [])
@@ -61,6 +67,13 @@ export function ChatPage() {
     providersApi.getCurrentProvider()
       .then((res) => setProviderInfo(res.data))
       .catch(() => setProviderInfo(null))
+  }, [])
+
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
   }, [])
 
   useEffect(() => {
@@ -126,6 +139,9 @@ export function ChatPage() {
       session_id: currentSessionId || undefined,
     }
     addMessage(userMessage)
+    setLastSentMessage(message)
+    setUserError(null)
+    setStreamStageLabel('Connecting...')
     setStreaming(true)
 
     const assistantId = `assistant-${Date.now()}`
@@ -138,10 +154,10 @@ export function ChatPage() {
     })
 
     try {
-      const classified = chatMode === 'auto' ? classifyTaskType(message) : chatMode
+      const classified = defaultChatMode === 'auto' ? classifyTaskType(message) : defaultChatMode
       const effectiveMode = classified === 'uncertain' ? 'chat' : classified
 
-      if (chatMode === 'auto' && classified === 'uncertain') {
+      if (defaultChatMode === 'auto' && classified === 'uncertain') {
         addMessage({
           id: `system-clarify-${Date.now()}`,
           role: 'system',
@@ -255,13 +271,15 @@ export function ChatPage() {
               elapsed_ms: Number(eventData.elapsed_ms || 0),
               error: (eventData.error as string | null) || null,
             }
+            setStreamStageLabel(`Workflow: ${toChineseStageName(stage)} ${toChineseStatus(stageStatus[stage].status)}`)
             updateMessage(assistantId, { content: renderBioProgress() } as Partial<Message>)
           } else if (sseEvent.eventType === 'bio_workflow_needs_input') {
             const q = String(eventData.user_question || 'Need more user input')
             const fields = Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]).join(', ') : ''
             setPendingWorkflowTraceId(String(eventData.trace_id || traceId || ''))
             setPendingWorkflowFields(Array.isArray(eventData.required_fields) ? (eventData.required_fields as string[]) : [])
-            finalResponse = `${renderBioProgress()}\n\n流程已暂停：需要你补充信息后才能继续。\n\n问题：${q}${fields ? `\n建议补充字段：${fields}` : ''}`
+            const progressText = Object.keys(stageStatus).length > 0 ? `${renderBioProgress()}\n\n` : ''
+            finalResponse = `${progressText}流程已暂停：需要你补充信息后才能继续。\n\n问题：${q}${fields ? `\n建议补充字段：${fields}` : ''}`
           } else if (sseEvent.eventType === 'bio_workflow_final') {
             const workflowSummary = String(eventData.response || '')
             const status = String(eventData.status || 'unknown')
@@ -270,9 +288,11 @@ export function ChatPage() {
               : status === 'needs_user_input'
                 ? '流程暂停，等待你的输入'
                 : '流程已结束，但有部分步骤失败'
-            finalResponse = `${renderBioProgress()}\n\n最终结论：${statusCn}\n\n${workflowSummary || '系统已完成执行，但没有返回额外摘要。'}`
+            const progressText = Object.keys(stageStatus).length > 0 ? `${renderBioProgress()}\n\n` : ''
+            finalResponse = `${progressText}最终结论：${statusCn}\n\n${workflowSummary || '系统已完成执行，但没有返回额外摘要。'}`
             setPendingWorkflowTraceId(null)
             setPendingWorkflowFields([])
+            setStreamStageLabel('Workflow finalizing...')
           } else if (sseEvent.eventType === 'error') {
             throw new Error((eventData.message as string) || (eventData.error as string) || 'workflow stream error')
           }
@@ -281,6 +301,7 @@ export function ChatPage() {
           throw new Error(`${sseEvent.eventType}: ${err}`)
         } else if (sseEvent.eventType === 'final_response') {
           finalResponse = ((eventData.data as Record<string, unknown>)?.response as string) || ''
+          setStreamStageLabel('Synthesizing final response...')
         } else if (sseEvent.eventType === 'error') {
           throw new Error((eventData.message as string) || (eventData.error as string) || 'stream error')
         }
@@ -293,7 +314,7 @@ export function ChatPage() {
       updateMessage(assistantId, { content: finalResponse } as Partial<Message>)
       setSelectedImage(null)
 
-      const sessionsRes = await fetch('/api/sessions')
+      const sessionsRes = await fetch('/api/sessions?kind=chat')
       const sessionsData = await sessionsRes.json()
       const sessions = Array.isArray(sessionsData) ? sessionsData : (sessionsData.sessions || [])
       setSessions(sessions)
@@ -301,18 +322,20 @@ export function ChatPage() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Chat error:', msg)
+      setUserError(`Request failed: ${msg}`)
       updateMessage(assistantId, {
         role: 'system',
-        content: `Chat failed: ${msg}\nCheck logs/features/chat_*.log and logs/agens_*.log`,
+        content: `聊天失败：${msg}\n你可以点击 Retry Last 重试，或切换模型后再试。`,
       } as Partial<Message>)
     } finally {
+      setStreamStageLabel('')
       setStreaming(false)
     }
   }
 
   const handleNewChat = async () => {
     try {
-      const res = await fetch('/api/sessions?title=New%20Chat', {
+      const res = await fetch('/api/sessions?title=New%20Chat&kind=chat', {
         method: 'POST',
       })
       const data = await res.json()
@@ -324,62 +347,11 @@ export function ChatPage() {
       setPendingWorkflowTraceId(null)
       setPendingWorkflowFields([])
 
-      const sessionsRes = await fetch('/api/sessions')
+      const sessionsRes = await fetch('/api/sessions?kind=chat')
       const sessionsData = await sessionsRes.json()
       setSessions(Array.isArray(sessionsData) ? sessionsData : (sessionsData.sessions || []))
     } catch (e) {
       console.error('Failed to create new chat session', e)
-    }
-  }
-
-  const runMemorySelfCheck = () => {
-    const checklist = [
-      '记忆自检步骤：',
-      '1) 在同一会话连续发送两条消息（包含可识别事实，如“我的项目代号是 A1”）。',
-      '2) 发送“请复述我刚才给出的项目代号”。',
-      '3) 切换新会话后再次询问，模型不应继续记住上一会话事实。',
-      '4) 如需底层验证：访问 /debug/results/{session_id} 查看 task_results。',
-    ].join('\n')
-    addMessage({
-      id: `system-memory-check-${Date.now()}`,
-      role: 'system',
-      content: checklist,
-      created_at: new Date().toISOString(),
-      session_id: currentSessionId || undefined,
-    })
-  }
-
-  const summarizeAndContinue = async () => {
-    if (!currentSessionId) return
-    try {
-      const res = await fetch('/api/chat/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: currentSessionId }),
-      })
-      const data = await res.json()
-      const completed = Array.isArray(data.completed) ? data.completed.slice(0, 8) : []
-      const pending = Array.isArray(data.pending) ? data.pending.slice(0, 8) : []
-      addMessage({
-        id: `system-summary-${Date.now()}`,
-        role: 'system',
-        content: [
-          '上下文已总结并继续：',
-          `- token usage: ${data.total_tokens ?? 0}/${data.window ?? 0} (${((Number(data.ratio || 0) * 100).toFixed(1))}%)`,
-          completed.length ? `- 已完成:\n${completed.map((x: string) => `  • ${x}`).join('\n')}` : '- 已完成: （无提取）',
-          pending.length ? `- 待完成:\n${pending.map((x: string) => `  • ${x}`).join('\n')}` : '- 待完成: （无提取）',
-        ].join('\n'),
-        created_at: new Date().toISOString(),
-        session_id: currentSessionId || undefined,
-      })
-    } catch (e) {
-      addMessage({
-        id: `system-summary-error-${Date.now()}`,
-        role: 'system',
-        content: `总结失败：${e instanceof Error ? e.message : String(e)}`,
-        created_at: new Date().toISOString(),
-        session_id: currentSessionId || undefined,
-      })
     }
   }
 
@@ -404,7 +376,22 @@ export function ChatPage() {
     <div className="flex flex-col h-full">
       <Header title="Chat" />
 
-      <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+      {userError && (
+        <div className="mx-4 mt-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm flex items-center justify-between gap-3">
+          <span>{userError}</span>
+          <button
+            onClick={() => {
+              if (lastSentMessage) handleSendMessage(lastSentMessage)
+            }}
+            disabled={!lastSentMessage || isStreaming}
+            className="px-3 py-1.5 text-xs rounded-lg border border-destructive/40 hover:bg-destructive/20 disabled:opacity-50"
+          >
+            Retry Last
+          </button>
+        </div>
+      )}
+
+      <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap md:gap-2 overflow-x-auto">
         <button
           onClick={handleNewChat}
           className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
@@ -412,23 +399,19 @@ export function ChatPage() {
           New Chat
         </button>
         <button
-          onClick={runMemorySelfCheck}
+          onClick={() => navigate('/sessions')}
           className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+          title="Open full sessions history"
         >
-          Memory Self-Check
+          Sessions
         </button>
         <button
-          onClick={summarizeAndContinue}
-          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+          onClick={() => setMobileTraceOpen((v) => !v)}
+          className="md:hidden px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
+          aria-expanded={mobileTraceOpen}
+          aria-label="Toggle invocation trace panel"
         >
-          Summarize & Continue
-        </button>
-        <button
-          onClick={() => setMemoryScope(memoryScope === 'session' ? 'global' : 'session')}
-          className="px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted/50 cursor-pointer"
-          title="Toggle memory retrieval scope"
-        >
-          Memory: {memoryScope === 'global' ? 'Global' : 'Session'}
+          Trace
         </button>
         <select
           value={currentSessionId || ''}
@@ -442,29 +425,18 @@ export function ChatPage() {
             </option>
           ))}
         </select>
-        <button
-          onClick={() => setChatMode('auto')}
-          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'auto' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
-        >
-          Auto
-        </button>
-        <button
-          onClick={() => setChatMode('chat')}
-          className={`px-3 py-1.5 text-xs rounded-lg border ${chatMode === 'chat' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}
-        >
-          Normal Chat
-        </button>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div
           ref={containerRef}
-          className="flex-1 flex"
-          style={{ width: `${splitPosition}%` }}
+          className="flex-none min-w-0 h-full"
+          style={{ width: isMobile ? '100%' : `${splitPosition}%` }}
         >
           <ChatWindow
             messages={messages}
             isStreaming={isStreaming}
+            streamStageLabel={streamStageLabel}
             onSendMessage={handleSendMessage}
             onSelectImage={setSelectedImage}
             selectedImage={selectedImage ? { name: selectedImage.name, size: selectedImage.size } : null}
@@ -472,16 +444,18 @@ export function ChatPage() {
         </div>
 
         <div
-          className="w-1 bg-border hover:bg-primary cursor-col-resize transition-colors duration-200"
+          className="hidden md:block w-1 bg-border hover:bg-primary cursor-col-resize transition-colors duration-200"
           onMouseDown={handleMouseDown}
         />
 
-        <div
-          className="overflow-hidden"
-          style={{ width: `${100 - splitPosition}%` }}
-        >
-          <InvocationTrace events={traceEvents} isStreaming={isStreaming} />
-        </div>
+        {realtimeLogsEnabled && (
+          <div
+            className={`${mobileTraceOpen ? 'block' : 'hidden'} md:block flex-none min-w-0 overflow-hidden border-t md:border-t-0 md:border-l border-border`}
+            style={{ width: isMobile ? '100%' : `${100 - splitPosition}%` }}
+          >
+            <InvocationTrace events={traceEvents} isStreaming={isStreaming} />
+          </div>
+        )}
       </div>
     </div>
   )
