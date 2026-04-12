@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 VECTOR_SIZE = 1024
 COLLECTION_NAME = "agent_knowledge"
+DEFAULT_KNOWLEDGE_NAMESPACE = "shared_knowledge"
 
 
 class KnowledgeBase:
@@ -122,6 +123,7 @@ class KnowledgeBase:
         version: str = None,
         metadata: dict = None,
         scope_id: str = None,
+        namespace: str = DEFAULT_KNOWLEDGE_NAMESPACE,
     ) -> str:
         """
         写入一条知识，返回 point_id
@@ -149,7 +151,12 @@ class KnowledgeBase:
         _owner = owner or json.dumps(agent_ids)
         _version = version or self.DEFAULT_VERSION
 
-        full_metadata = {"agent_ids": agent_ids, "topic": topic, **(metadata or {})}
+        full_metadata = {
+            "agent_ids": agent_ids,
+            "topic": topic,
+            "namespace": (metadata or {}).get("namespace", namespace),
+            **(metadata or {}),
+        }
         if scope_id:
             full_metadata["scope_id"] = scope_id
 
@@ -213,6 +220,7 @@ class KnowledgeBase:
                 version=item.get("version"),
                 metadata=item.get("metadata", {}),
                 scope_id=item.get("scope_id"),
+                namespace=item.get("namespace", DEFAULT_KNOWLEDGE_NAMESPACE),
             )
             ids.append(point_id)
         logger.info(f"📦 Batch wrote {len(ids)} knowledge entries")
@@ -226,6 +234,7 @@ class KnowledgeBase:
         top_k: int = 5,
         min_score: float = 0.6,
         scope_id: str = None,
+        namespace: str = None,
     ) -> list:
         """
         语义检索
@@ -246,11 +255,11 @@ class KnowledgeBase:
 
         if self._lance_table is not None:
             return await self._search_lance(
-                vector, agent_id, topic, top_k, min_score, scope_id
+                vector, agent_id, topic, top_k, min_score, scope_id, namespace
             )
         else:
             return self._search_in_memory(
-                vector, agent_id, topic, top_k, min_score, scope_id
+                vector, agent_id, topic, top_k, min_score, scope_id, namespace
             )
 
     async def _search_lance(
@@ -261,6 +270,7 @@ class KnowledgeBase:
         top_k: int,
         min_score: float,
         scope_id: str = None,
+        namespace: str = None,
     ) -> list:
         try:
             import json
@@ -306,6 +316,11 @@ class KnowledgeBase:
 
                 if scope_id and meta.get("scope_id") not in (None, "", scope_id):
                     continue
+                if (
+                    namespace
+                    and meta.get("namespace", DEFAULT_KNOWLEDGE_NAMESPACE) != namespace
+                ):
+                    continue
 
                 filtered.append(
                     {
@@ -335,6 +350,7 @@ class KnowledgeBase:
         top_k: int,
         min_score: float,
         scope_id: str = None,
+        namespace: str = None,
     ) -> list:
         import numpy as np
 
@@ -369,6 +385,11 @@ class KnowledgeBase:
 
             metadata = item.get("metadata") or {}
             if scope_id and metadata.get("scope_id") not in (None, "", scope_id):
+                continue
+            if (
+                namespace
+                and metadata.get("namespace", DEFAULT_KNOWLEDGE_NAMESPACE) != namespace
+            ):
                 continue
 
             score = cosine_sim(vector, item["vector"])

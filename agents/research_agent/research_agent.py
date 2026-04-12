@@ -116,11 +116,13 @@ class ResearchAgent(BaseAgent):
 
                 await self.knowledge.add(
                     text=condensed,
-                    agent_ids=["global", "research_agent"],
+                    agent_ids=["research_agent"],
                     topic="research",
                     source="research_agent",
+                    namespace="research_memory",
                     metadata={
                         "kind": "research_condensed",
+                        "namespace": "research_memory",
                         "query": instruction[:500],
                         "source_count": len(source_items),
                     },

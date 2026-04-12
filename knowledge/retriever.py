@@ -16,6 +16,7 @@ class Retriever:
         topic: str = None,
         top_k: int = 3,
         scope_id: str = None,
+        namespace: str = None,
     ) -> str:
         """检索并格式化为可直接拼入 prompt 的字符串"""
         results = await self.kb.search(
@@ -24,6 +25,7 @@ class Retriever:
             topic=topic,
             top_k=top_k,
             scope_id=scope_id,
+            namespace=namespace,
         )
 
         if not results:
