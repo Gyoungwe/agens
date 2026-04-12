@@ -804,6 +804,64 @@ def _normalize_workflow_intent(
     return normalized
 
 
+_BIO_CLARIFICATION_FIELD_LABELS: Dict[str, str] = {
+    "assay_type": "分析类型 / assay type",
+    "reference_bundle": "参考基因组与注释 / reference bundle",
+    "expected_outputs": "期望输出 / expected outputs",
+    "input_assets": "输入数据 / input assets",
+    "sample_sheet": "样本设计 / sample sheet",
+    "constraints": "计算与时间限制 / constraints",
+}
+
+
+def _should_clarify_before_bio_execution(intent: WorkflowIntentSpec) -> bool:
+    missing = set(intent.fields_requiring_confirmation or [])
+    risks = set(
+        (intent.system_inference.inferred_risks if intent.system_inference else [])
+        or []
+    )
+    return bool(missing) and (
+        "assay_type" in missing
+        or "reference_bundle" in missing
+        or "expected_outputs" in missing
+        or "missing_input_assets" in risks
+        or "missing_reference_bundle" in risks
+    )
+
+
+def _build_bio_clarification_question(intent: WorkflowIntentSpec) -> str:
+    missing = list(intent.fields_requiring_confirmation or [])
+    labels = [
+        _BIO_CLARIFICATION_FIELD_LABELS.get(field, field.replace("_", " "))
+        for field in missing
+    ]
+    prompt_lines = [
+        "在继续执行生物信息学流程前，我需要先补齐关键信息。",
+        "请尽量回答下面几项：",
+    ]
+    for idx, label in enumerate(labels, start=1):
+        prompt_lines.append(f"{idx}. {label}")
+
+    prompt_lines.append(
+        "例如可以直接回复：物种 / 数据类型（FASTQ/BAM 等）/ 参考基因组版本 / 你最想得到的结果。"
+    )
+    return "\n".join(prompt_lines)
+
+
+def _build_research_prose_summary_prompt(query: str, raw: str) -> str:
+    return (
+        "你是研究总结助手。请将以下 research 结果整理成一份面向最终用户的文本汇报。\n"
+        "要求：\n"
+        "1) 使用自然语言，不要输出 JSON；\n"
+        "2) 先给出 2-4 句执行摘要；\n"
+        "3) 再给出“关键发现”“局限与不确定性”“下一步建议”三个小节；\n"
+        "4) 如果原始结果包含来源、论文或证据，请在文中自然提及；\n"
+        "5) 如果信息不足，需要明确指出还缺什么，而不是假装确定；\n"
+        "6) 风格像专业聊天助手的研究汇报，清晰、直接、可读。\n\n"
+        f"Research Query: {query}\n\nRaw Findings:\n{raw}"
+    )
+
+
 def _workflow_family_from_intent(intent: WorkflowIntentSpec) -> str:
     assay = (intent.assay_type or "other").lower()
     mapping = {
@@ -1230,11 +1288,8 @@ async def chat(request: ChatRequest):
 
         logging.info(f"🌐 [/chat] 调用 orchestrator.run() | trace_id={trace_id}")
         chat_log.info(f"chat_orchestrator_run trace_id={trace_id}")
-        augmented_message = await _augment_with_research_memory_if_needed(
-            request.message
-        )
         result = await orch.run(
-            user_input=augmented_message,
+            user_input=request.message,
             session_id=request.session_id,
         )
         session_id = state.session_manager.current_session_id or ""
@@ -1334,6 +1389,48 @@ async def run_bio_workflow(request: BioWorkflowRequest, stream: bool = False):
             )
 
         prepared = await _prepare_bio_workflow_request(request, trace_id, chat_log)
+        if prepared.get("clarification_needed"):
+            return {
+                "success": False,
+                "status": "needs_user_input",
+                "trace_id": trace_id,
+                "session_id": prepared["session_id"],
+                "workflow": prepared["plan"].workflow_family,
+                "scope_id": prepared["scope_id"],
+                "provider_id": prepared["target_provider_id"],
+                "provider_fallback": prepared["target_provider_id"]
+                != prepared["requested_provider_id"],
+                "response": prepared["clarification_question"],
+                "stage_results": [],
+                "failed_stages": 0,
+                "total_stages": 0,
+                "last_checkpoint": {},
+                "execution_policy": {
+                    "continue_on_error": request.continue_on_error,
+                    "critical_stage_always_stops": True,
+                    "stopped_by_policy": True,
+                    "qc_gate_failures": 0,
+                    "needs_input_failures": 1,
+                },
+                "needs_user_input": True,
+                "user_question": prepared["clarification_question"],
+                "required_fields": prepared.get("required_fields", []),
+                "harness": {
+                    "state_persistence": True,
+                    "execution_boundaries": {
+                        "stage_timeout_seconds": prepared["timeout_seconds"],
+                        "continue_on_error": request.continue_on_error,
+                    },
+                    "audit_traceability": True,
+                },
+                "intent": prepared["intent"].model_dump()
+                if hasattr(prepared["intent"], "model_dump")
+                else prepared["intent"].dict(),
+                "plan": prepared["plan"].model_dump()
+                if hasattr(prepared["plan"], "model_dump")
+                else prepared["plan"].dict(),
+                "cached": False,
+            }
         cache_key = _bio_workflow_cache_key(
             request.goal,
             prepared["dataset_desc"],
@@ -1475,6 +1572,31 @@ async def _prepare_bio_workflow_request(
         intent=request.intent,
         user_input_payload=request.user_input_payload,
     )
+
+    if _should_clarify_before_bio_execution(normalized_intent):
+        return {
+            "orch": orch,
+            "requested_provider_id": requested_provider_id,
+            "target_provider_id": target_provider_id,
+            "dataset_desc": dataset_desc,
+            "scope_id": scope_id,
+            "session_id": session_id,
+            "timeout_seconds": timeout_seconds,
+            "stage_specs": [],
+            "intent": normalized_intent,
+            "plan": WorkflowPlanSpec(
+                plan_id=str(uuid.uuid4()),
+                intent_id=normalized_intent.request_id,
+                workflow_family=_workflow_family_from_intent(normalized_intent),
+                stages=[],
+            ),
+            "clarification_needed": True,
+            "clarification_question": _build_bio_clarification_question(
+                normalized_intent
+            ),
+            "required_fields": normalized_intent.fields_requiring_confirmation,
+        }
+
     dataset_desc = normalized_intent.dataset or dataset_desc
     if request.plan and request.plan.stages:
         workflow_plan = request.plan
@@ -1508,6 +1630,7 @@ async def _prepare_bio_workflow_request(
         "stage_specs": stage_specs,
         "intent": normalized_intent,
         "plan": workflow_plan,
+        "clarification_needed": False,
     }
 
 
@@ -1745,6 +1868,61 @@ async def _bio_stream_generator(
         prepared["scope_id"],
         prepared["target_provider_id"],
     )
+    if prepared.get("clarification_needed"):
+        yield {
+            "event": "bio_workflow_needs_input",
+            "data": json.dumps(
+                {
+                    "event": "bio_workflow_needs_input",
+                    "trace_id": trace_id,
+                    "session_id": prepared["session_id"],
+                    "user_question": prepared["clarification_question"],
+                    "required_fields": prepared.get("required_fields", []),
+                },
+                ensure_ascii=False,
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+        yield {
+            "event": "bio_workflow_final",
+            "data": json.dumps(
+                {
+                    "success": False,
+                    "status": "needs_user_input",
+                    "workflow": prepared["plan"].workflow_family,
+                    "trace_id": trace_id,
+                    "session_id": prepared["session_id"],
+                    "scope_id": prepared["scope_id"],
+                    "provider_id": prepared["target_provider_id"],
+                    "response": prepared["clarification_question"],
+                    "stage_results": [],
+                    "failed_stages": 0,
+                    "total_stages": 0,
+                    "execution_policy": {
+                        "continue_on_error": request.continue_on_error,
+                        "critical_stage_always_stops": True,
+                        "stopped_by_policy": True,
+                        "qc_gate_failures": 0,
+                        "needs_input_failures": 1,
+                    },
+                    "needs_user_input": True,
+                    "user_question": prepared["clarification_question"],
+                    "required_fields": prepared.get("required_fields", []),
+                    "provider_fallback": prepared["target_provider_id"]
+                    != prepared["requested_provider_id"],
+                    "intent": prepared["intent"].model_dump()
+                    if hasattr(prepared["intent"], "model_dump")
+                    else prepared["intent"].dict(),
+                    "plan": prepared["plan"].model_dump()
+                    if hasattr(prepared["plan"], "model_dump")
+                    else prepared["plan"].dict(),
+                    "cached": False,
+                },
+                ensure_ascii=False,
+            ),
+            "id": str(uuid.uuid4())[:8],
+        }
+        return
     cached_result = _get_cached_bio_workflow_result(cache_key)
     if cached_result:
         yield {
@@ -2032,13 +2210,9 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
 
             logger.info(f"🌐 [/chat/stream:{trace_id}] 🚀 启动 orchestrator.run()")
 
-            augmented_message = await _augment_with_research_memory_if_needed(
-                request.message
-            )
-
             task = asyncio.create_task(
                 orch.run(
-                    user_input=augmented_message,
+                    user_input=request.message,
                     session_id=session_id,
                     trace_id=trace_id,
                     memory_scope=request.memory_scope or "session",
@@ -2194,11 +2368,77 @@ async def get_chat_history(session_id: str):
         session = state.session_manager.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        if (session.get("metadata") or {}).get("kind", "chat") != "chat":
+            raise HTTPException(status_code=404, detail="Chat session not found")
         messages = state.session_manager.store.get_messages(session_id)
         return {**session, "messages": messages}
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/research/history/{session_id}")
+@app.get("/api/research/history/{session_id}")
+async def get_research_history(session_id: str):
+    """获取 research 专用历史（会话元数据 + research 结果）。"""
+    try:
+        session = state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if (session.get("metadata") or {}).get("kind") != "research":
+            raise HTTPException(status_code=404, detail="Research session not found")
+
+        rows = state.session_manager.store.get_results(session_id)
+        research_results = []
+        for row in rows:
+            agent_id = str(row.get("agent_id", ""))
+            if agent_id in {"research_agent", "bio_report_agent"}:
+                research_results.append(
+                    {
+                        "agent_id": agent_id,
+                        "result": str(row.get("result", "")),
+                        "created_at": row.get("created_at", ""),
+                        "trace_id": row.get("trace_id", ""),
+                    }
+                )
+
+        return {
+            "session_id": session_id,
+            "title": session.get("title"),
+            "status": session.get("status"),
+            "created_at": session.get("created_at"),
+            "updated_at": session.get("updated_at"),
+            "results": research_results,
+            "results_count": len(research_results),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/research/sessions/{session_id}")
+@app.delete("/api/research/sessions/{session_id}")
+async def delete_research_session(session_id: str):
+    """删除 research 专用会话。"""
+    session_log = get_feature_logger("sessions")
+    try:
+        session = state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if (session.get("metadata") or {}).get("kind") != "research":
+            raise HTTPException(status_code=404, detail="Research session not found")
+
+        state.session_manager.delete_session(session_id)
+        session_log.info(f"delete_research_session session_id={session_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session_log.error(
+            f"delete_research_session_error session_id={session_id} error={type(e).__name__}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2217,7 +2457,9 @@ async def run_research(request: ResearchRequest):
             pass
 
     trace_id = str(uuid.uuid4())
-    session_id = request.session_id
+    session_id = request.session_id or state.session_manager.new_session(
+        title=f"Research: {request.query[:40]}", kind="research"
+    )
 
     scope_id = f"research::{(request.query or '').strip()[:80]}"
     memory_ctx = await _retrieve_research_knowledge_context(
@@ -2234,20 +2476,24 @@ async def run_research(request: ResearchRequest):
         agent_id="research_agent",
         session_id=session_id,
         trace_id=trace_id,
-        runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
+        runtime_context={
+            "scope_id": scope_id,
+            "knowledge_topic": "research",
+            "knowledge_namespace": "research_memory",
+        },
     )
 
-    summary_prompt = (
-        "请将以下 research 结果整理为结构化结论，输出包括："
-        "1) 关键发现 2) 证据与来源 3) 风险与局限 4) 下一步建议。\n\n"
-        f"Research Query: {request.query}\n\nRaw Findings:\n{raw}"
-    )
+    summary_prompt = _build_research_prose_summary_prompt(request.query, raw)
     summarized = await orch.run_single_agent(
         user_input=summary_prompt,
-        agent_id="bio_report_agent",
+        agent_id="writer_agent",
         session_id=session_id,
         trace_id=str(uuid.uuid4()),
-        runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
+        runtime_context={
+            "scope_id": scope_id,
+            "knowledge_topic": "research",
+            "knowledge_namespace": "research_memory",
+        },
     )
 
     return {
@@ -2256,6 +2502,7 @@ async def run_research(request: ResearchRequest):
         "query": request.query,
         "research": raw,
         "summary": summarized,
+        "summary_format": "text",
     }
 
 
@@ -2285,7 +2532,7 @@ async def stream_research(request: ResearchRequest):
                     pass
 
             session_id = request.session_id or state.session_manager.new_session(
-                title=f"Research: {request.query[:40]}"
+                title=f"Research: {request.query[:40]}", kind="research"
             )
 
             yield {
@@ -2345,7 +2592,11 @@ async def stream_research(request: ResearchRequest):
                 agent_id="research_agent",
                 session_id=session_id,
                 trace_id=trace_id,
-                runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
+                runtime_context={
+                    "scope_id": scope_id,
+                    "knowledge_topic": "research",
+                    "knowledge_namespace": "research_memory",
+                },
             )
 
             sources = _extract_research_sources(raw)
@@ -2405,17 +2656,17 @@ async def stream_research(request: ResearchRequest):
                 "id": str(uuid.uuid4())[:8],
             }
 
-            summary_prompt = (
-                "请将以下 research 结果整理为结构化结论，输出包括："
-                "1) 关键发现 2) 证据与来源 3) 风险与局限 4) 下一步建议。\n\n"
-                f"Research Query: {request.query}\n\nRaw Findings:\n{raw}"
-            )
+            summary_prompt = _build_research_prose_summary_prompt(request.query, raw)
             summarized = await orch.run_single_agent(
                 user_input=summary_prompt,
-                agent_id="bio_report_agent",
+                agent_id="writer_agent",
                 session_id=session_id,
                 trace_id=str(uuid.uuid4()),
-                runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
+                runtime_context={
+                    "scope_id": scope_id,
+                    "knowledge_topic": "research",
+                    "knowledge_namespace": "research_memory",
+                },
             )
 
             yield {
@@ -2423,12 +2674,14 @@ async def stream_research(request: ResearchRequest):
                 "data": json.dumps(
                     {
                         "event": "research_done",
+                        "namespace": "research_runtime",
                         "success": True,
                         "trace_id": trace_id,
                         "session_id": session_id,
                         "query": request.query,
                         "research": raw,
                         "summary": summarized,
+                        "summary_format": "text",
                         "sources": sources,
                         "source_items": source_items,
                         "knowledge": knowledge_points,
@@ -2440,7 +2693,12 @@ async def stream_research(request: ResearchRequest):
             yield {
                 "event": "done",
                 "data": json.dumps(
-                    {"event": "done", "trace_id": trace_id}, ensure_ascii=False
+                    {
+                        "event": "done",
+                        "trace_id": trace_id,
+                        "namespace": "research_runtime",
+                    },
+                    ensure_ascii=False,
                 ),
                 "id": str(uuid.uuid4())[:8],
             }
@@ -2472,11 +2730,11 @@ async def stream_research(request: ResearchRequest):
 
 @app.get("/sessions", response_model=List[SessionInfo])
 @app.get("/api/sessions", response_model=List[SessionInfo])
-async def list_sessions():
+async def list_sessions(kind: str | None = None):
     """列出所有会话"""
     session_log = get_feature_logger("sessions")
     try:
-        sessions = state.session_manager.list_sessions()
+        sessions = state.session_manager.list_sessions(kind=kind)
         session_log.info(f"list_sessions total={len(sessions)}")
         return [
             SessionInfo(
@@ -2497,13 +2755,13 @@ async def list_sessions():
 
 @app.post("/sessions")
 @app.post("/api/sessions")
-async def create_session(title: str = "新会话"):
+async def create_session(title: str = "新会话", kind: str = "chat"):
     """创建新会话"""
     session_log = get_feature_logger("sessions")
     try:
-        session_id = state.session_manager.new_session(title=title[:50])
+        session_id = state.session_manager.new_session(title=title[:50], kind=kind)
         session_log.info(f"create_session session_id={session_id} title={title[:50]}")
-        return {"session_id": session_id, "title": title}
+        return {"session_id": session_id, "title": title, "kind": kind}
     except Exception as e:
         session_log.error(
             f"create_session_error title={title[:50]} error={type(e).__name__}: {e}"
@@ -3039,6 +3297,22 @@ async def get_session_results(session_id: str):
     except Exception as e:
         logger.error(f"Get results error: {e}")
         return {"error": str(e)}
+
+
+@app.get("/sessions/{session_id}/results")
+@app.get("/api/sessions/{session_id}/results")
+async def get_session_results_public(session_id: str):
+    """获取会话的所有任务结果（稳定用户接口）"""
+    try:
+        results = state.session_manager.store.get_results(session_id)
+        return {
+            "session_id": session_id,
+            "results_count": len(results),
+            "results": results,
+        }
+    except Exception as e:
+        logger.error(f"Get public session results error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/")

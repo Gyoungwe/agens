@@ -3,8 +3,10 @@ import pytest
 from api.main import (
     WorkflowIntentConfirmRequest,
     WorkflowPlanGenerateRequest,
+    BioWorkflowRequest,
     confirm_bio_intent,
     generate_bio_workflow_plan,
+    run_bio_workflow,
     _generate_workflow_plan,
     _normalize_workflow_intent,
     _stage_specs_from_plan,
@@ -137,6 +139,22 @@ async def test_generate_bio_workflow_plan_endpoint_returns_dynamic_plan():
     )
     assert response["plan"]["workflow_family"] == "metagenomics"
     assert len(response["plan"]["stages"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_execute_bio_workflow_clarifies_before_execution_for_underspecified_request():
+    response = await run_bio_workflow(
+        BioWorkflowRequest(
+            goal="给我一个处理高重复序列优化的基因组组装流程",
+            dataset="chat-session",
+        )
+    )
+
+    assert response["status"] == "needs_user_input"
+    assert response["needs_user_input"] is True
+    assert response["total_stages"] == 0
+    assert "关键信息" in response["user_question"]
+    assert len(response["required_fields"]) >= 1
 
 
 @pytest.mark.asyncio
