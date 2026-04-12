@@ -67,18 +67,47 @@ function formatDuration(start: number, end: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
+function parseAgentOutputObject(output: unknown): Record<string, unknown> | null {
+  if (typeof output !== 'string') return null
+  try {
+    const parsed = JSON.parse(output)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)) : []
+}
+
+function renderResearchSelectionBlock(selected: string[], completed: string[]) {
+  if (selected.length === 0 && completed.length === 0) return null
+
+  return (
+    <div className="mt-2 rounded-lg border border-cyan-200/60 bg-cyan-50/60 p-2 text-xs text-cyan-800 space-y-1">
+      {selected.length > 0 && (
+        <div>
+          <span className="font-semibold">Selected:</span> {selected.join(', ')}
+        </div>
+      )}
+      {completed.length > 0 && (
+        <div>
+          <span className="font-semibold">Completed:</span> {completed.join(', ')}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceEvent }) {
   const [expanded, setExpanded] = useState(false)
   const icon = EVENT_ICONS[event.type] || <Sparkles size={14} className="text-gray-500" />
   const colorClass = EVENT_COLORS[event.type] || 'border-l-gray-400 bg-gray-50/30'
   let innerEvent = String(event.data?.event || '')
-  if (!innerEvent && typeof event.data?.output === 'string') {
-    try {
-      const parsed = JSON.parse(event.data.output)
-      innerEvent = String((parsed as Record<string, unknown>)?.event || '')
-    } catch {
-      innerEvent = ''
-    }
+  const parsedOutput = parseAgentOutputObject(event.data?.output)
+  if (!innerEvent && parsedOutput) {
+    innerEvent = String(parsedOutput.event || '')
   }
   const label = EVENT_LABELS[innerEvent] || EVENT_LABELS[event.type] || event.type
   const duration = prevEvent ? formatDuration(prevEvent.created_at, event.created_at) : null
@@ -86,23 +115,25 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
   const renderContent = () => {
     const data = event.data || {}
     switch (event.type) {
-      case 'agent_thinking':
-        return <span className="text-yellow-700">{String(data.message || '')}</span>
+      case 'agent_thinking': {
+        const msg = String(data.message || '')
+        const selected = getStringArray(data.selected_skills)
+        const shouldHighlight = /research skill selection:/i.test(msg)
+        return (
+          <>
+            <span className="text-yellow-700">{msg}</span>
+            {shouldHighlight && selected.length > 0 && renderResearchSelectionBlock(selected, [])}
+          </>
+        )
+      }
       case 'agent_tool_call':
         return <span className="text-purple-700">Calling {String(data.skill_id || data.tool || 'tool')}...</span>
       case 'agent_file_read':
         return <span className="text-green-700">{String(data.file_path || '')}</span>
       case 'agent_output':
         let routingObj: Record<string, unknown> | null = null
-        if (typeof data.output === 'string') {
-          try {
-            const parsed = JSON.parse(data.output)
-            if (parsed && typeof parsed === 'object' && String((parsed as Record<string, unknown>).event || '') === 'routing_decision') {
-              routingObj = parsed as Record<string, unknown>
-            }
-          } catch {
-            routingObj = null
-          }
+        if (parsedOutput && String(parsedOutput.event || '') === 'routing_decision') {
+          routingObj = parsedOutput
         }
         if (String(data.event || '') === 'routing_decision' || routingObj) {
           const source = routingObj || data
@@ -113,7 +144,19 @@ function TraceItem({ event, prevEvent }: { event: TraceEvent; prevEvent?: TraceE
             </span>
           )
         }
-        return <span className="text-cyan-700 truncate block max-w-xs">{String(data.summary || data.output || '')}</span>
+        const base = String(data.summary || data.output || '')
+        const researchSelectionSource =
+          String(data.summary || '') === 'research_skill_selection' && parsedOutput
+            ? parsedOutput
+            : null
+        const selected = getStringArray(researchSelectionSource?.selected_skills)
+        const completed = getStringArray(researchSelectionSource?.completed_skills)
+        return (
+          <>
+            <span className="text-cyan-700 truncate block max-w-xs">{base}</span>
+            {renderResearchSelectionBlock(selected, completed)}
+          </>
+        )
       case 'agent_done':
         return <span className="text-green-700 truncate block max-w-xs">{String(data.result || '')}</span>
       case 'final_response':
