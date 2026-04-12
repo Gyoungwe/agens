@@ -142,6 +142,24 @@ class ResearchRequest(BaseModel):
     provider_id: Optional[str] = None
 
 
+def _looks_like_research_query(text: str) -> bool:
+    t = (text or "").lower()
+    markers = [
+        "research",
+        "search",
+        "paper",
+        "literature",
+        "survey",
+        "evidence",
+        "论文",
+        "研究",
+        "检索",
+        "文献",
+        "证据",
+    ]
+    return any(m in t for m in markers)
+
+
 def _normalize_source_to_link(source: str) -> str:
     s = (source or "").strip()
     if not s:
@@ -233,6 +251,50 @@ def _extract_research_knowledge(raw_text: str) -> List[str]:
         if p not in dedup:
             dedup.append(p)
     return dedup[:20]
+
+
+async def _retrieve_research_knowledge_context(
+    query: str, scope_id: Optional[str] = None
+) -> str:
+    """从本地知识库检索历史 research 凝练内容，供 research/chat 流程复用。"""
+    kb = state.knowledge_base
+    if not kb:
+        return ""
+    try:
+        items = await kb.search(
+            query=query,
+            agent_id="research_agent",
+            topic="research",
+            top_k=5,
+            min_score=0.45,
+            scope_id=scope_id,
+        )
+        if not items:
+            return ""
+        lines = ["历史研究记忆（本地知识库）"]
+        for i, r in enumerate(items, 1):
+            text = str(r.get("text", ""))
+            lines.append(f"{i}. {text[:450]}")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"retrieve research knowledge failed: {e}")
+        return ""
+
+
+async def _augment_with_research_memory_if_needed(message: str) -> str:
+    if not _looks_like_research_query(message):
+        return message
+    memory_ctx = await _retrieve_research_knowledge_context(
+        query=message,
+        scope_id=None,
+    )
+    if not memory_ctx:
+        return message
+    return (
+        f"{message}\n\n"
+        "请优先参考以下本地历史研究记忆，避免重复检索并输出增量发现：\n"
+        f"{memory_ctx}"
+    )
 
 
 class ChatResponse(BaseModel):
@@ -1168,8 +1230,11 @@ async def chat(request: ChatRequest):
 
         logging.info(f"🌐 [/chat] 调用 orchestrator.run() | trace_id={trace_id}")
         chat_log.info(f"chat_orchestrator_run trace_id={trace_id}")
+        augmented_message = await _augment_with_research_memory_if_needed(
+            request.message
+        )
         result = await orch.run(
-            user_input=request.message,
+            user_input=augmented_message,
             session_id=request.session_id,
         )
         session_id = state.session_manager.current_session_id or ""
@@ -1967,9 +2032,13 @@ async def chat_stream(request: ChatRequest, last_event_id: str = None):
 
             logger.info(f"🌐 [/chat/stream:{trace_id}] 🚀 启动 orchestrator.run()")
 
+            augmented_message = await _augment_with_research_memory_if_needed(
+                request.message
+            )
+
             task = asyncio.create_task(
                 orch.run(
-                    user_input=request.message,
+                    user_input=augmented_message,
                     session_id=session_id,
                     trace_id=trace_id,
                     memory_scope=request.memory_scope or "session",
@@ -2150,11 +2219,22 @@ async def run_research(request: ResearchRequest):
     trace_id = str(uuid.uuid4())
     session_id = request.session_id
 
+    scope_id = f"research::{(request.query or '').strip()[:80]}"
+    memory_ctx = await _retrieve_research_knowledge_context(
+        query=request.query,
+        scope_id=scope_id,
+    )
+
+    research_instruction = request.query
+    if memory_ctx:
+        research_instruction = f"{request.query}\n\n请结合以下历史研究记忆继续深化，避免重复搜索并标注增量发现：\n{memory_ctx}"
+
     raw = await orch.run_single_agent(
-        user_input=request.query,
+        user_input=research_instruction,
         agent_id="research_agent",
         session_id=session_id,
         trace_id=trace_id,
+        runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
     )
 
     summary_prompt = (
@@ -2167,6 +2247,7 @@ async def run_research(request: ResearchRequest):
         agent_id="bio_report_agent",
         session_id=session_id,
         trace_id=str(uuid.uuid4()),
+        runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
     )
 
     return {
@@ -2235,11 +2316,36 @@ async def stream_research(request: ResearchRequest):
                 "id": str(uuid.uuid4())[:8],
             }
 
+            scope_id = f"research::{(request.query or '').strip()[:80]}"
+            memory_ctx = await _retrieve_research_knowledge_context(
+                query=request.query,
+                scope_id=scope_id,
+            )
+            if memory_ctx:
+                yield {
+                    "event": "research_progress",
+                    "data": json.dumps(
+                        {
+                            "event": "research_progress",
+                            "trace_id": trace_id,
+                            "stage": "knowledge_reuse",
+                            "message": "Loaded related local research memory for this topic.",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "id": str(uuid.uuid4())[:8],
+                }
+
+            research_instruction = request.query
+            if memory_ctx:
+                research_instruction = f"{request.query}\n\n请结合以下历史研究记忆继续深化，避免重复搜索并标注增量发现：\n{memory_ctx}"
+
             raw = await orch.run_single_agent(
-                user_input=request.query,
+                user_input=research_instruction,
                 agent_id="research_agent",
                 session_id=session_id,
                 trace_id=trace_id,
+                runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
             )
 
             sources = _extract_research_sources(raw)
@@ -2309,6 +2415,7 @@ async def stream_research(request: ResearchRequest):
                 agent_id="bio_report_agent",
                 session_id=session_id,
                 trace_id=str(uuid.uuid4()),
+                runtime_context={"scope_id": scope_id, "knowledge_topic": "research"},
             )
 
             yield {

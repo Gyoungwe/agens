@@ -18,6 +18,7 @@ class ResearchAgent(BaseAgent):
         knowledge=None,
         provider_registry=None,
         auto_installer=None,
+        memory_store=None,
     ):
         super().__init__(
             agent_id="research_agent",
@@ -29,6 +30,7 @@ class ResearchAgent(BaseAgent):
             provider=provider,
             provider_registry=provider_registry,
             auto_installer=auto_installer,
+            memory_store=memory_store,
         )
 
     def _needs_search(self, query: str) -> bool:
@@ -88,4 +90,43 @@ class ResearchAgent(BaseAgent):
                 )
 
         result = await self._execute_with_llm(instruction, merged_context)
+
+        # 自动将 research 结果凝练后写入本地知识库，供后续 chat research 检索复用
+        if self.knowledge and not merged_context.get("skip_knowledge_persist"):
+            try:
+                source_items = []
+                raw_sources = merged_context.get("search_result")
+                if isinstance(raw_sources, dict):
+                    for item in raw_sources.get("results", [])[:8]:
+                        if isinstance(item, dict):
+                            src = item.get("url") or item.get("source") or ""
+                            if src:
+                                source_items.append(str(src))
+
+                condensed = (
+                    f"[Research Memory]\n"
+                    f"Query: {instruction[:300]}\n"
+                    f"Key Findings:\n{str(result)[:2200]}\n"
+                    + (
+                        f"Sources:\n" + "\n".join(f"- {s}" for s in source_items)
+                        if source_items
+                        else ""
+                    )
+                )
+
+                await self.knowledge.add(
+                    text=condensed,
+                    agent_ids=["global", "research_agent"],
+                    topic="research",
+                    source="research_agent",
+                    metadata={
+                        "kind": "research_condensed",
+                        "query": instruction[:500],
+                        "source_count": len(source_items),
+                    },
+                    scope_id=merged_context.get("scope_id"),
+                )
+            except Exception as e:
+                logger.warning(f"[research_agent] persist knowledge failed: {e}")
+
         return result
