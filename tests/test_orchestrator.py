@@ -116,3 +116,72 @@ class TestOrchestratorEventEmission:
 
         await orch._safe_emit_callback(event, "trace-1")
         await asyncio.sleep(0.1)
+
+
+class TestOrchestratorDelegationPlanning:
+    @pytest.mark.asyncio
+    async def test_plan_returns_research_mode_without_multi_agent_plan(self):
+        bus = MessageBus()
+        await bus.register("orchestrator")
+        await bus.register("research_agent")
+        await bus.register("writer_agent")
+        registry = MagicMock()
+        registry.get.return_value = MagicMock()
+
+        orch = Orchestrator(bus=bus, provider_registry=registry)
+        decision, plan = await orch._plan("research papers about lung cancer")
+
+        assert decision.mode == "research"
+        assert plan == []
+        orch._cleanup_task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_plan_returns_clarify_first_for_broad_bio_request(self):
+        bus = MessageBus()
+        await bus.register("orchestrator")
+        await bus.register("bio_planner_agent")
+        await bus.register("bio_report_agent")
+        registry = MagicMock()
+        registry.get.return_value = MagicMock()
+
+        orch = Orchestrator(bus=bus, provider_registry=registry)
+        decision, plan = await orch._plan("帮我做一个生信 workflow")
+
+        assert decision.mode == "clarify_first"
+        assert plan == []
+        assert decision.clarification_question
+        orch._cleanup_task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_run_research_mode_returns_writer_summary(self):
+        bus = MessageBus()
+        await bus.register("orchestrator")
+        await bus.register("research_agent")
+        await bus.register("writer_agent")
+        registry = MagicMock()
+        provider = MagicMock()
+        registry.get.return_value = provider
+        session_manager = MagicMock()
+        session_manager.current_session_id = None
+        session_manager.new_session.side_effect = lambda title, kind="chat": setattr(
+            session_manager, "current_session_id", f"{kind}-session"
+        )
+        session_manager.add_assistant_message = AsyncMock()
+        session_manager.add_user_message = AsyncMock()
+        session_manager.get_context = AsyncMock(return_value=[])
+
+        orch = Orchestrator(
+            bus=bus,
+            provider_registry=registry,
+            session_manager=session_manager,
+        )
+        orch._run_research_mode = AsyncMock(return_value="Research summary")
+        orch._emit_event = AsyncMock()
+
+        result = await orch.run("research evidence for CRISPR editing")
+
+        assert result == "Research summary"
+        orch._run_research_mode.assert_awaited_once()
+        session_manager.add_user_message.assert_not_awaited()
+        session_manager.add_assistant_message.assert_awaited()
+        orch._cleanup_task.cancel()

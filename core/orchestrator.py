@@ -10,9 +10,11 @@ from pathlib import Path
 from copy import deepcopy
 from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
+from core.delegation_policy import decide_delegation
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
 from core.events import EventEnvelope, AgentEvent, AgentEventType
+from core.runtime_contract import RuntimeDelegationDecisionContract
 from bus.message_bus import MessageBus, DeduplicationCache
 from utils.retry import retry_with_backoff, RetryError
 from integrations.mlflow_trace import get_trace_tracker
@@ -300,6 +302,11 @@ class Orchestrator(BaseAgent):
         sm = self.session_manager
         previous_trace_id = self._current_trace_id
         previous_session_id = self._current_session_id
+        if trace_id:
+            self._current_trace_id = trace_id
+        elif not self._current_trace_id:
+            self._current_trace_id = str(uuid.uuid4())
+        trace_id = self._current_trace_id
         self._current_session_id = session_id
 
         context_messages = []
@@ -314,10 +321,7 @@ class Orchestrator(BaseAgent):
                     history = await self.context_compressor.compress(history)
                     logger.info(f"🗜️ 上下文压缩后: {len(history)} 条")
             else:
-                sm.new_session(title=user_input[:40])
-                session_id = sm.current_session_id
-                self._current_session_id = session_id
-            await sm.add_user_message(user_input)
+                session_id = None
             if self.context_compressor:
                 if memory_scope == "global" and sm._memory:
                     context_messages = (
@@ -332,17 +336,25 @@ class Orchestrator(BaseAgent):
                 else:
                     context_messages = await sm.get_context() or []
 
-        # 1. 用 LLM 拆解任务（带上下文）
-        plan = await self._plan(user_input, context_messages=context_messages)
+        # 1. 决策并生成任务计划（带上下文）
+        decision, plan = await self._plan(user_input, context_messages=context_messages)
         logger.info(f"📋 任务计划: {plan}")
 
-        # 2. 生成 trace_id（如果还没有的话）
-        # 修复：trace_id 通过参数传递，不再依赖实例可变状态，防止并发请求互相覆盖
-        if trace_id:
-            self._current_trace_id = trace_id
-        elif not self._current_trace_id:
-            self._current_trace_id = str(uuid.uuid4())
-        trace_id = self._current_trace_id
+        if sm and not session_id:
+            session_kind = "research" if decision.mode == "research" else "chat"
+            title = (
+                f"Research: {user_input[:40]}"
+                if decision.mode == "research"
+                else user_input[:40]
+            )
+            sm.new_session(title=title, kind=session_kind)
+            session_id = sm.current_session_id
+            self._current_session_id = session_id
+
+        if sm and decision.mode != "research":
+            await sm.add_user_message(user_input)
+
+        # 2. trace 已在规划前生成，避免 routing 事件缺少 trace_id
         logger.info(f"🚀 [run] trace_id={trace_id} 开始执行")
 
         trace_start = time.time()
@@ -354,6 +366,53 @@ class Orchestrator(BaseAgent):
         )
 
         try:
+            if decision.mode == "clarify_first":
+                final = decision.clarification_question or decision.reason
+                await self._emit_event(
+                    EventEnvelope.final_response(
+                        agent_id=self.agent_id,
+                        trace_id=trace_id,
+                        response=final,
+                        session_id=self._current_session_id,
+                    )
+                )
+                if sm:
+                    await sm.add_assistant_message(final)
+                self._trace_tracker.finish_trace(
+                    trace_id=trace_id,
+                    status="success",
+                    elapsed_ms=int((time.time() - trace_start) * 1000),
+                    results_count=0,
+                    final_length=len(final or ""),
+                )
+                return final
+
+            if decision.mode == "research":
+                final = await self._run_research_mode(
+                    user_input=user_input,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                )
+                await self._emit_event(
+                    EventEnvelope.final_response(
+                        agent_id=self.agent_id,
+                        trace_id=trace_id,
+                        response=final,
+                        session_id=self._current_session_id,
+                        namespace="research_runtime",
+                    )
+                )
+                if sm:
+                    await sm.add_assistant_message(final)
+                self._trace_tracker.finish_trace(
+                    trace_id=trace_id,
+                    status="success",
+                    elapsed_ms=int((time.time() - trace_start) * 1000),
+                    results_count=1,
+                    final_length=len(final or ""),
+                )
+                return final
+
             if not plan:
                 from providers.base_provider import ChatMessage
 
@@ -462,6 +521,7 @@ class Orchestrator(BaseAgent):
         session_id: str = None,
         trace_id: str = None,
         runtime_context: Optional[dict] = None,
+        emit_final_response: bool = True,
     ) -> str:
         """
         直接运行单个 Agent（不经过 Orchestrator 调度）
@@ -548,15 +608,16 @@ class Orchestrator(BaseAgent):
                 )
             )
 
-            await self._emit_event(
-                EventEnvelope.final_response(
-                    agent_id=agent_id,
-                    trace_id=trace_id,
-                    response=final,
-                    session_id=session_id,
-                    namespace=(runtime_context or {}).get("namespace", ""),
+            if emit_final_response:
+                await self._emit_event(
+                    EventEnvelope.final_response(
+                        agent_id=agent_id,
+                        trace_id=trace_id,
+                        response=final,
+                        session_id=session_id,
+                        namespace=(runtime_context or {}).get("namespace", ""),
+                    )
                 )
-            )
 
             await sm.add_assistant_message(final)
 
@@ -581,8 +642,23 @@ class Orchestrator(BaseAgent):
                 sm.new_session(title=user_input[:40])
             await sm.add_user_message(user_input)
 
-        plan = await self._plan(user_input)
+        decision, plan = await self._plan(user_input)
         logger.info(f"📋 任务计划: {plan}")
+
+        if decision.mode in {"research", "clarify_first"}:
+            final = (
+                await self._run_research_mode(
+                    user_input=user_input,
+                    session_id=sm.current_session_id if sm else session_id,
+                    trace_id=str(uuid.uuid4()),
+                )
+                if decision.mode == "research"
+                else (decision.clarification_question or decision.reason)
+            )
+            yield final
+            if sm:
+                await sm.add_assistant_message(final)
+            return
 
         trace_id = await self._dispatch(
             plan, user_input, session_id=sm.current_session_id if sm else None
@@ -606,8 +682,56 @@ class Orchestrator(BaseAgent):
 
     # ── 任务规划 ─────────────────────────────────
 
-    async def _plan(self, user_input: str, context_messages: list = None) -> list[dict]:
-        """用 LLM 把用户任务拆解成子任务列表"""
+    def _build_research_summary_prompt(self, query: str, raw: str) -> str:
+        return (
+            "请将以下 research 结果整理成面向用户的中文文本报告。\n\n"
+            f"研究问题：{query}\n\n"
+            "输出要求：\n"
+            "1. 先给简短结论\n"
+            "2. 再写 3-6 条关键发现\n"
+            "3. 明确不确定性、局限或证据强弱\n"
+            "4. 不要输出 JSON\n\n"
+            f"原始研究内容：\n{raw}"
+        )
+
+    async def _run_research_mode(
+        self,
+        user_input: str,
+        session_id: Optional[str],
+        trace_id: str,
+    ) -> str:
+        runtime_context = {
+            "scope_id": f"research::{(user_input or '').strip()[:80]}",
+            "knowledge_topic": "research",
+            "knowledge_namespace": "research_memory",
+            "namespace": "research_runtime",
+            "session_kind": "research",
+        }
+        raw = await self.run_single_agent(
+            user_input=user_input,
+            agent_id="research_agent",
+            session_id=session_id,
+            trace_id=trace_id,
+            runtime_context=runtime_context,
+            emit_final_response=False,
+        )
+        if "writer_agent" not in self.bus.registered_agents:
+            return raw
+
+        summary_prompt = self._build_research_summary_prompt(user_input, raw)
+        return await self.run_single_agent(
+            user_input=summary_prompt,
+            agent_id="writer_agent",
+            session_id=session_id,
+            trace_id=trace_id,
+            runtime_context=runtime_context,
+            emit_final_response=False,
+        )
+
+    async def _plan(
+        self, user_input: str, context_messages: list = None
+    ) -> tuple[RuntimeDelegationDecisionContract, list[dict]]:
+        """先做 delegation 决策，再决定是否生成多 Agent 任务计划。"""
         available_agents = [
             a for a in self.bus.registered_agents if a != "orchestrator"
         ]
@@ -617,18 +741,18 @@ class Orchestrator(BaseAgent):
             available_agents=available_agents,
         )
 
+        decision = decide_delegation(
+            user_input=user_input,
+            available_agents=available_agents,
+            selected_agents=selected_agents,
+            recommendation=recommendation,
+            decision_reason=decision_reason,
+        )
+
         try:
             if self._current_trace_id:
                 decision_payload = json.dumps(
-                    {
-                        "event": "routing_decision",
-                        "mode": "direct_chat"
-                        if not selected_agents
-                        else "selective_collaboration",
-                        "selected_agents": selected_agents,
-                        "reason": decision_reason,
-                        "recommendation": recommendation,
-                    },
+                    {"event": "routing_decision", **decision.model_dump()},
                     ensure_ascii=False,
                 )
                 asyncio.create_task(
@@ -645,17 +769,17 @@ class Orchestrator(BaseAgent):
         except Exception:
             pass
 
-        if not selected_agents:
+        if decision.mode in {"direct_chat", "research", "clarify_first"}:
             logger.info("任务识别为普通对话，跳过多 Agent 协作调度")
-            return []
+            return decision, []
 
         if not available_agents:
             logger.warning("没有可用的 Agent")
-            return []
+            return decision, []
 
         config = _load_agents_config()
         agent_descriptions = []
-        for agent_id in selected_agents:
+        for agent_id in decision.selected_agents:
             for agent_cfg in config.get("agents", []):
                 if agent_cfg.get("id") == agent_id:
                     desc = agent_cfg.get("description", "")
@@ -706,7 +830,7 @@ class Orchestrator(BaseAgent):
             end = text.rfind("]") + 1
             if start == -1 or end == 0:
                 logger.error(f"LLM 返回不是有效的 JSON 格式: {text[:200]}")
-                return _default_parallel_plan(user_input, available_agents)
+                return decision, _default_parallel_plan(user_input, available_agents)
             plan = json.loads(text[start:end])
             normalized = []
             for step in plan:
@@ -726,13 +850,19 @@ class Orchestrator(BaseAgent):
                     step["instruction"] = (
                         f"{step['instruction']}\n\n[建议补充给用户]\n{recommendation}"
                     )
-            return normalized or _default_parallel_plan(user_input, selected_agents)
+            return decision, normalized or _default_parallel_plan(
+                user_input, decision.selected_agents
+            )
         except json.JSONDecodeError as e:
             logger.error(f"JSON 解析失败: {e}, 原始响应: {text[:500]}")
-            return _default_parallel_plan(user_input, selected_agents)
+            return decision, _default_parallel_plan(
+                user_input, decision.selected_agents
+            )
         except Exception as e:
             logger.error(f"任务规划失败: {e}", exc_info=True)
-            return _default_parallel_plan(user_input, selected_agents)
+            return decision, _default_parallel_plan(
+                user_input, decision.selected_agents
+            )
 
     # ── 任务分发（带重试） ─────────────────────────
 
