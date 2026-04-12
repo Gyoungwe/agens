@@ -9,6 +9,8 @@ from memory.context_compressor import ContextCompressor
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CHAT_MEMORY_NAMESPACE = "chat_memory"
+
 
 class SessionMemory:
     """
@@ -31,7 +33,11 @@ class SessionMemory:
         self.compress_threshold = compress_threshold
 
     async def summarize_topic_if_needed(
-        self, session_id: str, role: str, content: str
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        namespace: str = DEFAULT_CHAT_MEMORY_NAMESPACE,
     ) -> bool:
         """当消息包含显式总结触发词时，生成并写入一条结构化记忆摘要。"""
         text = (content or "").lower()
@@ -68,7 +74,12 @@ class SessionMemory:
             session_id=session_id,
             role="system",
             source="auto_summary_trigger",
-            metadata={"triggered": True, "trigger_role": role},
+            metadata={
+                "triggered": True,
+                "trigger_role": role,
+                "namespace": namespace,
+            },
+            namespace=namespace,
         )
         logger.info(f"auto_summary_triggered session={session_id} role={role}")
         return True
@@ -78,12 +89,15 @@ class SessionMemory:
         session_id: str,
         role: str,
         content: str,
+        namespace: str = DEFAULT_CHAT_MEMORY_NAMESPACE,
     ) -> str:
         """添加一条消息到记忆"""
         memory_id = await self.vector_store.add(
             text=f"{role}: {content}",
             session_id=session_id,
             role=role,
+            metadata={"namespace": namespace},
+            namespace=namespace,
         )
         logger.debug(f"Added message to session {session_id}: {role}")
         return memory_id
@@ -94,6 +108,7 @@ class SessionMemory:
         query: str = None,
         max_messages: int = None,
         global_scope: bool = False,
+        namespace: str = DEFAULT_CHAT_MEMORY_NAMESPACE,
     ) -> list[ChatMessage]:
         """
         获取对话上下文。
@@ -108,6 +123,7 @@ class SessionMemory:
                 query=query,
                 session_id=None if global_scope else session_id,
                 top_k=limit,
+                namespace=namespace,
             )
         else:
             if global_scope:
@@ -115,11 +131,13 @@ class SessionMemory:
                     query=session_id,
                     session_id=None,
                     top_k=limit,
+                    namespace=namespace,
                 )
             else:
                 memories = await self.vector_store.get_recent(
                     session_id=session_id,
                     limit=limit,
+                    namespace=namespace,
                 )
 
         messages = []

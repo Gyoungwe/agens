@@ -30,6 +30,8 @@ VECTOR_SIZE = 1024
 EMBEDDING_API_URL = "https://api.siliconflow.cn/v1/embeddings"
 EMBEDDING_MODEL = "BAAI/bge-m3"
 
+DEFAULT_MEMORY_NAMESPACE = "chat_memory"
+
 
 def _get_embedding_api_key():
     return os.getenv("SILICONFLOW_API_KEY", "")
@@ -238,6 +240,7 @@ class VectorStore:
         ttl_seconds: int = 0,
         metadata: dict = None,
         scope_id: str = None,
+        namespace: str = DEFAULT_MEMORY_NAMESPACE,
     ) -> str:
         """
         添加记忆
@@ -261,7 +264,11 @@ class VectorStore:
         _owner = owner or session_id
         _version = version or self.DEFAULT_VERSION
 
-        full_metadata = {"role": role, **(metadata or {})}
+        full_metadata = {
+            "role": role,
+            "namespace": (metadata or {}).get("namespace", namespace),
+            **(metadata or {}),
+        }
         if scope_id:
             full_metadata["scope_id"] = scope_id
 
@@ -305,6 +312,7 @@ class VectorStore:
         top_k: int = 5,
         include_expired: bool = False,
         scope_id: str = None,
+        namespace: str = None,
     ) -> List[dict]:
         """
         向量相似性搜索
@@ -361,6 +369,11 @@ class VectorStore:
                 parsed = self._result_to_dict(r)
                 if scope_id and parsed.get("scope_id") not in (None, "", scope_id):
                     continue
+                if (
+                    namespace
+                    and parsed.get("namespace", DEFAULT_MEMORY_NAMESPACE) != namespace
+                ):
+                    continue
 
                 filtered.append(parsed)
 
@@ -375,6 +388,7 @@ class VectorStore:
         session_id: str,
         limit: int = 10,
         include_expired: bool = False,
+        namespace: str = None,
     ) -> List[dict]:
         """获取最近记忆"""
         try:
@@ -396,12 +410,22 @@ class VectorStore:
                     except Exception:
                         pass
 
+                metadata = json.loads(all_data["metadata"][i])
+                if (
+                    namespace
+                    and metadata.get("namespace", DEFAULT_MEMORY_NAMESPACE) != namespace
+                ):
+                    continue
+
                 results.append(
                     {
                         "id": all_data["id"][i],
                         "text": all_data["text"][i],
                         "session_id": all_data["owner"][i],
-                        "role": json.loads(all_data["metadata"][i]).get("role", ""),
+                        "role": metadata.get("role", ""),
+                        "namespace": metadata.get(
+                            "namespace", DEFAULT_MEMORY_NAMESPACE
+                        ),
                         "created_at": all_data["created_at"][i],
                     }
                 )
@@ -431,6 +455,7 @@ class VectorStore:
             "created_at": r.get("created_at"),
             "role": meta.get("role", ""),
             "scope_id": meta.get("scope_id"),
+            "namespace": meta.get("namespace", DEFAULT_MEMORY_NAMESPACE),
         }
 
     async def delete(self, memory_id: str):
