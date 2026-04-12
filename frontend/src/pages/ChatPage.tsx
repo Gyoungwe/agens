@@ -50,6 +50,38 @@ export function ChatPage() {
     return 'uncertain'
   }
 
+  const looksLikeResearchQuery = (text: string): boolean => {
+    const t = text.trim().toLowerCase()
+    if (!t) return false
+
+    const forcePrefixes = ['[research]', 'research:', 'research：', '研究:', '研究：', '检索:', '检索：']
+    if (forcePrefixes.some((prefix) => t.startsWith(prefix))) return true
+
+    const markers = [
+      'research', 'paper', 'literature', 'citation', 'doi', 'pmid', 'latest', 'recent',
+      '研究', '论文', '文献', '引用', '参考文献', '最新', '方法', '综述',
+      '如何处理', '怎么处理', '处理方法', '最新论文', '最新进展',
+    ]
+    return markers.some((marker) => t.includes(marker))
+  }
+
+  const buildResearchProgressBubble = (selected: string[] = [], completed: string[] = []) => {
+    const selectedLine = selected.length > 0
+      ? `- 已选择检索技能：${selected.join('、')}：进行中`
+      : '- 已选择检索技能：等待中'
+    const completedLine = completed.length > 0
+      ? `- 已完成检索技能：${completed.join('、')}：已完成`
+      : '- 已完成检索技能：等待中'
+
+    return [
+      '## Research in progress',
+      '- 正在选择检索技能与来源：进行中',
+      selectedLine,
+      completedLine,
+      '- 正在整理最终回答：等待中',
+    ].join('\n')
+  }
+
   useEffect(() => {
     fetch('/api/sessions?kind=chat')
       .then((res) => res.json())
@@ -145,10 +177,11 @@ export function ChatPage() {
     setStreaming(true)
 
     const assistantId = `assistant-${Date.now()}`
+    const researchLikely = looksLikeResearchQuery(message)
     addMessage({
       id: assistantId,
       role: 'assistant',
-      content: '',
+      content: researchLikely ? buildResearchProgressBubble() : '',
       created_at: new Date().toISOString(),
       session_id: currentSessionId || undefined,
     })
@@ -244,6 +277,20 @@ export function ChatPage() {
         return lines.join('\n')
       }
 
+      const getStringList = (value: unknown): string[] =>
+        Array.isArray(value) ? value.map((item) => String(item)) : []
+
+      const getResearchSelectionPayload = (data: Record<string, unknown>) => {
+        const nested = (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : null
+        const source = nested ?? data
+        return {
+          message: String(source.message || data.message || ''),
+          summary: String(source.summary || data.summary || ''),
+          selected: getStringList(source.selected_skills ?? source.selected ?? source.skills),
+          completed: getStringList(source.completed_skills ?? source.completed),
+        }
+      }
+
       for await (const sseEvent of parseSSEStream(reader, decoder)) {
         traceId = (sseEvent.data.trace_id as string) || traceId
 
@@ -304,6 +351,32 @@ export function ChatPage() {
           setStreamStageLabel('Synthesizing final response...')
         } else if (sseEvent.eventType === 'error') {
           throw new Error((eventData.message as string) || (eventData.error as string) || 'stream error')
+        }
+
+        // Live progress updates for research skill selection in the main assistant bubble
+        if (sseEvent.eventType === 'agent_thinking') {
+          const payload = getResearchSelectionPayload(eventData)
+          if (/research skill selection:/i.test(payload.message)) {
+            updateMessage(
+              assistantId,
+              { content: buildResearchProgressBubble(payload.selected, []) } as Partial<Message>,
+            )
+          }
+        } else if (sseEvent.eventType === 'agent_output') {
+          const payload = getResearchSelectionPayload(eventData)
+          const parts: string[] = []
+          if (payload.selected.length > 0) {
+            parts.push(`Selected: ${payload.selected.join(', ')}`)
+          }
+          if (payload.completed.length > 0) {
+            parts.push(`Completed: ${payload.completed.join(', ')}`)
+          }
+          if (payload.summary === 'research_skill_selection' && parts.length > 0) {
+            updateMessage(
+              assistantId,
+              { content: buildResearchProgressBubble(payload.selected, payload.completed) } as Partial<Message>,
+            )
+          }
         }
       }
 
