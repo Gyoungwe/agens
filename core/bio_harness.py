@@ -239,7 +239,9 @@ class BioWorkflowHarness:
                 session_id=session_id,
                 owner=spec.agent_id,
                 source="bio_workflow_stage",
+                namespace="workflow_memory",
                 metadata={
+                    "namespace": "workflow_memory",
                     "stage": spec.name,
                     "status": result.status,
                     "trace_id": result.trace_id,
@@ -359,6 +361,7 @@ class BioWorkflowHarness:
             agent_id=spec.agent_id,
             trace_id=stage_trace,
             session_id=session_id,
+            namespace="workflow_runtime",
         )
 
         self.state_manager.save_checkpoint(
@@ -379,6 +382,7 @@ class BioWorkflowHarness:
             agent_id=spec.agent_id,
             trace_id=stage_trace,
             session_id=session_id,
+            namespace="workflow_runtime",
         )
 
         async def emit_stage_progress(elapsed_ms: int):
@@ -391,6 +395,7 @@ class BioWorkflowHarness:
                 agent_id=spec.agent_id,
                 trace_id=stage_trace,
                 session_id=session_id,
+                namespace="workflow_runtime",
                 elapsed_ms=elapsed_ms,
                 progress_pct=progress_pct,
                 waiting_for="model_response",
@@ -462,6 +467,7 @@ class BioWorkflowHarness:
             agent_id=spec.agent_id,
             trace_id=stage_trace,
             session_id=session_id,
+            namespace="workflow_runtime",
             status=result.status,
             elapsed_ms=result.elapsed_ms,
             output=result.output,
@@ -509,6 +515,7 @@ class BioWorkflowHarness:
             agent_id="harness",
             trace_id=trace_id,
             session_id=session_id,
+            namespace="workflow_runtime",
             goal=goal,
             dataset=dataset,
             scope_id=scope_id,

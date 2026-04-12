@@ -125,6 +125,7 @@ class BaseAgent(ABC):
         self._trace_emitters = collections.defaultdict(list)
         self._current_trace_id = None
         self._current_session_id = None
+        self._current_namespace = ""
 
     def set_event_emitter(self, emit_fn):
         """设置事件发射回调，用于实时事件流"""
@@ -151,6 +152,8 @@ class BaseAgent(ABC):
 
     def _emit(self, event):
         """发射事件到回调"""
+        if hasattr(event, "namespace") and not getattr(event, "namespace", ""):
+            event.namespace = self._current_namespace or ""
         event_type = getattr(event, "type", None) or (
             event.event_type.value if hasattr(event, "event_type") else "unknown"
         )
@@ -284,8 +287,10 @@ class BaseAgent(ABC):
 
         previous_trace_id = self._current_trace_id
         previous_session_id = self._current_session_id
+        previous_namespace = self._current_namespace
         self._current_trace_id = message.trace_id
         self._current_session_id = message.session_id or task.context.get("session_id")
+        self._current_namespace = task.context.get("namespace", "")
 
         self._emit(
             EventEnvelope.agent_start(
@@ -350,9 +355,10 @@ class BaseAgent(ABC):
                         ).model_dump(),
                     )
                 )
-                self._current_trace_id = previous_trace_id
-                self._current_session_id = previous_session_id
-                return
+            self._current_trace_id = previous_trace_id
+            self._current_session_id = previous_session_id
+            self._current_namespace = previous_namespace
+            return
 
         import time
 
@@ -470,6 +476,7 @@ class BaseAgent(ABC):
 
         self._current_trace_id = previous_trace_id
         self._current_session_id = previous_session_id
+        self._current_namespace = previous_namespace
 
     async def _handle_status(self, message: Message):
         """处理状态消息（默认忽略，子类可覆盖）"""
@@ -523,6 +530,7 @@ class BaseAgent(ABC):
         """Agent 调用技能的统一入口（带 Pre/Post Hooks）"""
         previous_trace_id = self._current_trace_id
         previous_session_id = self._current_session_id
+        previous_namespace = self._current_namespace
         if self.registry is None:
             raise RuntimeError("SkillRegistry 未注入")
 
@@ -558,6 +566,7 @@ class BaseAgent(ABC):
                     skill_id=skill_id,
                     instruction=instruction,
                     session_id=self._current_session_id,
+                    namespace=self._current_namespace,
                 )
             )
 
@@ -567,6 +576,7 @@ class BaseAgent(ABC):
                     trace_id=self._current_trace_id or "",
                     message=f"Executing skill: {skill_id}",
                     session_id=self._current_session_id,
+                    namespace=self._current_namespace,
                 )
             )
 
@@ -586,6 +596,7 @@ class BaseAgent(ABC):
                     output=str(output)[:500],
                     summary=str(output)[:100],
                     session_id=self._current_session_id,
+                    namespace=self._current_namespace,
                 )
             )
 
@@ -626,6 +637,7 @@ class BaseAgent(ABC):
         finally:
             self._current_trace_id = previous_trace_id
             self._current_session_id = previous_session_id
+            self._current_namespace = previous_namespace
 
     # ── 知识库检索 ───────────────────────────────
 
@@ -635,6 +647,7 @@ class BaseAgent(ABC):
         topic: str = None,
         top_k: int = 3,
         scope_id: str = None,
+        namespace: str = None,
     ) -> str:
         """执行前自动检索相关知识，KB 不可用时静默跳过"""
         if self.knowledge is None:
@@ -649,6 +662,7 @@ class BaseAgent(ABC):
                 topic=topic,
                 top_k=top_k,
                 scope_id=scope_id,
+                namespace=namespace,
             )
         except RuntimeError as e:
             if "未初始化" in str(e) or "连接失败" in str(e):
@@ -660,6 +674,7 @@ class BaseAgent(ABC):
         query: str,
         top_k: int = 3,
         scope_id: str = None,
+        namespace: str = None,
     ) -> str:
         """检索 Agent 独立记忆，KB 不可用时静默跳过"""
         if self.memory_store is None:
@@ -670,6 +685,7 @@ class BaseAgent(ABC):
                 owner=self.agent_id,
                 top_k=top_k,
                 scope_id=scope_id,
+                namespace=namespace,
             )
         except Exception as e:
             logger.warning(f"[{self.agent_id}] memory retrieval failed: {e}")
@@ -699,21 +715,26 @@ class BaseAgent(ABC):
                 trace_id=self._current_trace_id or "",
                 message="正在思考问题...",
                 session_id=self._current_session_id,
+                namespace=(context or {}).get("namespace", self._current_namespace),
             )
         )
 
         scope_id = context.get("scope_id") if context else None
         knowledge_topic = context.get("knowledge_topic") if context else None
+        knowledge_namespace = context.get("knowledge_namespace") if context else None
+        memory_namespace = context.get("memory_namespace") if context else None
         knowledge_ctx = await self.retrieve_context(
             instruction,
             topic=knowledge_topic,
             top_k=3,
             scope_id=scope_id,
+            namespace=knowledge_namespace,
         )
         memory_ctx = await self.retrieve_memory_context(
             instruction,
             top_k=3,
             scope_id=scope_id,
+            namespace=memory_namespace,
         )
 
         prompt_system = system or self.get_system_prompt()
@@ -748,6 +769,7 @@ class BaseAgent(ABC):
                 skill_id="llm",
                 instruction=instruction[:100],
                 session_id=self._current_session_id,
+                namespace=(context or {}).get("namespace", self._current_namespace),
             )
         )
 
@@ -764,6 +786,7 @@ class BaseAgent(ABC):
                 output=resp.text[:200] if resp.text else "",
                 summary=resp.text[:100] if resp.text else "",
                 session_id=self._current_session_id,
+                namespace=(context or {}).get("namespace", self._current_namespace),
             )
         )
 
@@ -779,16 +802,20 @@ class BaseAgent(ABC):
         """流式 LLM 调用，返回异步生成器"""
         scope_id = context.get("scope_id") if context else None
         knowledge_topic = context.get("knowledge_topic") if context else None
+        knowledge_namespace = context.get("knowledge_namespace") if context else None
+        memory_namespace = context.get("memory_namespace") if context else None
         knowledge_ctx = await self.retrieve_context(
             instruction,
             topic=knowledge_topic,
             top_k=3,
             scope_id=scope_id,
+            namespace=knowledge_namespace,
         )
         memory_ctx = await self.retrieve_memory_context(
             instruction,
             top_k=3,
             scope_id=scope_id,
+            namespace=memory_namespace,
         )
 
         prompt_system = system or self.get_system_prompt()

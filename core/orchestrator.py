@@ -489,7 +489,12 @@ class Orchestrator(BaseAgent):
         if session_id:
             sm.resume_session(session_id)
         else:
-            sm.new_session(title=user_input[:40])
+            kind = (
+                (runtime_context or {}).get("session_kind", "chat")
+                if runtime_context
+                else "chat"
+            )
+            sm.new_session(title=user_input[:40], kind=kind)
             session_id = sm.current_session_id
         self._current_session_id = session_id
 
@@ -504,6 +509,8 @@ class Orchestrator(BaseAgent):
                 agent_id=agent_id,
                 trace_id=trace_id,
                 instruction=user_input,
+                session_id=session_id,
+                namespace=(runtime_context or {}).get("namespace", ""),
             )
         )
 
@@ -536,6 +543,8 @@ class Orchestrator(BaseAgent):
                     agent_id=agent_id,
                     trace_id=trace_id,
                     result=final,
+                    session_id=session_id,
+                    namespace=(runtime_context or {}).get("namespace", ""),
                 )
             )
 
@@ -545,6 +554,7 @@ class Orchestrator(BaseAgent):
                     trace_id=trace_id,
                     response=final,
                     session_id=session_id,
+                    namespace=(runtime_context or {}).get("namespace", ""),
                 )
             )
 
@@ -628,6 +638,7 @@ class Orchestrator(BaseAgent):
                             trace_id=self._current_trace_id,
                             output=decision_payload,
                             summary="routing_decision",
+                            namespace="chat_runtime",
                         )
                     )
                 )
@@ -792,16 +803,17 @@ class Orchestrator(BaseAgent):
                 "error": str(e),
                 "error_code": "RETRY_EXHAUSTED",
             }
-            await self._emit_event(
-                EventEnvelope.task_failed(
-                    agent_id=recipient,
-                    trace_id=trace_id,
-                    error_message=str(e),
-                    error_code="RETRY_EXHAUSTED",
-                    session_id=session_id,
-                )
+        await self._emit_event(
+            EventEnvelope.task_failed(
+                agent_id=recipient,
+                trace_id=trace_id,
+                error_message=str(e),
+                error_code="RETRY_EXHAUSTED",
+                session_id=session_id,
+                namespace=(runtime_context or {}).get("namespace", ""),
             )
-            return {"error": str(e)}
+        )
+        return {"error": str(e)}
 
     async def _dispatch(
         self,
@@ -828,6 +840,7 @@ class Orchestrator(BaseAgent):
                 trace_id=trace_id,
                 instruction=original_input,
                 session_id=session_id,
+                namespace="chat_runtime",
             )
         )
 
@@ -961,6 +974,7 @@ class Orchestrator(BaseAgent):
                     trace_id=trace_id,
                     timeout_seconds=timeout,
                     session_id=session_id,
+                    namespace="chat_runtime",
                 )
             )
             if trace_id in self._pending:
