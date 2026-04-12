@@ -6,6 +6,7 @@ export interface ResearchRunResponse {
   query: string
   research: string
   summary: string
+  summary_format?: 'text' | 'json'
 }
 
 export interface ResearchStreamEvent {
@@ -22,6 +23,7 @@ export interface ResearchStreamEvent {
   point?: string
   research?: string
   summary?: string
+  summary_format?: 'text' | 'json'
   sources?: string[]
   knowledge?: string[]
 }
@@ -30,13 +32,18 @@ export const researchApi = {
   run: (data: { query: string; session_id?: string; provider_id?: string }) =>
     client.post<ResearchRunResponse>('/research/run', data),
 
-  stream: async (data: { query: string; session_id?: string; provider_id?: string }) =>
+  stream: async (data: { query: string; session_id?: string; provider_id?: string; signal?: AbortSignal }) =>
     fetch('/api/research/stream', {
       method: 'POST',
+      signal: data.signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        query: data.query,
+        session_id: data.session_id,
+        provider_id: data.provider_id,
+      }),
     }),
 }

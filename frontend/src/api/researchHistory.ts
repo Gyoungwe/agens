@@ -1,5 +1,5 @@
 import client from './client'
-import type { Message, Session } from '@/types'
+import type { Session } from '@/types'
 
 export interface SessionResultsResponse {
   session_id: string
@@ -15,20 +15,27 @@ export interface SessionResultsResponse {
   }>
 }
 
-export interface ChatHistoryResponse {
+export interface ResearchHistoryResponse {
   session_id: string
   title?: string
   status?: 'active' | 'completed' | 'closed' | string
   created_at?: string
   updated_at?: string
-  message_count?: number
-  messages: Message[]
+  results_count: number
+  results: Array<{
+    agent_id: string
+    result: string
+    created_at: string
+    trace_id?: string
+  }>
 }
 
 export const researchHistoryApi = {
-  listSessions: () => client.get<Session[]>('/sessions'),
-  getChatHistory: (sessionId: string) =>
-    client.get<ChatHistoryResponse>(`/chat/history/${sessionId}`),
+  listSessions: () => client.get<Session[]>('/sessions', { params: { kind: 'research' } }),
+  getResearchHistory: (sessionId: string) =>
+    client.get<ResearchHistoryResponse>(`/research/history/${sessionId}`),
+  deleteResearchSession: (sessionId: string) =>
+    client.delete(`/research/sessions/${sessionId}`),
   getSessionResults: (sessionId: string) =>
-    client.get<SessionResultsResponse>(`/debug/results/${sessionId}`),
+    client.get<SessionResultsResponse>(`/sessions/${sessionId}/results`),
 }
