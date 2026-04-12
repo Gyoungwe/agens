@@ -1,0 +1,39 @@
+skill_id: molecular_dynamics
+name: molecular-dynamics
+description: Run and analyze molecular dynamics simulations with OpenMM and MDAnalysis.
+  Set up protein/small molecule systems, define force fields, run energy minimization
+  and production MD, analyze trajectories (RMSD, RMSF, contact maps, free energy surfaces).
+  For structural biology, drug binding, and biophysics.
+version: 1.0.0
+author: Kuan-lin Huang
+license: MIT
+tags:
+- scientific-agent-skills
+- molecular-dynamics
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: molecular-dynamics
+  upstream_path: scientific-skills/molecular-dynamics/SKILL.md
+  upstream_frontmatter:
+    name: molecular-dynamics
+    description: Run and analyze molecular dynamics simulations with OpenMM and MDAnalysis.
+      Set up protein/small molecule systems, define force fields, run energy minimization
+      and production MD, analyze trajectories (RMSD, RMSF, contact maps, free energy
+      surfaces). For structural biology, drug binding, and biophysics.
+    license: MIT
+    metadata:
+      skill-author: Kuan-lin Huang

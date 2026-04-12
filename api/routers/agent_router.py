@@ -34,12 +34,12 @@ async def list_agents():
         result = []
         for agent in agents:
             agent_id = agent["agent_id"]
-            skills = [s for s in all_skills if agent_id in s.get("agent_ids", "[]")]
+            skills = registry.get_for_agent_metadata(agent_id)
             result.append(
                 {
                     **agent,
                     "skill_count": len(skills),
-                    "skills": [s.get("name", s["skill_id"]) for s in skills],
+                    "skills": [s.name or s.skill_id for s in skills],
                 }
             )
 

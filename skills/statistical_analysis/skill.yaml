@@ -1,0 +1,40 @@
+skill_id: statistical_analysis
+name: statistical-analysis
+description: Guided statistical analysis with test selection and reporting. Use when
+  you need help choosing appropriate tests for your data, assumption checking, power
+  analysis, and APA-formatted results. Best for academic research reporting, test
+  selection guidance. For implementing specific models programmatically use statsmodels.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- statistical-analysis
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: statistical-analysis
+  upstream_path: scientific-skills/statistical-analysis/SKILL.md
+  upstream_frontmatter:
+    name: statistical-analysis
+    description: Guided statistical analysis with test selection and reporting. Use
+      when you need help choosing appropriate tests for your data, assumption checking,
+      power analysis, and APA-formatted results. Best for academic research reporting,
+      test selection guidance. For implementing specific models programmatically use
+      statsmodels.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

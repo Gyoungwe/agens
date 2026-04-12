@@ -1,0 +1,37 @@
+skill_id: pymatgen
+name: pymatgen
+description: Materials science toolkit. Crystal structures (CIF, POSCAR), phase diagrams,
+  band structure, DOS, Materials Project integration, format conversion, for computational
+  materials science.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- pymatgen
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pymatgen
+  upstream_path: scientific-skills/pymatgen/SKILL.md
+  upstream_frontmatter:
+    name: pymatgen
+    description: Materials science toolkit. Crystal structures (CIF, POSCAR), phase
+      diagrams, band structure, DOS, Materials Project integration, format conversion,
+      for computational materials science.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

@@ -1,0 +1,39 @@
+skill_id: phylogenetics
+name: phylogenetics
+description: Build and analyze phylogenetic trees using MAFFT (multiple alignment),
+  IQ-TREE 2 (maximum likelihood), and FastTree (fast NJ/ML). Visualize with ETE3 or
+  FigTree. For evolutionary analysis, microbial genomics, viral phylodynamics, protein
+  family analysis, and molecular clock studies.
+version: 1.0.0
+author: Kuan-lin Huang
+license: Unknown
+tags:
+- scientific-agent-skills
+- phylogenetics
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: phylogenetics
+  upstream_path: scientific-skills/phylogenetics/SKILL.md
+  upstream_frontmatter:
+    name: phylogenetics
+    description: Build and analyze phylogenetic trees using MAFFT (multiple alignment),
+      IQ-TREE 2 (maximum likelihood), and FastTree (fast NJ/ML). Visualize with ETE3
+      or FigTree. For evolutionary analysis, microbial genomics, viral phylodynamics,
+      protein family analysis, and molecular clock studies.
+    license: Unknown
+    metadata:
+      skill-author: Kuan-lin Huang

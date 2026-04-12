@@ -1,0 +1,49 @@
+skill_id: peer_review
+name: peer-review
+description: Structured manuscript/grant review with checklist-based evaluation. Use
+  when writing formal peer reviews with specific criteria methodology assessment,
+  statistical validity, reporting standards compliance (CONSORT/STROBE), and constructive
+  feedback. Best for actual review writing, manuscript revision. For evaluating claims/evidence
+  quality use scientific-critical-thinking; for quantitative scoring frameworks use
+  scholar-evaluation.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- peer-review
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: peer-review
+  upstream_path: scientific-skills/peer-review/SKILL.md
+  upstream_frontmatter:
+    name: peer-review
+    description: Structured manuscript/grant review with checklist-based evaluation.
+      Use when writing formal peer reviews with specific criteria methodology assessment,
+      statistical validity, reporting standards compliance (CONSORT/STROBE), and constructive
+      feedback. Best for actual review writing, manuscript revision. For evaluating
+      claims/evidence quality use scientific-critical-thinking; for quantitative scoring
+      frameworks use scholar-evaluation.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

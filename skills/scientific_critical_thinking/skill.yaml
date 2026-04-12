@@ -1,0 +1,45 @@
+skill_id: scientific_critical_thinking
+name: scientific-critical-thinking
+description: Evaluate scientific claims and evidence quality. Use for assessing experimental
+  design validity, identifying biases and confounders, applying evidence grading frameworks
+  (GRADE, Cochrane Risk of Bias), or teaching critical analysis. Best for understanding
+  evidence quality, identifying flaws. For formal peer review writing use peer-review.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- scientific-critical-thinking
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: scientific-critical-thinking
+  upstream_path: scientific-skills/scientific-critical-thinking/SKILL.md
+  upstream_frontmatter:
+    name: scientific-critical-thinking
+    description: Evaluate scientific claims and evidence quality. Use for assessing
+      experimental design validity, identifying biases and confounders, applying evidence
+      grading frameworks (GRADE, Cochrane Risk of Bias), or teaching critical analysis.
+      Best for understanding evidence quality, identifying flaws. For formal peer
+      review writing use peer-review.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

@@ -1,0 +1,44 @@
+skill_id: vaex
+name: vaex
+description: Use this skill for processing and analyzing large tabular datasets (billions
+  of rows) that exceed available RAM. Vaex excels at out-of-core DataFrame operations,
+  lazy evaluation, fast aggregations, efficient visualization of big data, and machine
+  learning on large datasets. Apply when users need to work with large CSV/HDF5/Arrow/Parquet
+  files, perform fast statistics on massive datasets, create visualizations of big
+  data, or build ML pipelines that do not fit in memory.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- vaex
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: vaex
+  upstream_path: scientific-skills/vaex/SKILL.md
+  upstream_frontmatter:
+    name: vaex
+    description: Use this skill for processing and analyzing large tabular datasets
+      (billions of rows) that exceed available RAM. Vaex excels at out-of-core DataFrame
+      operations, lazy evaluation, fast aggregations, efficient visualization of big
+      data, and machine learning on large datasets. Apply when users need to work
+      with large CSV/HDF5/Arrow/Parquet files, perform fast statistics on massive
+      datasets, create visualizations of big data, or build ML pipelines that do not
+      fit in memory.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

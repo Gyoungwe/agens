@@ -1,0 +1,41 @@
+skill_id: torchdrug
+name: torchdrug
+description: PyTorch-native graph neural networks for molecules and proteins. Use
+  when building custom GNN architectures for drug discovery, protein modeling, or
+  knowledge graph reasoning. Best for custom model development, protein property prediction,
+  retrosynthesis. For pre-trained models and diverse featurizers use deepchem; for
+  benchmark datasets use pytdc.
+version: 1.0.0
+author: K-Dense Inc.
+license: Apache-2.0 license
+tags:
+- scientific-agent-skills
+- torchdrug
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: torchdrug
+  upstream_path: scientific-skills/torchdrug/SKILL.md
+  upstream_frontmatter:
+    name: torchdrug
+    description: PyTorch-native graph neural networks for molecules and proteins.
+      Use when building custom GNN architectures for drug discovery, protein modeling,
+      or knowledge graph reasoning. Best for custom model development, protein property
+      prediction, retrosynthesis. For pre-trained models and diverse featurizers use
+      deepchem; for benchmark datasets use pytdc.
+    license: Apache-2.0 license
+    metadata:
+      skill-author: K-Dense Inc.

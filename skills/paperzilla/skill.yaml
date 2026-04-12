@@ -1,0 +1,39 @@
+skill_id: paperzilla
+name: paperzilla
+description: Chat with your agent about projects, recommendations, and canonical papers
+  in Paperzilla. Use when users ask for recent project recommendations, canonical
+  paper details, markdown-based summaries, recommendation feedback, feed export, or
+  Atom feed URLs.
+version: 1.0.0
+author: Paperzilla Inc
+license: MIT
+tags:
+- scientific-agent-skills
+- paperzilla
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: paperzilla
+  upstream_path: scientific-skills/paperzilla/SKILL.md
+  upstream_frontmatter:
+    name: paperzilla
+    description: Chat with your agent about projects, recommendations, and canonical
+      papers in Paperzilla. Use when users ask for recent project recommendations,
+      canonical paper details, markdown-based summaries, recommendation feedback,
+      feed export, or Atom feed URLs.
+    license: MIT
+    metadata:
+      skill-author: Paperzilla Inc

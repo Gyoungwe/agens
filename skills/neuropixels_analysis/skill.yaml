@@ -1,0 +1,43 @@
+skill_id: neuropixels_analysis
+name: neuropixels-analysis
+description: Neuropixels neural recording analysis. Load SpikeGLX/OpenEphys data,
+  preprocess, motion correction, Kilosort4 spike sorting, quality metrics, Allen/IBL
+  curation, AI-assisted visual analysis, for Neuropixels 1.0/2.0 extracellular electrophysiology.
+  Use when working with neural recordings, spike sorting, extracellular electrophysiology,
+  or when the user mentions Neuropixels, SpikeGLX, Open Ephys, Kilosort, quality metrics,
+  or unit curation.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- neuropixels-analysis
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: neuropixels-analysis
+  upstream_path: scientific-skills/neuropixels-analysis/SKILL.md
+  upstream_frontmatter:
+    name: neuropixels-analysis
+    description: Neuropixels neural recording analysis. Load SpikeGLX/OpenEphys data,
+      preprocess, motion correction, Kilosort4 spike sorting, quality metrics, Allen/IBL
+      curation, AI-assisted visual analysis, for Neuropixels 1.0/2.0 extracellular
+      electrophysiology. Use when working with neural recordings, spike sorting, extracellular
+      electrophysiology, or when the user mentions Neuropixels, SpikeGLX, Open Ephys,
+      Kilosort, quality metrics, or unit curation.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

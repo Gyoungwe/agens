@@ -1,0 +1,37 @@
+skill_id: zarr_python
+name: zarr-python
+description: Chunked N-D arrays for cloud storage. Compressed arrays, parallel I/O,
+  S3/GCS integration, NumPy/Dask/Xarray compatible, for large-scale scientific computing
+  pipelines.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- zarr-python
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: zarr-python
+  upstream_path: scientific-skills/zarr-python/SKILL.md
+  upstream_frontmatter:
+    name: zarr-python
+    description: Chunked N-D arrays for cloud storage. Compressed arrays, parallel
+      I/O, S3/GCS integration, NumPy/Dask/Xarray compatible, for large-scale scientific
+      computing pipelines.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

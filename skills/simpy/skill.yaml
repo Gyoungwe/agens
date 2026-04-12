@@ -1,0 +1,40 @@
+skill_id: simpy
+name: simpy
+description: Process-based discrete-event simulation framework in Python. Use this
+  skill when building simulations of systems with processes, queues, resources, and
+  time-based events such as manufacturing systems, service operations, network traffic,
+  logistics, or any system where entities interact with shared resources over time.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- simpy
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: simpy
+  upstream_path: scientific-skills/simpy/SKILL.md
+  upstream_frontmatter:
+    name: simpy
+    description: Process-based discrete-event simulation framework in Python. Use
+      this skill when building simulations of systems with processes, queues, resources,
+      and time-based events such as manufacturing systems, service operations, network
+      traffic, logistics, or any system where entities interact with shared resources
+      over time.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

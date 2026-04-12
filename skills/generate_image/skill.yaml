@@ -1,0 +1,42 @@
+skill_id: generate_image
+name: generate-image
+description: Generate or edit images using AI models (FLUX, Nano Banana 2). Use for
+  general-purpose image generation including photos, illustrations, artwork, visual
+  assets, concept art, and any image that is not a technical diagram or schematic.
+  For flowcharts, circuits, pathways, and technical diagrams, use the scientific-schematics
+  skill instead.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- generate-image
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: generate-image
+  upstream_path: scientific-skills/generate-image/SKILL.md
+  upstream_frontmatter:
+    name: generate-image
+    description: Generate or edit images using AI models (FLUX, Nano Banana 2). Use
+      for general-purpose image generation including photos, illustrations, artwork,
+      visual assets, concept art, and any image that is not a technical diagram or
+      schematic. For flowcharts, circuits, pathways, and technical diagrams, use the
+      scientific-schematics skill instead.
+    license: MIT license
+    compatibility: Requires an OpenRouter API key
+    metadata:
+      skill-author: K-Dense Inc.

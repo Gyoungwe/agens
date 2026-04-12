@@ -1,0 +1,39 @@
+skill_id: opentrons_integration
+name: opentrons-integration
+description: Official Opentrons Protocol API for OT-2 and Flex robots. Use when writing
+  protocols specifically for Opentrons hardware with full access to Protocol API v2
+  features. Best for production Opentrons protocols, official API compatibility. For
+  multi-vendor automation or broader equipment control use pylabrobot.
+version: 1.0.0
+author: K-Dense Inc.
+license: Unknown
+tags:
+- scientific-agent-skills
+- opentrons-integration
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: opentrons-integration
+  upstream_path: scientific-skills/opentrons-integration/SKILL.md
+  upstream_frontmatter:
+    name: opentrons-integration
+    description: Official Opentrons Protocol API for OT-2 and Flex robots. Use when
+      writing protocols specifically for Opentrons hardware with full access to Protocol
+      API v2 features. Best for production Opentrons protocols, official API compatibility.
+      For multi-vendor automation or broader equipment control use pylabrobot.
+    license: Unknown
+    metadata:
+      skill-author: K-Dense Inc.

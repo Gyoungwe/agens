@@ -1,0 +1,44 @@
+skill_id: pyhealth
+name: pyhealth
+description: Comprehensive healthcare AI toolkit for developing, testing, and deploying
+  machine learning models with clinical data. This skill should be used when working
+  with electronic health records (EHR), clinical prediction tasks (mortality, readmission,
+  drug recommendation), medical coding systems (ICD, NDC, ATC), physiological signals
+  (EEG, ECG), healthcare datasets (MIMIC-III/IV, eICU, OMOP), or implementing deep
+  learning models for healthcare applications (RETAIN, SafeDrug, Transformer, GNN).
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- pyhealth
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pyhealth
+  upstream_path: scientific-skills/pyhealth/SKILL.md
+  upstream_frontmatter:
+    name: pyhealth
+    description: Comprehensive healthcare AI toolkit for developing, testing, and
+      deploying machine learning models with clinical data. This skill should be used
+      when working with electronic health records (EHR), clinical prediction tasks
+      (mortality, readmission, drug recommendation), medical coding systems (ICD,
+      NDC, ATC), physiological signals (EEG, ECG), healthcare datasets (MIMIC-III/IV,
+      eICU, OMOP), or implementing deep learning models for healthcare applications
+      (RETAIN, SafeDrug, Transformer, GNN).
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

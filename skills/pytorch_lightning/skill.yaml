@@ -1,0 +1,39 @@
+skill_id: pytorch_lightning
+name: pytorch-lightning
+description: Deep learning framework (PyTorch Lightning). Organize PyTorch code into
+  LightningModules, configure Trainers for multi-GPU/TPU, implement data pipelines,
+  callbacks, logging (W&B, TensorBoard), distributed training (DDP, FSDP, DeepSpeed),
+  for scalable neural network training.
+version: 1.0.0
+author: K-Dense Inc.
+license: Apache-2.0 license
+tags:
+- scientific-agent-skills
+- pytorch-lightning
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pytorch-lightning
+  upstream_path: scientific-skills/pytorch-lightning/SKILL.md
+  upstream_frontmatter:
+    name: pytorch-lightning
+    description: Deep learning framework (PyTorch Lightning). Organize PyTorch code
+      into LightningModules, configure Trainers for multi-GPU/TPU, implement data
+      pipelines, callbacks, logging (W&B, TensorBoard), distributed training (DDP,
+      FSDP, DeepSpeed), for scalable neural network training.
+    license: Apache-2.0 license
+    metadata:
+      skill-author: K-Dense Inc.

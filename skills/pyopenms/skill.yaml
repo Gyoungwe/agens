@@ -1,0 +1,41 @@
+skill_id: pyopenms
+name: pyopenms
+description: Complete mass spectrometry analysis platform. Use for proteomics workflows
+  feature detection, peptide identification, protein quantification, and complex LC-MS/MS
+  pipelines. Supports extensive file formats and algorithms. Best for proteomics,
+  comprehensive MS data processing. For simple spectral comparison and metabolite
+  ID use matchms.
+version: 1.0.0
+author: K-Dense Inc.
+license: 3 clause BSD license
+tags:
+- scientific-agent-skills
+- pyopenms
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pyopenms
+  upstream_path: scientific-skills/pyopenms/SKILL.md
+  upstream_frontmatter:
+    name: pyopenms
+    description: Complete mass spectrometry analysis platform. Use for proteomics
+      workflows feature detection, peptide identification, protein quantification,
+      and complex LC-MS/MS pipelines. Supports extensive file formats and algorithms.
+      Best for proteomics, comprehensive MS data processing. For simple spectral comparison
+      and metabolite ID use matchms.
+    license: 3 clause BSD license
+    metadata:
+      skill-author: K-Dense Inc.

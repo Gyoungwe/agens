@@ -1,0 +1,37 @@
+skill_id: omero_integration
+name: omero-integration
+description: Microscopy data management platform. Access images via Python, retrieve
+  datasets, analyze pixels, manage ROIs/annotations, batch processing, for high-content
+  screening and microscopy workflows.
+version: 1.0.0
+author: K-Dense Inc.
+license: Unknown
+tags:
+- scientific-agent-skills
+- omero-integration
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: omero-integration
+  upstream_path: scientific-skills/omero-integration/SKILL.md
+  upstream_frontmatter:
+    name: omero-integration
+    description: Microscopy data management platform. Access images via Python, retrieve
+      datasets, analyze pixels, manage ROIs/annotations, batch processing, for high-content
+      screening and microscopy workflows.
+    license: Unknown
+    metadata:
+      skill-author: K-Dense Inc.

@@ -1,0 +1,47 @@
+skill_id: timesfm_forecasting
+name: timesfm-forecasting
+description: Zero-shot time series forecasting with Google's TimesFM foundation model.
+  Use for any univariate time series (sales, sensors, energy, vitals, weather) without
+  training a custom model. Supports CSV/DataFrame/array inputs with point forecasts
+  and prediction intervals. Includes a preflight system checker script to verify RAM/GPU
+  before first use.
+version: 1.0.0
+author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
+license: Apache-2.0 license
+tags:
+- scientific-agent-skills
+- timesfm-forecasting
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: timesfm-forecasting
+  upstream_path: scientific-skills/timesfm-forecasting/SKILL.md
+  upstream_frontmatter:
+    name: timesfm-forecasting
+    description: Zero-shot time series forecasting with Google's TimesFM foundation
+      model. Use for any univariate time series (sales, sensors, energy, vitals, weather)
+      without training a custom model. Supports CSV/DataFrame/array inputs with point
+      forecasts and prediction intervals. Includes a preflight system checker script
+      to verify RAM/GPU before first use.
+    allowed-tools: Read Write Edit Bash
+    license: Apache-2.0 license
+    metadata:
+      skill-author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
+      skill-version: 1.0.0

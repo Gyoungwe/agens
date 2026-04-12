@@ -1,0 +1,41 @@
+skill_id: stable_baselines3
+name: stable-baselines3
+description: Production-ready reinforcement learning algorithms (PPO, SAC, DQN, TD3,
+  DDPG, A2C) with scikit-learn-like API. Use for standard RL experiments, quick prototyping,
+  and well-documented algorithm implementations. Best for single-agent RL with Gymnasium
+  environments. For high-performance parallel training, multi-agent systems, or custom
+  vectorized environments, use pufferlib instead.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- stable-baselines3
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: stable-baselines3
+  upstream_path: scientific-skills/stable-baselines3/SKILL.md
+  upstream_frontmatter:
+    name: stable-baselines3
+    description: Production-ready reinforcement learning algorithms (PPO, SAC, DQN,
+      TD3, DDPG, A2C) with scikit-learn-like API. Use for standard RL experiments,
+      quick prototyping, and well-documented algorithm implementations. Best for single-agent
+      RL with Gymnasium environments. For high-performance parallel training, multi-agent
+      systems, or custom vectorized environments, use pufferlib instead.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

@@ -1,0 +1,49 @@
+skill_id: optimize_for_gpu
+name: optimize-for-gpu
+description: GPU-accelerate Python code using CuPy, Numba CUDA, Warp, cuDF, cuML,
+  cuGraph, KvikIO, cuCIM, cuxfilter, cuVS, cuSpatial, and RAFT. Use whenever the user
+  mentions GPU/CUDA/NVIDIA acceleration, or wants to speed up NumPy, pandas, scikit-learn,
+  scikit-image, NetworkX, GeoPandas, or Faiss workloads. Covers physics simulation,
+  differentiable rendering, mesh ray casting, particle systems (DEM/SPH/fluids), vector/similarity
+  search, GPUDirect Storage file IO, interactive dashboards, geospatial analysis,
+  medical imaging, and sparse eigensolvers. Also use when you see CPU-bound Python
+  code (loops, large arrays, ML pipelines, graph analytics, image processing) that
+  would benefit from GPU acceleration, even if not explicitly requested.
+version: 1.0.0
+author: K-Dense Inc.
+license: ''
+tags:
+- scientific-agent-skills
+- optimize-for-gpu
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: optimize-for-gpu
+  upstream_path: scientific-skills/optimize-for-gpu/SKILL.md
+  upstream_frontmatter:
+    name: optimize-for-gpu
+    description: GPU-accelerate Python code using CuPy, Numba CUDA, Warp, cuDF, cuML,
+      cuGraph, KvikIO, cuCIM, cuxfilter, cuVS, cuSpatial, and RAFT. Use whenever the
+      user mentions GPU/CUDA/NVIDIA acceleration, or wants to speed up NumPy, pandas,
+      scikit-learn, scikit-image, NetworkX, GeoPandas, or Faiss workloads. Covers
+      physics simulation, differentiable rendering, mesh ray casting, particle systems
+      (DEM/SPH/fluids), vector/similarity search, GPUDirect Storage file IO, interactive
+      dashboards, geospatial analysis, medical imaging, and sparse eigensolvers. Also
+      use when you see CPU-bound Python code (loops, large arrays, ML pipelines, graph
+      analytics, image processing) that would benefit from GPU acceleration, even
+      if not explicitly requested.
+    metadata:
+      author: K-Dense, Inc.

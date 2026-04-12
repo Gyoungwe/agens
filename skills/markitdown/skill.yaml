@@ -1,0 +1,42 @@
+skill_id: markitdown
+name: markitdown
+description: Convert files and office documents to Markdown. Supports PDF, DOCX, PPTX,
+  XLSX, images (with OCR), audio (with transcription), HTML, CSV, JSON, XML, ZIP,
+  YouTube URLs, EPubs and more.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- markitdown
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: markitdown
+  upstream_path: scientific-skills/markitdown/SKILL.md
+  upstream_frontmatter:
+    name: markitdown
+    description: Convert files and office documents to Markdown. Supports PDF, DOCX,
+      PPTX, XLSX, images (with OCR), audio (with transcription), HTML, CSV, JSON,
+      XML, ZIP, YouTube URLs, EPubs and more.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

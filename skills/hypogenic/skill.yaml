@@ -1,0 +1,41 @@
+skill_id: hypogenic
+name: hypogenic
+description: Automated LLM-driven hypothesis generation and testing on tabular datasets.
+  Use when you want to systematically explore hypotheses about patterns in empirical
+  data (e.g., deception detection, content analysis). Combines literature insights
+  with data-driven hypothesis testing. For manual hypothesis formulation use hypothesis-generation;
+  for creative ideation use scientific-brainstorming.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- hypogenic
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: hypogenic
+  upstream_path: scientific-skills/hypogenic/SKILL.md
+  upstream_frontmatter:
+    name: hypogenic
+    description: Automated LLM-driven hypothesis generation and testing on tabular
+      datasets. Use when you want to systematically explore hypotheses about patterns
+      in empirical data (e.g., deception detection, content analysis). Combines literature
+      insights with data-driven hypothesis testing. For manual hypothesis formulation
+      use hypothesis-generation; for creative ideation use scientific-brainstorming.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

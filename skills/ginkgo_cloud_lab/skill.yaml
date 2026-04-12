@@ -1,0 +1,40 @@
+skill_id: ginkgo_cloud_lab
+name: ginkgo-cloud-lab
+description: Submit and manage protocols on Ginkgo Bioworks Cloud Lab (cloud.ginkgo.bio),
+  a web-based interface for autonomous lab execution on Reconfigurable Automation
+  Carts (RACs). Use when the user wants to run cell-free protein expression (validation
+  or optimization), generate fluorescent pixel art, or interact with Ginkgo Cloud
+  Lab services. Covers protocol selection, input preparation, pricing, and ordering
+  workflows.
+version: 1.0.0
+author: K-Dense Inc.
+license: ''
+tags:
+- scientific-agent-skills
+- ginkgo-cloud-lab
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: ginkgo-cloud-lab
+  upstream_path: scientific-skills/ginkgo-cloud-lab/SKILL.md
+  upstream_frontmatter:
+    name: ginkgo-cloud-lab
+    description: Submit and manage protocols on Ginkgo Bioworks Cloud Lab (cloud.ginkgo.bio),
+      a web-based interface for autonomous lab execution on Reconfigurable Automation
+      Carts (RACs). Use when the user wants to run cell-free protein expression (validation
+      or optimization), generate fluorescent pixel art, or interact with Ginkgo Cloud
+      Lab services. Covers protocol selection, input preparation, pricing, and ordering
+      workflows.

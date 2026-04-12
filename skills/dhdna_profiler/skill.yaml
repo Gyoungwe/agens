@@ -1,0 +1,49 @@
+skill_id: dhdna_profiler
+name: dhdna-profiler
+description: Extract cognitive patterns and thinking fingerprints from any text. Use
+  this skill when the user wants to analyze how someone thinks, understand cognitive
+  style, profile writing or speech patterns, compare thinking styles between people,
+  asks "what's my thinking style", "analyze how this person reasons", "cognitive profile",
+  "thinking pattern", "DHDNA", "digital DNA", or wants to understand the mind behind
+  any text. Also trigger when the user provides text and wants deeper insight into
+  the author's reasoning patterns, decision-making style, or cognitive signature.
+version: 1.0.0
+author: AHK Strategies (ashrafkahoush-ux)
+license: MIT license
+tags:
+- scientific-agent-skills
+- dhdna-profiler
+tools:
+- Read
+- Write
+permissions:
+  network: false
+  filesystem: true
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: dhdna-profiler
+  upstream_path: scientific-skills/dhdna-profiler/SKILL.md
+  upstream_frontmatter:
+    name: dhdna-profiler
+    description: Extract cognitive patterns and thinking fingerprints from any text.
+      Use this skill when the user wants to analyze how someone thinks, understand
+      cognitive style, profile writing or speech patterns, compare thinking styles
+      between people, asks "what's my thinking style", "analyze how this person reasons",
+      "cognitive profile", "thinking pattern", "DHDNA", "digital DNA", or wants to
+      understand the mind behind any text. Also trigger when the user provides text
+      and wants deeper insight into the author's reasoning patterns, decision-making
+      style, or cognitive signature.
+    allowed-tools: Read Write
+    license: MIT license
+    metadata:
+      skill-author: AHK Strategies (ashrafkahoush-ux)

@@ -1,0 +1,37 @@
+skill_id: umap_learn
+name: umap-learn
+description: UMAP dimensionality reduction. Fast nonlinear manifold learning for 2D/3D
+  visualization, clustering preprocessing (HDBSCAN), supervised/parametric UMAP, for
+  high-dimensional data.
+version: 1.0.0
+author: K-Dense Inc.
+license: BSD-3-Clause license
+tags:
+- scientific-agent-skills
+- umap-learn
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: umap-learn
+  upstream_path: scientific-skills/umap-learn/SKILL.md
+  upstream_frontmatter:
+    name: umap-learn
+    description: UMAP dimensionality reduction. Fast nonlinear manifold learning for
+      2D/3D visualization, clustering preprocessing (HDBSCAN), supervised/parametric
+      UMAP, for high-dimensional data.
+    license: BSD-3-Clause license
+    metadata:
+      skill-author: K-Dense Inc.

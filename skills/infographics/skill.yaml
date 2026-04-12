@@ -1,0 +1,41 @@
+skill_id: infographics
+name: infographics
+description: Create professional infographics using Nano Banana Pro AI with smart
+  iterative refinement. Uses Gemini 3 Pro for quality review. Integrates research-lookup
+  and web search for accurate data. Supports 10 infographic types, 8 industry styles,
+  and colorblind-safe palettes.
+version: 1.0.0
+author: K-Dense Inc.
+license: ''
+tags:
+- scientific-agent-skills
+- infographics
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: infographics
+  upstream_path: scientific-skills/infographics/SKILL.md
+  upstream_frontmatter:
+    name: infographics
+    description: Create professional infographics using Nano Banana Pro AI with smart
+      iterative refinement. Uses Gemini 3 Pro for quality review. Integrates research-lookup
+      and web search for accurate data. Supports 10 infographic types, 8 industry
+      styles, and colorblind-safe palettes.
+    allowed-tools: Read Write Edit Bash

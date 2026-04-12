@@ -1,0 +1,37 @@
+skill_id: medchem
+name: medchem
+description: Medicinal chemistry filters. Apply drug-likeness rules (Lipinski, Veber),
+  PAINS filters, structural alerts, complexity metrics, for compound prioritization
+  and library filtering.
+version: 1.0.0
+author: K-Dense Inc.
+license: Apache-2.0 license
+tags:
+- scientific-agent-skills
+- medchem
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: medchem
+  upstream_path: scientific-skills/medchem/SKILL.md
+  upstream_frontmatter:
+    name: medchem
+    description: Medicinal chemistry filters. Apply drug-likeness rules (Lipinski,
+      Veber), PAINS filters, structural alerts, complexity metrics, for compound prioritization
+      and library filtering.
+    license: Apache-2.0 license
+    metadata:
+      skill-author: K-Dense Inc.

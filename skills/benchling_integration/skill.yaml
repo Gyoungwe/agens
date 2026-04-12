@@ -1,0 +1,38 @@
+skill_id: benchling_integration
+name: benchling-integration
+description: Benchling R&D platform integration. Access registry (DNA, proteins),
+  inventory, ELN entries, workflows via API, build Benchling Apps, query Data Warehouse,
+  for lab data management automation.
+version: 1.0.0
+author: K-Dense Inc.
+license: Unknown
+tags:
+- scientific-agent-skills
+- benchling-integration
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: benchling-integration
+  upstream_path: scientific-skills/benchling-integration/SKILL.md
+  upstream_frontmatter:
+    name: benchling-integration
+    description: Benchling R&D platform integration. Access registry (DNA, proteins),
+      inventory, ELN entries, workflows via API, build Benchling Apps, query Data
+      Warehouse, for lab data management automation.
+    license: Unknown
+    compatibility: Requires a Benchling account and API key
+    metadata:
+      skill-author: K-Dense Inc.

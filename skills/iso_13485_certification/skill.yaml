@@ -1,0 +1,47 @@
+skill_id: iso_13485_certification
+name: iso-13485-certification
+description: Comprehensive toolkit for preparing ISO 13485 certification documentation
+  for medical device Quality Management Systems. Use when users need help with ISO
+  13485 QMS documentation, including (1) conducting gap analysis of existing documentation,
+  (2) creating Quality Manuals, (3) developing required procedures and work instructions,
+  (4) preparing Medical Device Files, (5) understanding ISO 13485 requirements, or
+  (6) identifying missing documentation for medical device certification. Also use
+  when users mention medical device regulations, QMS certification, FDA QMSR, EU MDR,
+  or need help with quality system documentation.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- iso-13485-certification
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: iso-13485-certification
+  upstream_path: scientific-skills/iso-13485-certification/SKILL.md
+  upstream_frontmatter:
+    name: iso-13485-certification
+    description: Comprehensive toolkit for preparing ISO 13485 certification documentation
+      for medical device Quality Management Systems. Use when users need help with
+      ISO 13485 QMS documentation, including (1) conducting gap analysis of existing
+      documentation, (2) creating Quality Manuals, (3) developing required procedures
+      and work instructions, (4) preparing Medical Device Files, (5) understanding
+      ISO 13485 requirements, or (6) identifying missing documentation for medical
+      device certification. Also use when users mention medical device regulations,
+      QMS certification, FDA QMSR, EU MDR, or need help with quality system documentation.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

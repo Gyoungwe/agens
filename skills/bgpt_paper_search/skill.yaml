@@ -1,0 +1,45 @@
+skill_id: bgpt_paper_search
+name: bgpt-paper-search
+description: Search scientific papers and retrieve structured experimental data extracted
+  from full-text studies via the BGPT MCP server. Returns 25+ fields per paper including
+  methods, results, sample sizes, quality scores, and conclusions. Use for literature
+  reviews, evidence synthesis, and finding experimental details not available in abstracts
+  alone.
+version: 1.0.0
+author: BGPT
+license: MIT
+tags:
+- scientific-agent-skills
+- bgpt-paper-search
+tools:
+- Bash
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: bgpt-paper-search
+  upstream_path: scientific-skills/bgpt-paper-search/SKILL.md
+  upstream_frontmatter:
+    name: bgpt-paper-search
+    description: Search scientific papers and retrieve structured experimental data
+      extracted from full-text studies via the BGPT MCP server. Returns 25+ fields
+      per paper including methods, results, sample sizes, quality scores, and conclusions.
+      Use for literature reviews, evidence synthesis, and finding experimental details
+      not available in abstracts alone.
+    allowed-tools: Bash
+    license: MIT
+    metadata:
+      skill-author: BGPT
+      website: https://bgpt.pro/mcp
+      github: https://github.com/connerlambden/bgpt-mcp

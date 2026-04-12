@@ -1,0 +1,39 @@
+skill_id: depmap
+name: depmap
+description: Query the Cancer Dependency Map (DepMap) for cancer cell line gene dependency
+  scores (CRISPR Chronos), drug sensitivity data, and gene effect profiles. Use for
+  identifying cancer-specific vulnerabilities, synthetic lethal interactions, and
+  validating oncology drug targets.
+version: 1.0.0
+author: Kuan-lin Huang
+license: CC-BY-4.0
+tags:
+- scientific-agent-skills
+- depmap
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: depmap
+  upstream_path: scientific-skills/depmap/SKILL.md
+  upstream_frontmatter:
+    name: depmap
+    description: Query the Cancer Dependency Map (DepMap) for cancer cell line gene
+      dependency scores (CRISPR Chronos), drug sensitivity data, and gene effect profiles.
+      Use for identifying cancer-specific vulnerabilities, synthetic lethal interactions,
+      and validating oncology drug targets.
+    license: CC-BY-4.0
+    metadata:
+      skill-author: Kuan-lin Huang

@@ -1,0 +1,37 @@
+skill_id: pydeseq2
+name: pydeseq2
+description: Differential gene expression analysis (Python DESeq2). Identify DE genes
+  from bulk RNA-seq counts, Wald tests, FDR correction, volcano/MA plots, for RNA-seq
+  analysis.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- pydeseq2
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pydeseq2
+  upstream_path: scientific-skills/pydeseq2/SKILL.md
+  upstream_frontmatter:
+    name: pydeseq2
+    description: Differential gene expression analysis (Python DESeq2). Identify DE
+      genes from bulk RNA-seq counts, Wald tests, FDR correction, volcano/MA plots,
+      for RNA-seq analysis.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

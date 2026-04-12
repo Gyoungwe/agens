@@ -1,0 +1,47 @@
+skill_id: open_notebook
+name: open-notebook
+description: Self-hosted, open-source alternative to Google NotebookLM for AI-powered
+  research and document analysis. Use when organizing research materials into notebooks,
+  ingesting diverse content sources (PDFs, videos, audio, web pages, Office documents),
+  generating AI-powered notes and summaries, creating multi-speaker podcasts from
+  research, chatting with documents using context-aware AI, searching across materials
+  with full-text and vector search, or running custom content transformations. Supports
+  16+ AI providers including OpenAI, Anthropic, Google, Ollama, Groq, and Mistral
+  with complete data privacy through self-hosting.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT
+tags:
+- scientific-agent-skills
+- open-notebook
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: open-notebook
+  upstream_path: scientific-skills/open-notebook/SKILL.md
+  upstream_frontmatter:
+    name: open-notebook
+    description: Self-hosted, open-source alternative to Google NotebookLM for AI-powered
+      research and document analysis. Use when organizing research materials into
+      notebooks, ingesting diverse content sources (PDFs, videos, audio, web pages,
+      Office documents), generating AI-powered notes and summaries, creating multi-speaker
+      podcasts from research, chatting with documents using context-aware AI, searching
+      across materials with full-text and vector search, or running custom content
+      transformations. Supports 16+ AI providers including OpenAI, Anthropic, Google,
+      Ollama, Groq, and Mistral with complete data privacy through self-hosting.
+    license: MIT
+    metadata:
+      skill-author: K-Dense Inc.

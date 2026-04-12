@@ -1,0 +1,39 @@
+skill_id: anndata
+name: anndata
+description: Data structure for annotated matrices in single-cell analysis. Use when
+  working with .h5ad files or integrating with the scverse ecosystem. This is the
+  data format skill—for analysis workflows use scanpy; for probabilistic models use
+  scvi-tools; for population-scale queries use cellxgene-census.
+version: 1.0.0
+author: K-Dense Inc.
+license: BSD-3-Clause license
+tags:
+- scientific-agent-skills
+- anndata
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: anndata
+  upstream_path: scientific-skills/anndata/SKILL.md
+  upstream_frontmatter:
+    name: anndata
+    description: Data structure for annotated matrices in single-cell analysis. Use
+      when working with .h5ad files or integrating with the scverse ecosystem. This
+      is the data format skill—for analysis workflows use scanpy; for probabilistic
+      models use scvi-tools; for population-scale queries use cellxgene-census.
+    license: BSD-3-Clause license
+    metadata:
+      skill-author: K-Dense Inc.

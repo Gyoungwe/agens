@@ -1,0 +1,40 @@
+skill_id: seaborn
+name: seaborn
+description: Statistical visualization with pandas integration. Use for quick exploration
+  of distributions, relationships, and categorical comparisons with attractive defaults.
+  Best for box plots, violin plots, pair plots, heatmaps. Built on matplotlib. For
+  interactive plots use plotly; for publication styling use scientific-visualization.
+version: 1.0.0
+author: K-Dense Inc.
+license: BSD-3-Clause license
+tags:
+- scientific-agent-skills
+- seaborn
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: seaborn
+  upstream_path: scientific-skills/seaborn/SKILL.md
+  upstream_frontmatter:
+    name: seaborn
+    description: Statistical visualization with pandas integration. Use for quick
+      exploration of distributions, relationships, and categorical comparisons with
+      attractive defaults. Best for box plots, violin plots, pair plots, heatmaps.
+      Built on matplotlib. For interactive plots use plotly; for publication styling
+      use scientific-visualization.
+    license: BSD-3-Clause license
+    metadata:
+      skill-author: K-Dense Inc.

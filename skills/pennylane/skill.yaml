@@ -1,0 +1,43 @@
+skill_id: pennylane
+name: pennylane
+description: Hardware-agnostic quantum ML framework with automatic differentiation.
+  Use when training quantum circuits via gradients, building hybrid quantum-classical
+  models, or needing device portability across IBM/Google/Rigetti/IonQ. Best for variational
+  algorithms (VQE, QAOA), quantum neural networks, and integration with PyTorch/JAX/TensorFlow.
+  For hardware-specific optimizations use qiskit (IBM) or cirq (Google); for open
+  quantum systems use qutip.
+version: 1.0.0
+author: K-Dense Inc.
+license: Apache-2.0 license
+tags:
+- scientific-agent-skills
+- pennylane
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pennylane
+  upstream_path: scientific-skills/pennylane/SKILL.md
+  upstream_frontmatter:
+    name: pennylane
+    description: Hardware-agnostic quantum ML framework with automatic differentiation.
+      Use when training quantum circuits via gradients, building hybrid quantum-classical
+      models, or needing device portability across IBM/Google/Rigetti/IonQ. Best for
+      variational algorithms (VQE, QAOA), quantum neural networks, and integration
+      with PyTorch/JAX/TensorFlow. For hardware-specific optimizations use qiskit
+      (IBM) or cirq (Google); for open quantum systems use qutip.
+    license: Apache-2.0 license
+    metadata:
+      skill-author: K-Dense Inc.

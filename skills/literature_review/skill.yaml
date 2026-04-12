@@ -1,0 +1,50 @@
+skill_id: literature_review
+name: literature-review
+description: Conduct comprehensive, systematic literature reviews using multiple academic
+  databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill should be
+  used when conducting systematic literature reviews, meta-analyses, research synthesis,
+  or comprehensive literature searches across biomedical, scientific, and technical
+  domains. Creates professionally formatted markdown documents and PDFs with verified
+  citations in multiple citation styles (APA, Nature, Vancouver, etc.).
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- literature-review
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: literature-review
+  upstream_path: scientific-skills/literature-review/SKILL.md
+  upstream_frontmatter:
+    name: literature-review
+    description: Conduct comprehensive, systematic literature reviews using multiple
+      academic databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill
+      should be used when conducting systematic literature reviews, meta-analyses,
+      research synthesis, or comprehensive literature searches across biomedical,
+      scientific, and technical domains. Creates professionally formatted markdown
+      documents and PDFs with verified citations in multiple citation styles (APA,
+      Nature, Vancouver, etc.).
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

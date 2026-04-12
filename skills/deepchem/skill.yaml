@@ -1,0 +1,41 @@
+skill_id: deepchem
+name: deepchem
+description: Molecular ML with diverse featurizers and pre-built datasets. Use for
+  property prediction (ADMET, toxicity) with traditional ML or GNNs when you want
+  extensive featurization options and MoleculeNet benchmarks. Best for quick experiments
+  with pre-trained models, diverse molecular representations. For graph-first PyTorch
+  workflows use torchdrug; for benchmark datasets use pytdc.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- deepchem
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: deepchem
+  upstream_path: scientific-skills/deepchem/SKILL.md
+  upstream_frontmatter:
+    name: deepchem
+    description: Molecular ML with diverse featurizers and pre-built datasets. Use
+      for property prediction (ADMET, toxicity) with traditional ML or GNNs when you
+      want extensive featurization options and MoleculeNet benchmarks. Best for quick
+      experiments with pre-trained models, diverse molecular representations. For
+      graph-first PyTorch workflows use torchdrug; for benchmark datasets use pytdc.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

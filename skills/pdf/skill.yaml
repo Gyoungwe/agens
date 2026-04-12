@@ -1,0 +1,41 @@
+skill_id: pdf
+name: pdf
+description: Use this skill whenever the user wants to do anything with PDF files.
+  This includes reading or extracting text/tables from PDFs, combining or merging
+  multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks,
+  creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images,
+  and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file
+  or asks to produce one, use this skill.
+version: 1.0.0
+author: K-Dense Inc.
+license: Proprietary. LICENSE.txt has complete terms
+tags:
+- scientific-agent-skills
+- pdf
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: pdf
+  upstream_path: scientific-skills/pdf/SKILL.md
+  upstream_frontmatter:
+    name: pdf
+    description: Use this skill whenever the user wants to do anything with PDF files.
+      This includes reading or extracting text/tables from PDFs, combining or merging
+      multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks,
+      creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting
+      images, and OCR on scanned PDFs to make them searchable. If the user mentions
+      a .pdf file or asks to produce one, use this skill.
+    license: Proprietary. LICENSE.txt has complete terms

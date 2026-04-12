@@ -1,0 +1,45 @@
+skill_id: usfiscaldata
+name: usfiscaldata
+description: Query the U.S. Treasury Fiscal Data API for federal financial data including
+  national debt, government spending, revenue, interest rates, exchange rates, and
+  savings bonds. Access 54 datasets and 182 data tables with no API key required.
+  Use when working with U.S. federal fiscal data, national debt tracking (Debt to
+  the Penny), Daily Treasury Statements, Monthly Treasury Statements, Treasury securities
+  auctions, interest rates on Treasury securities, foreign exchange rates, savings
+  bonds, or any U.S. government financial statistics.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT
+tags:
+- scientific-agent-skills
+- usfiscaldata
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: usfiscaldata
+  upstream_path: scientific-skills/usfiscaldata/SKILL.md
+  upstream_frontmatter:
+    name: usfiscaldata
+    description: Query the U.S. Treasury Fiscal Data API for federal financial data
+      including national debt, government spending, revenue, interest rates, exchange
+      rates, and savings bonds. Access 54 datasets and 182 data tables with no API
+      key required. Use when working with U.S. federal fiscal data, national debt
+      tracking (Debt to the Penny), Daily Treasury Statements, Monthly Treasury Statements,
+      Treasury securities auctions, interest rates on Treasury securities, foreign
+      exchange rates, savings bonds, or any U.S. government financial statistics.
+    license: MIT
+    metadata:
+      skill-author: K-Dense Inc.

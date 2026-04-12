@@ -1,0 +1,42 @@
+skill_id: latex_posters
+name: latex-posters
+description: Create professional research posters in LaTeX using beamerposter, tikzposter,
+  or baposter. Support for conference presentations, academic posters, and scientific
+  communication. Includes layout design, color schemes, multi-column formats, figure
+  integration, and poster-specific best practices for visual communication.
+version: 1.0.0
+author: K-Dense Inc.
+license: ''
+tags:
+- scientific-agent-skills
+- latex-posters
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- executor_agent
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: latex-posters
+  upstream_path: scientific-skills/latex-posters/SKILL.md
+  upstream_frontmatter:
+    name: latex-posters
+    description: Create professional research posters in LaTeX using beamerposter,
+      tikzposter, or baposter. Support for conference presentations, academic posters,
+      and scientific communication. Includes layout design, color schemes, multi-column
+      formats, figure integration, and poster-specific best practices for visual communication.
+    allowed-tools: Read Write Edit Bash

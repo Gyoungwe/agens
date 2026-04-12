@@ -1,0 +1,43 @@
+skill_id: research_grants
+name: research-grants
+description: Write competitive research proposals for NSF, NIH, DOE, DARPA, and Taiwan
+  NSTC. Agency-specific formatting, review criteria, budget preparation, broader impacts,
+  significance statements, innovation narratives, and compliance with submission requirements.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- research-grants
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: research-grants
+  upstream_path: scientific-skills/research-grants/SKILL.md
+  upstream_frontmatter:
+    name: research-grants
+    description: Write competitive research proposals for NSF, NIH, DOE, DARPA, and
+      Taiwan NSTC. Agency-specific formatting, review criteria, budget preparation,
+      broader impacts, significance statements, innovation narratives, and compliance
+      with submission requirements.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

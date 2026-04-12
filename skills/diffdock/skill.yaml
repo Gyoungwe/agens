@@ -1,0 +1,37 @@
+skill_id: diffdock
+name: diffdock
+description: Diffusion-based molecular docking. Predict protein-ligand binding poses
+  from PDB/SMILES, confidence scores, virtual screening, for structure-based drug
+  design. Not for affinity prediction.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- diffdock
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: diffdock
+  upstream_path: scientific-skills/diffdock/SKILL.md
+  upstream_frontmatter:
+    name: diffdock
+    description: Diffusion-based molecular docking. Predict protein-ligand binding
+      poses from PDB/SMILES, confidence scores, virtual screening, for structure-based
+      drug design. Not for affinity prediction.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

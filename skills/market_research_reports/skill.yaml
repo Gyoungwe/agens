@@ -1,0 +1,49 @@
+skill_id: market_research_reports
+name: market-research-reports
+description: Generate comprehensive market research reports (50+ pages) in the style
+  of top consulting firms (McKinsey, BCG, Gartner). Features professional LaTeX formatting,
+  extensive visual generation with scientific-schematics and generate-image, deep
+  integration with research-lookup for data gathering, and multi-framework strategic
+  analysis including Porter Five Forces, PESTLE, SWOT, TAM/SAM/SOM, and BCG Matrix.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- market-research-reports
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+- research_agent
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: market-research-reports
+  upstream_path: scientific-skills/market-research-reports/SKILL.md
+  upstream_frontmatter:
+    name: market-research-reports
+    description: Generate comprehensive market research reports (50+ pages) in the
+      style of top consulting firms (McKinsey, BCG, Gartner). Features professional
+      LaTeX formatting, extensive visual generation with scientific-schematics and
+      generate-image, deep integration with research-lookup for data gathering, and
+      multi-framework strategic analysis including Porter Five Forces, PESTLE, SWOT,
+      TAM/SAM/SOM, and BCG Matrix.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

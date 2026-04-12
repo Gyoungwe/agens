@@ -1,0 +1,56 @@
+skill_id: rowan
+name: rowan
+description: Rowan is a cloud-native molecular modeling and medicinal-chemistry workflow
+  platform with a Python API. Use for pKa and macropKa prediction, conformer and tautomer
+  ensembles, docking and analogue docking, protein-ligand cofolding, MSA generation,
+  molecular dynamics, permeability, descriptor workflows, and related small-molecule
+  or protein modeling tasks. Ideal for programmatic batch screening, multi-step chemistry
+  pipelines, and workflows that would otherwise require maintaining local HPC/GPU
+  infrastructure.
+version: 1.0.0
+author: Rowan Science
+license: Proprietary (API key required)
+tags:
+- scientific-agent-skills
+- rowan
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: rowan
+  upstream_path: scientific-skills/rowan/SKILL.md
+  upstream_frontmatter:
+    name: rowan
+    description: Rowan is a cloud-native molecular modeling and medicinal-chemistry
+      workflow platform with a Python API. Use for pKa and macropKa prediction, conformer
+      and tautomer ensembles, docking and analogue docking, protein-ligand cofolding,
+      MSA generation, molecular dynamics, permeability, descriptor workflows, and
+      related small-molecule or protein modeling tasks. Ideal for programmatic batch
+      screening, multi-step chemistry pipelines, and workflows that would otherwise
+      require maintaining local HPC/GPU infrastructure.
+    license: Proprietary (API key required)
+    compatibility: Python 3.12+, API key required
+    metadata:
+      skill-author: Rowan Science
+      trigger-keywords:
+      - pKa prediction
+      - molecular docking
+      - conformer search
+      - chemistry workflow
+      - drug discovery
+      - SMILES
+      - protein structure
+      - batch molecular modeling
+      - cloud chemistry

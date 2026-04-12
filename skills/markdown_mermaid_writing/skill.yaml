@@ -1,0 +1,53 @@
+skill_id: markdown_mermaid_writing
+name: markdown-mermaid-writing
+description: Comprehensive markdown and Mermaid diagram writing skill. Use when creating
+  any scientific document, report, analysis, or visualization. Establishes text-based
+  diagrams as the default documentation standard with full style guides (markdown
+  + mermaid), 24 diagram type references, and 9 document templates.
+version: 1.0.0
+author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
+license: Apache-2.0
+tags:
+- scientific-agent-skills
+- markdown-mermaid-writing
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: markdown-mermaid-writing
+  upstream_path: scientific-skills/markdown-mermaid-writing/SKILL.md
+  upstream_frontmatter:
+    name: markdown-mermaid-writing
+    description: Comprehensive markdown and Mermaid diagram writing skill. Use when
+      creating any scientific document, report, analysis, or visualization. Establishes
+      text-based diagrams as the default documentation standard with full style guides
+      (markdown + mermaid), 24 diagram type references, and 9 document templates.
+    allowed-tools: Read Write Edit Bash
+    license: Apache-2.0
+    metadata:
+      skill-author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
+      skill-source: https://github.com/SuperiorByteWorks-LLC/agent-project
+      skill-version: 1.0.0
+      skill-contributors:
+      - name: Clayton Young
+        org: Superior Byte Works, LLC / @borealBytes
+        role: Author and originator
+      - name: K-Dense Team
+        org: K-Dense Inc.
+        role: Integration target and community feedback

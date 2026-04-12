@@ -1,0 +1,46 @@
+skill_id: imaging_data_commons
+name: imaging-data-commons
+description: Query and download public cancer imaging data from NCI Imaging Data Commons
+  using idc-index. Use for accessing large-scale radiology (CT, MR, PET) and pathology
+  datasets for AI training or research. No authentication required. Query by metadata,
+  visualize in browser, check licenses.
+version: 1.0.0
+author: Andrey Fedorov, @fedorov
+license: This skill is provided under the MIT License. IDC data itself has individual
+  licensing (mostly CC-BY, some CC-NC) that must be respected when using the data.
+tags:
+- scientific-agent-skills
+- imaging-data-commons
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+- research_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: imaging-data-commons
+  upstream_path: scientific-skills/imaging-data-commons/SKILL.md
+  upstream_frontmatter:
+    name: imaging-data-commons
+    description: Query and download public cancer imaging data from NCI Imaging Data
+      Commons using idc-index. Use for accessing large-scale radiology (CT, MR, PET)
+      and pathology datasets for AI training or research. No authentication required.
+      Query by metadata, visualize in browser, check licenses.
+    license: This skill is provided under the MIT License. IDC data itself has individual
+      licensing (mostly CC-BY, some CC-NC) that must be respected when using the data.
+    metadata:
+      version: 1.4.0
+      skill-author: Andrey Fedorov, @fedorov
+      idc-index: 0.11.14
+      idc-data-version: v23
+      repository: https://github.com/ImagingDataCommons/idc-claude-skill

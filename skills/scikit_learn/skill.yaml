@@ -1,0 +1,41 @@
+skill_id: scikit_learn
+name: scikit-learn
+description: Machine learning in Python with scikit-learn. Use when working with supervised
+  learning (classification, regression), unsupervised learning (clustering, dimensionality
+  reduction), model evaluation, hyperparameter tuning, preprocessing, or building
+  ML pipelines. Provides comprehensive reference documentation for algorithms, preprocessing
+  techniques, pipelines, and best practices.
+version: 1.0.0
+author: K-Dense Inc.
+license: BSD-3-Clause license
+tags:
+- scientific-agent-skills
+- scikit-learn
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: scikit-learn
+  upstream_path: scientific-skills/scikit-learn/SKILL.md
+  upstream_frontmatter:
+    name: scikit-learn
+    description: Machine learning in Python with scikit-learn. Use when working with
+      supervised learning (classification, regression), unsupervised learning (clustering,
+      dimensionality reduction), model evaluation, hyperparameter tuning, preprocessing,
+      or building ML pipelines. Provides comprehensive reference documentation for
+      algorithms, preprocessing techniques, pipelines, and best practices.
+    license: BSD-3-Clause license
+    metadata:
+      skill-author: K-Dense Inc.

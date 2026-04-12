@@ -1,0 +1,50 @@
+skill_id: clinical_decision_support
+name: clinical-decision-support
+description: Generate professional clinical decision support (CDS) documents for pharmaceutical
+  and clinical research settings, including patient cohort analyses (biomarker-stratified
+  with outcomes) and treatment recommendation reports (evidence-based guidelines with
+  decision algorithms). Supports GRADE evidence grading, statistical analysis (hazard
+  ratios, survival curves, waterfall plots), biomarker integration, and regulatory
+  compliance. Outputs publication-ready LaTeX/PDF format optimized for drug development,
+  clinical research, and evidence synthesis.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT License
+tags:
+- scientific-agent-skills
+- clinical-decision-support
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: clinical-decision-support
+  upstream_path: scientific-skills/clinical-decision-support/SKILL.md
+  upstream_frontmatter:
+    name: clinical-decision-support
+    description: Generate professional clinical decision support (CDS) documents for
+      pharmaceutical and clinical research settings, including patient cohort analyses
+      (biomarker-stratified with outcomes) and treatment recommendation reports (evidence-based
+      guidelines with decision algorithms). Supports GRADE evidence grading, statistical
+      analysis (hazard ratios, survival curves, waterfall plots), biomarker integration,
+      and regulatory compliance. Outputs publication-ready LaTeX/PDF format optimized
+      for drug development, clinical research, and evidence synthesis.
+    allowed-tools: Read Write Edit Bash
+    license: MIT License
+    metadata:
+      skill-author: K-Dense Inc.

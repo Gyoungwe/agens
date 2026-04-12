@@ -1,0 +1,44 @@
+skill_id: torch_geometric
+name: torch-geometric
+description: Guide for building Graph Neural Networks with PyTorch Geometric (PyG).
+  Use this skill whenever the user asks about graph neural networks, GNNs, node classification,
+  link prediction, graph classification, message passing networks, heterogeneous graphs,
+  neighbor sampling, or any task involving torch_geometric / PyG. Also trigger when
+  you see imports from torch_geometric, or the user mentions graph convolutions (GCN,
+  GAT, GraphSAGE, GIN), graph data structures, or working with relational/network
+  data. Even if the user just says 'graph learning' or 'geometric deep learning',
+  use this skill.
+version: 1.0.0
+author: K-Dense Inc.
+license: ''
+tags:
+- scientific-agent-skills
+- torch-geometric
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: torch-geometric
+  upstream_path: scientific-skills/torch-geometric/SKILL.md
+  upstream_frontmatter:
+    name: torch-geometric
+    description: Guide for building Graph Neural Networks with PyTorch Geometric (PyG).
+      Use this skill whenever the user asks about graph neural networks, GNNs, node
+      classification, link prediction, graph classification, message passing networks,
+      heterogeneous graphs, neighbor sampling, or any task involving torch_geometric
+      / PyG. Also trigger when you see imports from torch_geometric, or the user mentions
+      graph convolutions (GCN, GAT, GraphSAGE, GIN), graph data structures, or working
+      with relational/network data. Even if the user just says 'graph learning' or
+      'geometric deep learning', use this skill.

@@ -1,0 +1,39 @@
+skill_id: scvelo
+name: scvelo
+description: RNA velocity analysis with scVelo. Estimate cell state transitions from
+  unspliced/spliced mRNA dynamics, infer trajectory directions, compute latent time,
+  and identify driver genes in single-cell RNA-seq data. Complements Scanpy/scVI-tools
+  for trajectory inference.
+version: 1.0.0
+author: Kuan-lin Huang
+license: BSD-3-Clause
+tags:
+- scientific-agent-skills
+- scvelo
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: scvelo
+  upstream_path: scientific-skills/scvelo/SKILL.md
+  upstream_frontmatter:
+    name: scvelo
+    description: RNA velocity analysis with scVelo. Estimate cell state transitions
+      from unspliced/spliced mRNA dynamics, infer trajectory directions, compute latent
+      time, and identify driver genes in single-cell RNA-seq data. Complements Scanpy/scVI-tools
+      for trajectory inference.
+    license: BSD-3-Clause
+    metadata:
+      skill-author: Kuan-lin Huang

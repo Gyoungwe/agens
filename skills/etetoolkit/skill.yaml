@@ -1,0 +1,37 @@
+skill_id: etetoolkit
+name: etetoolkit
+description: Phylogenetic tree toolkit (ETE). Tree manipulation (Newick/NHX), evolutionary
+  event detection, orthology/paralogy, NCBI taxonomy, visualization (PDF/SVG), for
+  phylogenomics.
+version: 1.0.0
+author: K-Dense Inc.
+license: GPL-3.0 license
+tags:
+- scientific-agent-skills
+- etetoolkit
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: etetoolkit
+  upstream_path: scientific-skills/etetoolkit/SKILL.md
+  upstream_frontmatter:
+    name: etetoolkit
+    description: Phylogenetic tree toolkit (ETE). Tree manipulation (Newick/NHX),
+      evolutionary event detection, orthology/paralogy, NCBI taxonomy, visualization
+      (PDF/SVG), for phylogenomics.
+    license: GPL-3.0 license
+    metadata:
+      skill-author: K-Dense Inc.

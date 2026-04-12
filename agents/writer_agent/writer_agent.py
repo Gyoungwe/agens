@@ -16,7 +16,12 @@ class WriterAgent(BaseAgent):
         super().__init__(
             agent_id="writer_agent",
             bus=bus,
-            skills=["format", "translate", "summarize"],
+            skills=[
+                "scientific_writing",
+                "citation_management",
+                "literature_review",
+                "summarize",
+            ],
             description="负责内容撰写、格式化、总结",
             registry=registry,
             knowledge=knowledge,

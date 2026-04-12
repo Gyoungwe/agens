@@ -1,0 +1,41 @@
+skill_id: fluidsim
+name: fluidsim
+description: Framework for computational fluid dynamics simulations using Python.
+  Use when running fluid dynamics simulations including Navier-Stokes equations (2D/3D),
+  shallow water equations, stratified flows, or when analyzing turbulence, vortex
+  dynamics, or geophysical flows. Provides pseudospectral methods with FFT, HPC support,
+  and comprehensive output analysis.
+version: 1.0.0
+author: K-Dense Inc.
+license: CeCILL FREE SOFTWARE LICENSE AGREEMENT
+tags:
+- scientific-agent-skills
+- fluidsim
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: fluidsim
+  upstream_path: scientific-skills/fluidsim/SKILL.md
+  upstream_frontmatter:
+    name: fluidsim
+    description: Framework for computational fluid dynamics simulations using Python.
+      Use when running fluid dynamics simulations including Navier-Stokes equations
+      (2D/3D), shallow water equations, stratified flows, or when analyzing turbulence,
+      vortex dynamics, or geophysical flows. Provides pseudospectral methods with
+      FFT, HPC support, and comprehensive output analysis.
+    license: CeCILL FREE SOFTWARE LICENSE AGREEMENT
+    metadata:
+      skill-author: K-Dense Inc.

@@ -16,7 +16,13 @@ class ExecutorAgent(BaseAgent):
         super().__init__(
             agent_id="executor_agent",
             bus=bus,
-            skills=["shell", "github", "api_call"],
+            skills=[
+                "shell",
+                "benchling_integration",
+                "dnanexus_integration",
+                "latchbio_integration",
+                "modal",
+            ],
             description="负责执行具体操作",
             registry=registry,
             knowledge=knowledge,

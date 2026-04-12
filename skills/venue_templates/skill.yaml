@@ -1,0 +1,49 @@
+skill_id: venue_templates
+name: venue-templates
+description: Access comprehensive LaTeX templates, formatting requirements, and submission
+  guidelines for major scientific publication venues (Nature, Science, PLOS, IEEE,
+  ACM), academic conferences (NeurIPS, ICML, CVPR, CHI), research posters, and grant
+  proposals (NSF, NIH, DOE, DARPA). This skill should be used when preparing manuscripts
+  for journal submission, conference papers, research posters, or grant proposals
+  and need venue-specific formatting requirements and templates.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- venue-templates
+tools:
+- Read
+- Write
+- Edit
+- Bash
+permissions:
+  network: true
+  filesystem: true
+  shell: true
+agents:
+- writer_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: venue-templates
+  upstream_path: scientific-skills/venue-templates/SKILL.md
+  upstream_frontmatter:
+    name: venue-templates
+    description: Access comprehensive LaTeX templates, formatting requirements, and
+      submission guidelines for major scientific publication venues (Nature, Science,
+      PLOS, IEEE, ACM), academic conferences (NeurIPS, ICML, CVPR, CHI), research
+      posters, and grant proposals (NSF, NIH, DOE, DARPA). This skill should be used
+      when preparing manuscripts for journal submission, conference papers, research
+      posters, or grant proposals and need venue-specific formatting requirements
+      and templates.
+    allowed-tools: Read Write Edit Bash
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

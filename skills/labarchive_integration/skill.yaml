@@ -1,0 +1,37 @@
+skill_id: labarchive_integration
+name: labarchive-integration
+description: Electronic lab notebook API integration. Access notebooks, manage entries/attachments,
+  backup notebooks, integrate with Protocols.io/Jupyter/REDCap, for programmatic ELN
+  workflows.
+version: 1.0.0
+author: K-Dense Inc.
+license: Unknown
+tags:
+- scientific-agent-skills
+- labarchive-integration
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: labarchive-integration
+  upstream_path: scientific-skills/labarchive-integration/SKILL.md
+  upstream_frontmatter:
+    name: labarchive-integration
+    description: Electronic lab notebook API integration. Access notebooks, manage
+      entries/attachments, backup notebooks, integrate with Protocols.io/Jupyter/REDCap,
+      for programmatic ELN workflows.
+    license: Unknown
+    metadata:
+      skill-author: K-Dense Inc.

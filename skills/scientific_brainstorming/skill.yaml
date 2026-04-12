@@ -1,0 +1,40 @@
+skill_id: scientific_brainstorming
+name: scientific-brainstorming
+description: Creative research ideation and exploration. Use for open-ended brainstorming
+  sessions, exploring interdisciplinary connections, challenging assumptions, or identifying
+  research gaps. Best for early-stage research planning when you do not have specific
+  observations yet. For formulating testable hypotheses from data use hypothesis-generation.
+version: 1.0.0
+author: K-Dense Inc.
+license: MIT license
+tags:
+- scientific-agent-skills
+- scientific-brainstorming
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents:
+- executor_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: scientific-brainstorming
+  upstream_path: scientific-skills/scientific-brainstorming/SKILL.md
+  upstream_frontmatter:
+    name: scientific-brainstorming
+    description: Creative research ideation and exploration. Use for open-ended brainstorming
+      sessions, exploring interdisciplinary connections, challenging assumptions,
+      or identifying research gaps. Best for early-stage research planning when you
+      do not have specific observations yet. For formulating testable hypotheses from
+      data use hypothesis-generation.
+    license: MIT license
+    metadata:
+      skill-author: K-Dense Inc.

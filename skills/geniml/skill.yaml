@@ -1,0 +1,42 @@
+skill_id: geniml
+name: geniml
+description: This skill should be used when working with genomic interval data (BED
+  files) for machine learning tasks. Use for training region embeddings (Region2Vec,
+  BEDspace), single-cell ATAC-seq analysis (scEmbed), building consensus peaks (universes),
+  or any ML-based analysis of genomic regions. Applies to BED file collections, scATAC-seq
+  data, chromatin accessibility datasets, and region-based genomic feature learning.
+version: 1.0.0
+author: K-Dense Inc.
+license: BSD-2-Clause license
+tags:
+- scientific-agent-skills
+- geniml
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+- bio_code_agent
+enabled: true
+source: scientific-agent-skills
+entrypoint: entry.py
+readme: README.md
+input_schema: {}
+output_schema:
+  type: object
+metadata:
+  upstream_repo: K-Dense-AI/scientific-agent-skills
+  upstream_skill: geniml
+  upstream_path: scientific-skills/geniml/SKILL.md
+  upstream_frontmatter:
+    name: geniml
+    description: This skill should be used when working with genomic interval data
+      (BED files) for machine learning tasks. Use for training region embeddings (Region2Vec,
+      BEDspace), single-cell ATAC-seq analysis (scEmbed), building consensus peaks
+      (universes), or any ML-based analysis of genomic regions. Applies to BED file
+      collections, scATAC-seq data, chromatin accessibility datasets, and region-based
+      genomic feature learning.
+    license: BSD-2-Clause license
+    metadata:
+      skill-author: K-Dense Inc.
