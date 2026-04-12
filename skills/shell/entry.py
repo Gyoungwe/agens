@@ -1,5 +1,3 @@
-# skills/shell/skill.py
-
 import asyncio
 from core.base_skill import BaseSkill, SkillInput
 from typing import Any
@@ -9,12 +7,6 @@ BLOCKED = {"rm", "sudo", "chmod", "dd", "mkfs", ":(){ :|:& };:"}
 
 
 class Skill(BaseSkill):
-    skill_id = "shell"
-    name = "Shell 命令执行"
-    description = "在本地执行 Shell 命令（带安全限制）"
-    version = "0.02"
-    tags = ["system", "shell", "executor"]
-
     async def run(self, input_data: SkillInput) -> Any:
         command = input_data.instruction.strip()
         cmd_name = command.split()[0]

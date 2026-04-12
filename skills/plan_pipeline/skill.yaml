@@ -1,0 +1,29 @@
+skill_id: plan_pipeline
+name: 生信流程规划
+description: 将生物信息学目标拆解为可执行阶段
+version: "0.01"
+author: system
+license: ""
+tags:
+  - bioinformatics
+  - planning
+  - workflow
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+  - bio_planner_agent
+enabled: true
+source: local
+entrypoint: entry.py
+readme: README.md
+input_schema:
+  type: object
+  properties:
+    instruction:
+      type: string
+output_schema:
+  type: object
+metadata: {}

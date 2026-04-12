@@ -1,17 +1,8 @@
-# skills/summarize/skill.py
-
-import os
 from core.base_skill import BaseSkill, SkillInput
 from typing import Any
 
 
 class Skill(BaseSkill):
-    skill_id = "summarize"
-    name = "内容摘要"
-    description = "对长文本进行结构化摘要提炼"
-    version = "0.02"
-    tags = ["nlp", "summary", "text"]
-
     def __init__(self):
         super().__init__()
         from providers.anthropic_provider import AnthropicProvider

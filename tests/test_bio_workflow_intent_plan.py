@@ -159,7 +159,7 @@ async def test_execute_bio_workflow_clarifies_before_execution_for_underspecifie
 
 @pytest.mark.asyncio
 async def test_plan_pipeline_skill_returns_known_artifacts():
-    from skills.plan_pipeline.skill import Skill as PlanPipelineSkill
+    from skills.plan_pipeline.entry import Skill as PlanPipelineSkill
     from core.base_skill import SkillInput
 
     skill = PlanPipelineSkill()
@@ -200,7 +200,7 @@ async def test_plan_pipeline_skill_returns_known_artifacts():
 
 @pytest.mark.asyncio
 async def test_qc_review_skill_returns_structured_qc_checks():
-    from skills.qc_review.skill import Skill as QCReviewSkill
+    from skills.qc_review.entry import Skill as QCReviewSkill
     from core.base_skill import SkillInput
 
     skill = QCReviewSkill()
@@ -214,7 +214,7 @@ async def test_qc_review_skill_returns_structured_qc_checks():
 
 @pytest.mark.asyncio
 async def test_compile_bio_report_skill_returns_structured_sections():
-    from skills.compile_bio_report.skill import Skill as CompileBioReportSkill
+    from skills.compile_bio_report.entry import Skill as CompileBioReportSkill
     from core.base_skill import SkillInput
 
     skill = CompileBioReportSkill()
@@ -228,7 +228,7 @@ async def test_compile_bio_report_skill_returns_structured_sections():
 
 @pytest.mark.asyncio
 async def test_generate_bio_code_skill_is_assay_aware():
-    from skills.generate_bio_code.skill import Skill as GenerateBioCodeSkill
+    from skills.generate_bio_code.entry import Skill as GenerateBioCodeSkill
     from core.base_skill import SkillInput
 
     skill = GenerateBioCodeSkill()

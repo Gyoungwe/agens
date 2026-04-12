@@ -4,12 +4,6 @@ from core.base_skill import BaseSkill, SkillInput
 
 
 class Skill(BaseSkill):
-    skill_id = "evolve_strategy"
-    name = "生信策略进化"
-    description = "总结流程得失并产出下一轮优化策略"
-    version = "0.02"
-    tags = ["bioinformatics", "evolution", "optimization"]
-
     async def run(self, input_data: SkillInput) -> Any:
         return {
             "instruction": input_data.instruction,

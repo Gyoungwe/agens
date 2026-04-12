@@ -4,12 +4,6 @@ from core.base_skill import BaseSkill, SkillInput
 
 
 class Skill(BaseSkill):
-    skill_id = "qc_review"
-    name = "生信质量审查"
-    description = "对分析输出做质量审查并给出修复建议"
-    version = "0.02"
-    tags = ["bioinformatics", "qc", "validation"]
-
     async def run(self, input_data: SkillInput) -> Any:
         return {
             "status": "reviewed",

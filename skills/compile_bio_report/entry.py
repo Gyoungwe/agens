@@ -4,12 +4,6 @@ from core.base_skill import BaseSkill, SkillInput
 
 
 class Skill(BaseSkill):
-    skill_id = "compile_bio_report"
-    name = "生信结果汇总"
-    description = "生成结构化生物信息学分析报告"
-    version = "0.02"
-    tags = ["bioinformatics", "report", "summary"]
-
     async def run(self, input_data: SkillInput) -> Any:
         return {
             "title": "Bioinformatics Workflow Report",

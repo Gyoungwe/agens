@@ -1,0 +1,29 @@
+skill_id: generate_bio_code
+name: 生信代码生成
+description: 生成生物信息学 pipeline 脚本建议
+version: "0.01"
+author: system
+license: ""
+tags:
+  - bioinformatics
+  - codegen
+  - pipeline
+tools: []
+permissions:
+  network: false
+  filesystem: true
+  shell: false
+agents:
+  - bio_code_agent
+enabled: true
+source: local
+entrypoint: entry.py
+readme: README.md
+input_schema:
+  type: object
+  properties:
+    instruction:
+      type: string
+output_schema:
+  type: object
+metadata: {}

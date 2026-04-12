@@ -1,0 +1,28 @@
+skill_id: summarize
+name: 内容摘要
+description: 对长文本进行结构化摘要提炼
+version: "0.02"
+author: system
+license: ""
+tags:
+  - nlp
+  - summary
+  - text
+tools: []
+permissions:
+  network: true
+  filesystem: false
+  shell: false
+agents: []
+enabled: true
+source: local
+entrypoint: entry.py
+readme: README.md
+input_schema:
+  type: object
+  properties:
+    instruction:
+      type: string
+output_schema:
+  type: object
+metadata: {}

@@ -1,0 +1,29 @@
+skill_id: compile_bio_report
+name: 生信结果汇总
+description: 生成结构化生物信息学分析报告
+version: "0.01"
+author: system
+license: ""
+tags:
+  - bioinformatics
+  - report
+  - summary
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+  - bio_report_agent
+enabled: true
+source: local
+entrypoint: entry.py
+readme: README.md
+input_schema:
+  type: object
+  properties:
+    instruction:
+      type: string
+output_schema:
+  type: object
+metadata: {}

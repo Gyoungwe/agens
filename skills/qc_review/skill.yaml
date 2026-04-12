@@ -1,0 +1,29 @@
+skill_id: qc_review
+name: 生信质量审查
+description: 对分析输出做质量审查并给出修复建议
+version: "0.01"
+author: system
+license: ""
+tags:
+  - bioinformatics
+  - qc
+  - validation
+tools: []
+permissions:
+  network: false
+  filesystem: false
+  shell: false
+agents:
+  - bio_qc_agent
+enabled: true
+source: local
+entrypoint: entry.py
+readme: README.md
+input_schema:
+  type: object
+  properties:
+    instruction:
+      type: string
+output_schema:
+  type: object
+metadata: {}
