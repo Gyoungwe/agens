@@ -36,6 +36,11 @@ export function AgentSettingsPage() {
     queryFn: async () => (await client.get('/memory/', { params: { owner: activeAgent, limit: 30 } })).data,
   })
 
+  // Split skills into Default (unassigned) and Assigned (registry-assigned) for clearer UI
+  const allSkills: Array<AgentSkillItem> = skillData?.skills || []
+  const defaultSkillsList = allSkills.filter((s) => !s.assigned)
+  const assignedSkillsList = allSkills.filter((s) => s.assigned)
+
   const bindMutation = useMutation({
     mutationFn: async ({ skillId, assigned }: { skillId: string; assigned: boolean }) => {
       if (assigned) {
@@ -97,23 +102,47 @@ export function AgentSettingsPage() {
           <div className="glass-card rounded-2xl p-4">
             <h3 className="text-sm font-semibold mb-3">Skill Binding</h3>
             <div className="space-y-2">
-              {(skillData?.skills || []).map((skill: AgentSkillItem) => (
+              {/* Default (unassigned) skills */}
+              {defaultSkillsList.length > 0 && (
+                <div className="mb-2 text-xs text-muted-foreground">Default Skills</div>
+              )}
+              {defaultSkillsList.map((skill) => (
                 <div key={skill.skill_id} className="flex items-center justify-between border border-border rounded-xl p-3">
                   <div>
                     <div className="text-sm font-medium">{skill.name}</div>
                     <div className="text-xs text-muted-foreground">{skill.description || skill.skill_id}</div>
                   </div>
                   <button
-                    onClick={() => bindMutation.mutate({ skillId: skill.skill_id, assigned: skill.assigned })}
+                    onClick={() => bindMutation.mutate({ skillId: skill.skill_id, assigned: false })}
                     disabled={bindMutation.isPending || !skill.enabled}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                      skill.assigned ? 'bg-primary text-white' : 'bg-secondary text-foreground'
-                    } disabled:opacity-50`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground disabled:opacity-50`}
                   >
-                    {skill.assigned ? 'Assigned' : 'Assign'}
+                    Assign
                   </button>
                 </div>
               ))}
+
+              {/* Assigned (registry) skills */}
+              {assignedSkillsList.length > 0 && (
+                <>
+                  <div className="mt-2 mb-2 text-xs text-muted-foreground">Assigned Skills</div>
+                  {assignedSkillsList.map((skill) => (
+                    <div key={skill.skill_id} className="flex items-center justify-between border border-border rounded-xl p-3">
+                      <div>
+                        <div className="text-sm font-medium">{skill.name}</div>
+                        <div className="text-xs text-muted-foreground">{skill.description || skill.skill_id}</div>
+                      </div>
+                      <button
+                        onClick={() => bindMutation.mutate({ skillId: skill.skill_id, assigned: true })}
+                        disabled={bindMutation.isPending || !skill.enabled}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white disabled:opacity-50`}
+                      >
+                        Unassign
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
