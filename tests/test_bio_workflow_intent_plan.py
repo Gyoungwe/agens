@@ -783,7 +783,7 @@ def test_evolution_approval_approve_stores_to_knowledge_base(tmp_path):
 
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             er_mod.approve_evolution("req_test_approve", comment="looks good")
         )
 
