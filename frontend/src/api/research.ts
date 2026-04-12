@@ -16,6 +16,9 @@ export interface ResearchStreamEvent {
   stage?: string
   message?: string
   source?: string
+  source_type?: 'website' | 'paper' | 'other'
+  source_link?: string
+  source_items?: Array<{ text: string; type: 'website' | 'paper' | 'other'; link?: string }>
   point?: string
   research?: string
   summary?: string

@@ -142,6 +142,34 @@ class ResearchRequest(BaseModel):
     provider_id: Optional[str] = None
 
 
+def _normalize_source_to_link(source: str) -> str:
+    s = (source or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+    if low.startswith("http://") or low.startswith("https://"):
+        return s
+    if low.startswith("doi:"):
+        doi = s.split(":", 1)[1].strip()
+        return f"https://doi.org/{doi}" if doi else ""
+    if low.startswith("arxiv:"):
+        aid = s.split(":", 1)[1].strip()
+        return f"https://arxiv.org/abs/{aid}" if aid else ""
+    if low.startswith("pmid:"):
+        pid = s.split(":", 1)[1].strip()
+        return f"https://pubmed.ncbi.nlm.nih.gov/{pid}/" if pid else ""
+    return ""
+
+
+def _source_kind(source: str) -> str:
+    s = (source or "").lower()
+    if s.startswith("doi:") or s.startswith("arxiv:") or s.startswith("pmid:"):
+        return "paper"
+    if s.startswith("http://") or s.startswith("https://"):
+        return "website"
+    return "other"
+
+
 def _extract_research_sources(raw_text: str) -> List[str]:
     if not raw_text:
         return []
@@ -2224,11 +2252,22 @@ async def stream_research(request: ResearchRequest):
                             "trace_id": trace_id,
                             "index": idx,
                             "source": src,
+                            "source_type": _source_kind(src),
+                            "source_link": _normalize_source_to_link(src),
                         },
                         ensure_ascii=False,
                     ),
                     "id": str(uuid.uuid4())[:8],
                 }
+
+            source_items = [
+                {
+                    "text": s,
+                    "type": _source_kind(s),
+                    "link": _normalize_source_to_link(s),
+                }
+                for s in sources
+            ]
 
             knowledge_points = _extract_research_knowledge(raw)
             for idx, point in enumerate(knowledge_points, start=1):
@@ -2284,6 +2323,7 @@ async def stream_research(request: ResearchRequest):
                         "research": raw,
                         "summary": summarized,
                         "sources": sources,
+                        "source_items": source_items,
                         "knowledge": knowledge_points,
                     },
                     ensure_ascii=False,

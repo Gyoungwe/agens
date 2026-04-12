@@ -3,6 +3,12 @@ import { Search, FlaskConical, Sparkles } from 'lucide-react'
 import { researchApi } from '@/api/research'
 import { parseSSEStream } from '@/utils/sse'
 
+type SourceItem = {
+  text: string
+  type: 'website' | 'paper' | 'other'
+  link?: string
+}
+
 type ParsedSection = {
   title: string
   items: string[]
@@ -58,7 +64,7 @@ export function ResearchPage() {
   const [result, setResult] = useState<{ research: string; summary: string; session_id?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<string[]>([])
-  const [sources, setSources] = useState<string[]>([])
+  const [sources, setSources] = useState<SourceItem[]>([])
   const [knowledge, setKnowledge] = useState<string[]>([])
 
   const runResearch = async () => {
@@ -96,7 +102,14 @@ export function ResearchPage() {
           setTimeline((prev) => [...prev, msg])
         } else if (sseEvent.eventType === 'research_source') {
           const src = String(sseEvent.data.source || '')
-          if (src) setSources((prev) => (prev.includes(src) ? prev : [...prev, src]))
+          const sourceType = (sseEvent.data.source_type as SourceItem['type'] | undefined) || 'other'
+          const sourceLink = String(sseEvent.data.source_link || '')
+          if (src) {
+            setSources((prev) => {
+              if (prev.some((p) => p.text === src)) return prev
+              return [...prev, { text: src, type: sourceType, link: sourceLink || undefined }]
+            })
+          }
         } else if (sseEvent.eventType === 'research_knowledge') {
           const point = String(sseEvent.data.point || '')
           if (point) setKnowledge((prev) => (prev.includes(point) ? prev : [...prev, point]))
@@ -106,7 +119,8 @@ export function ResearchPage() {
             summary: String(sseEvent.data.summary || ''),
             session_id: (sseEvent.data.session_id as string) || undefined,
           })
-          setSources((sseEvent.data.sources as string[] | undefined) || [])
+          const sourceItems = (sseEvent.data.source_items as SourceItem[] | undefined) || []
+          setSources(sourceItems)
           setKnowledge((sseEvent.data.knowledge as string[] | undefined) || [])
           setTimeline((prev) => [...prev, 'Research completed.'])
         } else if (sseEvent.eventType === 'error') {
@@ -174,10 +188,39 @@ export function ResearchPage() {
           {sources.length > 0 && (
             <div>
               <div className="text-xs text-muted-foreground mb-1">Sources (Websites / Papers)</div>
-              <div className="flex flex-wrap gap-2">
-                {sources.map((s, i) => (
-                  <span key={`${s}-${i}`} className="text-xs px-2 py-1 rounded-full bg-primary/10 border border-primary/20">{s}</span>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border p-3 bg-muted/20">
+                  <div className="text-xs font-medium mb-2">Websites</div>
+                  <div className="space-y-2">
+                    {sources.filter((s) => s.type === 'website').map((s, i) => (
+                      <div key={`${s.text}-${i}`} className="text-xs break-all">
+                        {s.link ? (
+                          <a href={s.link} target="_blank" rel="noreferrer" className="text-primary underline">
+                            {s.text}
+                          </a>
+                        ) : (
+                          <span>{s.text}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-3 bg-muted/20">
+                  <div className="text-xs font-medium mb-2">Papers</div>
+                  <div className="space-y-2">
+                    {sources.filter((s) => s.type === 'paper').map((s, i) => (
+                      <div key={`${s.text}-${i}`} className="text-xs break-all">
+                        {s.link ? (
+                          <a href={s.link} target="_blank" rel="noreferrer" className="text-primary underline">
+                            {s.text}
+                          </a>
+                        ) : (
+                          <span>{s.text}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
