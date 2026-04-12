@@ -2,76 +2,25 @@
 """
 技能注册中心
 
-技能系统参考 Claude Managed Agents SKILL.md 格式
+技能系统使用统一 skill.yaml manifest 格式
 
-标准化 SKILL.md 格式:
-```yaml
----
-skill_id: web_search
-name: 网页搜索
-description: 使用搜索引擎搜索互联网信息
-version: 0.02
-author: system
-tags: [search, internet, research]
-
-# 推荐模型（可选）
-model: claude-sonnet-4-6
-
-# 所需工具（可选）
-tools:
-  - bash
-  - read
-  - write
-
-# 输入schema（可选）
-input:
-  type: object
-  properties:
-    query:
-      type: string
-      description: 搜索查询词
-
-# 输出schema（可选）
-output:
-  type: object
-  properties:
-    results:
-      type: array
-
-# 权限要求（可选）
-permissions:
-  network: true
-  filesystem: false
-  shell: false
-
-# 代理可用（可选）
-agents: [research_agent, executor_agent]
-
-# 是否启用
-enabled: true
-
-# 来源
-source: local
----
-
-# 技能详细说明
-
-这里可以写更详细的技能描述、使用示例、注意事项等。
-Markdown 格式。
-```
+标准化技能包格式:
+- skills/<skill_id>/skill.yaml
+- skills/<skill_id>/README.md
+- skills/<skill_id>/entry.py
 """
 
 import sqlite3
 import importlib.util
 import logging
 import json
-import re
 import yaml
 import asyncio
 from pathlib import Path
 from typing import Type, Dict, List, Optional, Any
 
 from core.base_skill import BaseSkill
+from core.skill_manifest import SkillManifest, load_skill_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +33,7 @@ _POOL_SIZE = 5
 class SkillMetadata:
     """
     标准化技能元数据
-    参考 Claude Managed Agents SKILL.md 格式
+    统一基于 skill.yaml manifest
     """
 
     def __init__(self, data: dict):
@@ -93,6 +42,7 @@ class SkillMetadata:
         self.description = data.get("description", "")
         self.version = data.get("version", "0.02")
         self.author = data.get("author", "")
+        self.license = data.get("license", "")
         self.tags = data.get("tags", [])
 
         # 推荐模型
@@ -102,8 +52,8 @@ class SkillMetadata:
         self.tools = data.get("tools", [])
 
         # 输入输出 schema
-        self.input_schema = data.get("input", {})
-        self.output_schema = data.get("output", {})
+        self.input_schema = data.get("input", data.get("input_schema", {}))
+        self.output_schema = data.get("output", data.get("output_schema", {}))
 
         # 权限要求
         self.permissions = data.get("permissions", {})
@@ -117,8 +67,9 @@ class SkillMetadata:
         # 来源
         self.source = data.get("source", "local")
 
-        # 详细说明（SKILL.md 的正文部分）
-        self.readme = data.get("_readme", "")
+        self.readme = data.get("readme", "README.md")
+        self.entrypoint = data.get("entrypoint", "entry.py")
+        self.metadata = data.get("metadata", {})
 
     def to_dict(self) -> dict:
         return {
@@ -127,6 +78,7 @@ class SkillMetadata:
             "description": self.description,
             "version": self.version,
             "author": self.author,
+            "license": self.license,
             "tags": self.tags,
             "model": self.model,
             "tools": self.tools,
@@ -136,6 +88,9 @@ class SkillMetadata:
             "agents": self.agents,
             "enabled": self.enabled,
             "source": self.source,
+            "metadata": self.metadata,
+            "entrypoint": self.entrypoint,
+            "readme": self.readme,
         }
 
     def matches_agent(self, agent_id: str) -> bool:
@@ -200,12 +155,27 @@ class SkillRegistry:
                 output_schema TEXT,
                 permissions  TEXT,
                 agent_ids    TEXT,
+                metadata     TEXT,
+                license      TEXT,
                 enabled      INTEGER DEFAULT 1,
                 source       TEXT,
+                entrypoint   TEXT,
+                readme       TEXT,
                 install_path TEXT,
                 installed_at  TEXT DEFAULT (datetime('now'))
             )
         """)
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(skills)").fetchall()
+        }
+        if "metadata" not in columns:
+            conn.execute("ALTER TABLE skills ADD COLUMN metadata TEXT")
+        if "license" not in columns:
+            conn.execute("ALTER TABLE skills ADD COLUMN license TEXT")
+        if "entrypoint" not in columns:
+            conn.execute("ALTER TABLE skills ADD COLUMN entrypoint TEXT")
+        if "readme" not in columns:
+            conn.execute("ALTER TABLE skills ADD COLUMN readme TEXT")
         conn.close()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -232,9 +202,9 @@ class SkillRegistry:
         for skill_dir in sorted(SKILLS_DIR.iterdir()):
             if not skill_dir.is_dir():
                 continue
-            skill_md = skill_dir / "SKILL.md"
-            skill_py = skill_dir / "skill.py"
-            if skill_md.exists() and skill_py.exists():
+            manifest_file = skill_dir / "skill.yaml"
+            entry_file = skill_dir / "entry.py"
+            if manifest_file.exists() and entry_file.exists():
                 try:
                     self._register_from_dir(skill_dir)
                     count += 1
@@ -244,8 +214,9 @@ class SkillRegistry:
         logger.info(f"📦 扫描完成，共注册 {count} 个技能")
 
     def _register_from_dir(self, skill_dir: Path):
-        meta = self._parse_skill_md(skill_dir / "SKILL.md")
-        skill_id = meta.get("skill_id", skill_dir.name)
+        manifest = load_skill_manifest(skill_dir)
+        meta = manifest.to_registry_row()
+        skill_id = manifest.skill_id
 
         with self._conn() as conn:
             conn.execute(
@@ -253,8 +224,9 @@ class SkillRegistry:
                 INSERT OR REPLACE INTO skills
                 (skill_id, name, description, version, author,
                  tags, model, tools, input_schema, output_schema,
-                 permissions, agent_ids, enabled, source, install_path)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 permissions, agent_ids, metadata, license, enabled, source,
+                 entrypoint, readme, install_path)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
                 (
                     skill_id,
@@ -265,42 +237,27 @@ class SkillRegistry:
                     json.dumps(meta.get("tags", []), ensure_ascii=False),
                     meta.get("model", ""),
                     json.dumps(meta.get("tools", []), ensure_ascii=False),
-                    json.dumps(meta.get("input", {}), ensure_ascii=False),
-                    json.dumps(meta.get("output", {}), ensure_ascii=False),
+                    json.dumps(meta.get("input_schema", {}), ensure_ascii=False),
+                    json.dumps(meta.get("output_schema", {}), ensure_ascii=False),
                     json.dumps(meta.get("permissions", {}), ensure_ascii=False),
                     json.dumps(meta.get("agents", []), ensure_ascii=False),
+                    json.dumps(meta.get("metadata", {}), ensure_ascii=False),
+                    meta.get("license", ""),
                     1 if meta.get("enabled", True) else 0,
                     meta.get("source", "local"),
+                    meta.get("entrypoint", "entry.py"),
+                    meta.get("readme", "README.md"),
                     str(skill_dir.resolve()),
                 ),
             )
         logger.debug(f"  ✅ 注册技能: [{skill_id}]")
 
-    @staticmethod
-    def _parse_skill_md(path: Path) -> dict:
-        """
-        解析 SKILL.md 文件
-        支持 YAML frontmatter 格式
-        """
-        raw = path.read_text(encoding="utf-8")
-
-        # 提取 YAML frontmatter
-        match = re.match(r"^---\n(.*?)\n---(.*)$", raw, re.DOTALL)
-        if not match:
-            return {}
-
-        frontmatter = match.group(1)
-        readme = match.group(2).strip() if match.group(2) else ""
-
-        data = yaml.safe_load(frontmatter) or {}
-        data["_readme"] = readme
-
-        return data
-
     def parse_metadata(self, path: Path) -> SkillMetadata:
-        """解析技能元数据为 SkillMetadata 对象"""
-        data = self._parse_skill_md(path)
-        return SkillMetadata(data)
+        """解析 skill.yaml 为 SkillMetadata 对象"""
+        manifest = SkillManifest(
+            **(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+        )
+        return SkillMetadata(manifest.to_registry_row())
 
     # ══════════════════════════════════════════════
     # 技能加载（动态 import）
@@ -311,9 +268,10 @@ class SkillRegistry:
         if not row:
             return None
 
-        skill_py = Path(row["install_path"]) / "skill.py"
+        entrypoint = row["entrypoint"] or "entry.py"
+        skill_py = Path(row["install_path"]) / entrypoint
         if not skill_py.exists():
-            logger.error(f"技能文件不存在: {skill_py}")
+            logger.error(f"技能入口文件不存在: {skill_py}")
             return None
 
         spec = importlib.util.spec_from_file_location(f"skill_{skill_id}", skill_py)
@@ -322,7 +280,7 @@ class SkillRegistry:
 
         skill_class = getattr(module, "Skill", None)
         if skill_class is None:
-            logger.error(f"skill.py 中未找到 Skill 类: {skill_py}")
+            logger.error(f"entry.py 中未找到 Skill 类: {skill_py}")
             return None
 
         return skill_class
@@ -357,15 +315,19 @@ class SkillRegistry:
                 "description": row["description"],
                 "version": row["version"],
                 "author": row["author"],
+                "license": row["license"],
                 "tags": json.loads(row["tags"] or "[]"),
                 "model": row["model"],
                 "tools": json.loads(row["tools"] or "[]"),
-                "input": json.loads(row["input_schema"] or "{}"),
-                "output": json.loads(row["output_schema"] or "{}"),
+                "input_schema": json.loads(row["input_schema"] or "{}"),
+                "output_schema": json.loads(row["output_schema"] or "{}"),
                 "permissions": json.loads(row["permissions"] or "{}"),
                 "agents": json.loads(row["agent_ids"] or "[]"),
+                "metadata": json.loads(row["metadata"] or "{}"),
                 "enabled": bool(row["enabled"]),
                 "source": row["source"],
+                "entrypoint": row["entrypoint"] or "entry.py",
+                "readme": row["readme"] or "README.md",
             }
         )
 

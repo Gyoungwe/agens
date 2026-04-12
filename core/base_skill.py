@@ -6,7 +6,7 @@
 
 技能应:
 1. 继承 BaseSkill 并实现 run() 方法
-2. 通过 SKILL.md 定义元数据
+2. 通过 skill.yaml 定义元数据
 3. 返回结构化输出
 4. 支持 Hook 拦截
 """
@@ -68,33 +68,15 @@ class BaseSkill(ABC):
     所有技能的基类
 
     技能开发指南:
-    1. 创建 skills/<skill_id>/SKILL.md - 定义元数据
-    2. 创建 skills/<skill_id>/skill.py - 实现技能逻辑
+    1. 创建 skills/<skill_id>/skill.yaml - 定义通用 manifest
+    2. 创建 skills/<skill_id>/README.md - 技能说明
+    3. 创建 skills/<skill_id>/entry.py - 实现技能逻辑
 
-    示例 SKILL.md:
-    ```yaml
-    ---
-    skill_id: web_search
-    name: 网页搜索
-    description: 使用搜索引擎搜索互联网信息
-    version: 0.02
-    tools: [bash, read]
-    permissions:
-      network: true
-      filesystem: false
-    agents: [research_agent]
-    ---
-    ```
-
-    示例 skill.py:
+    示例 entry.py:
     ```python
     from core.base_skill import BaseSkill, SkillInput
 
     class Skill(BaseSkill):
-        skill_id = "web_search"
-        name = "网页搜索"
-        description = "使用搜索引擎搜索互联网信息"
-
         async def run(self, input_data: SkillInput) -> Any:
             query = input_data.instruction
             # 实现搜索逻辑
@@ -112,6 +94,16 @@ class BaseSkill(ABC):
     def __init__(self):
         self._enabled = True
         self._hooks = []
+
+    def apply_manifest(self, manifest):
+        self.skill_id = manifest.skill_id
+        self.name = manifest.name
+        self.description = manifest.description
+        self.version = manifest.version
+        self.author = manifest.author
+        self.tags = list(manifest.tags)
+        self._enabled = manifest.enabled
+        self.manifest = manifest
 
     async def execute(self, input_data: SkillInput) -> SkillOutput:
         """

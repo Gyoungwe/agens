@@ -22,6 +22,9 @@ class TestSkillMetadata:
             "output": {"type": "object"},
             "permissions": {"network": True, "filesystem": False},
             "agents": ["agent1", "agent2"],
+            "license": "MIT",
+            "entrypoint": "entry.py",
+            "readme": "README.md",
             "enabled": True,
             "source": "local",
         }
@@ -98,13 +101,16 @@ class TestSkillRegistry:
         skills_parent = tmp_path / "skills"
         skill_dir = skills_parent / "test_skill"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "skill.py").write_text("class Skill: pass")
-        (skill_dir / "SKILL.md").write_text("""---
-skill_id: test_skill
+        (skill_dir / "entry.py").write_text("class Skill: pass")
+        (skill_dir / "skill.yaml").write_text(
+            """skill_id: test_skill
 name: Test Skill
 description: Test
----
-# Readme""")
+entrypoint: entry.py
+readme: README.md
+"""
+        )
+        (skill_dir / "README.md").write_text("# Readme")
 
         import core.skill_registry as sr
 

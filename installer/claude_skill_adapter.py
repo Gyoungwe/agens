@@ -213,7 +213,7 @@ class ClaudeSkillAdapter:
         class_name = self._to_class_name(draft.tool_name)
         skill_id = draft.tool_name.lower().replace("-", "_")
 
-        code = f'''# skill.py
+        code = f'''# entry.py
 # 由 Claude Skill Adapter 自动生成
 # 源: {draft.source}
 # 生成时间: {datetime.now().isoformat()}
@@ -377,11 +377,14 @@ async def create_skill() -> {class_name}Skill:
         try:
             skill_dir.mkdir(parents=True, exist_ok=True)
 
-            skill_md_content = self._generate_skill_md(draft, skill_id)
-            (skill_dir / "SKILL.md").write_text(skill_md_content, encoding="utf-8")
+            skill_md_content = self._generate_skill_manifest(draft, skill_id)
+            (skill_dir / "skill.yaml").write_text(skill_md_content, encoding="utf-8")
+
+            readme_content = self._generate_readme(draft, skill_id)
+            (skill_dir / "README.md").write_text(readme_content, encoding="utf-8")
 
             skill_py_content = self.generate_skill_code(draft)
-            (skill_dir / "skill.py").write_text(skill_py_content, encoding="utf-8")
+            (skill_dir / "entry.py").write_text(skill_py_content, encoding="utf-8")
 
             logger.info(f"Skill {skill_id} installed to {skill_dir}")
 
@@ -391,8 +394,37 @@ async def create_skill() -> {class_name}Skill:
         except Exception as e:
             return ImportResult(success=False, error=str(e))
 
-    def _generate_skill_md(self, draft: SkillDraft, skill_id: str = None) -> str:
-        """生成 SKILL.md 文件内容"""
+    def _generate_skill_manifest(self, draft: SkillDraft, skill_id: str = None) -> str:
+        """生成 skill.yaml 文件内容"""
+        if skill_id is None:
+            skill_id = draft.tool_name.lower().replace("-", "_")
+
+        manifest = {
+            "skill_id": skill_id,
+            "name": draft.tool_name,
+            "description": draft.description,
+            "version": "1.0.0",
+            "author": "Claude Skill Adapter",
+            "license": "",
+            "tags": self._infer_tags(draft),
+            "tools": [],
+            "permissions": {
+                "network": False,
+                "filesystem": False,
+                "shell": False,
+            },
+            "agents": [],
+            "enabled": True,
+            "source": draft.source,
+            "entrypoint": "entry.py",
+            "readme": "README.md",
+            "input_schema": draft.original_schema.get("input_schema", {}),
+            "output_schema": {"type": "object"},
+            "metadata": {"validation_warnings": draft.validation_warnings},
+        }
+        return self._dict_to_yaml(manifest)
+
+    def _generate_readme(self, draft: SkillDraft, skill_id: str = None) -> str:
         if skill_id is None:
             skill_id = draft.tool_name.lower().replace("-", "_")
 
@@ -414,7 +446,7 @@ async def create_skill() -> {class_name}Skill:
 ## 使用方式
 
 ```python
-from skills.{skill_id}.skill import {self._to_class_name(draft.tool_name)}Skill
+from skills.{skill_id}.entry import {self._to_class_name(draft.tool_name)}Skill
 
 skill = {self._to_class_name(draft.tool_name)}Skill()
 result = await skill.execute('{{"param1": "value1"}}')

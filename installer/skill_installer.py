@@ -3,9 +3,11 @@
 import logging
 import shutil
 import httpx
+import yaml
 from pathlib import Path
 from typing import List, Optional
 from core.skill_registry import SKILLS_DIR
+from installer.scientific_skill_importer import ScientificSkillImporter
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,12 @@ class SkillInstaller:
                 shutil.rmtree(target_dir)
             return False
 
+    async def install_scientific_skills(self, dry_run: bool = False) -> dict:
+        importer = ScientificSkillImporter(
+            registry=self.registry, skills_dir=SKILLS_DIR
+        )
+        return await importer.import_all(dry_run=dry_run)
+
     async def _download_from_clawhub(self, skill_id: str, target_dir: Path) -> bool:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -111,43 +119,52 @@ class SkillInstaller:
 
     def _scaffold(self, skill_id: str, target_dir: Path, agent_ids: List[str]):
         target_dir.mkdir(parents=True)
-        agents_str = "[" + ", ".join(agent_ids) + "]" if agent_ids else "[]"
+        agents_list = agent_ids or []
 
-        (target_dir / "SKILL.md").write_text(
-            f"""---
-skill_id:    {skill_id}
-name:        {skill_id}
-description: （请填写技能描述）
-version:     0.02
-author:      local
-tags:        []
-agents:      {agents_str}
-enabled:     true
-source:      local
----
-
-## {skill_id}
-
-（请填写技能说明）
-""",
+        (target_dir / "skill.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "skill_id": skill_id,
+                    "name": skill_id,
+                    "description": "（请填写技能描述）",
+                    "version": "0.02",
+                    "author": "local",
+                    "license": "",
+                    "tags": [],
+                    "tools": [],
+                    "permissions": {
+                        "network": False,
+                        "filesystem": False,
+                        "shell": False,
+                    },
+                    "agents": agents_list,
+                    "enabled": True,
+                    "source": "local",
+                    "entrypoint": "entry.py",
+                    "readme": "README.md",
+                    "input_schema": {"type": "object", "properties": {}},
+                    "output_schema": {"type": "object"},
+                    "metadata": {},
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            ),
             encoding="utf-8",
         )
 
-        (target_dir / "skill.py").write_text(
-            f"""# skills/{skill_id}/skill.py
+        (target_dir / "README.md").write_text(
+            f"# {skill_id}\n\n（请填写技能说明）\n",
+            encoding="utf-8",
+        )
+
+        (target_dir / "entry.py").write_text(
+            f"""# skills/{skill_id}/entry.py
 
 from core.base_skill import BaseSkill, SkillInput
 from typing import Any
 
 
 class Skill(BaseSkill):
-
-    skill_id    = "{skill_id}"
-    name        = "{skill_id}"
-    description = "（请填写描述）"
-    version     = "0.02"
-    tags        = []
-
     async def run(self, input_data: SkillInput) -> Any:
         return f"技能 {skill_id} 收到指令: {{input_data.instruction}}"
 """,
