@@ -1,3 +1,5 @@
+import type { RuntimeEventContract, RuntimeOutputContract } from './runtime'
+
 export type EventType =
   | 'agent_status_changed'
   | 'approval_created'
@@ -12,7 +14,7 @@ export type EventType =
   | 'bio_workflow_start'
   | 'bio_workflow_done'
 
-export interface WebSocketEvent {
+export interface WebSocketEvent extends Omit<RuntimeEventContract, 'event_id' | 'task_id' | 'agent' | 'created_at' | 'status' | 'meta' | 'data'> {
   type: EventType
   data: unknown
   timestamp: string
@@ -69,14 +71,19 @@ export interface BioStageStatus {
   }
 }
 
-export interface BioEventLog {
+export interface BioEventLog extends Omit<RuntimeEventContract, 'event_id' | 'task_id' | 'type' | 'agent' | 'data' | 'meta' | 'contract_version' | 'correlation_id'> {
   id: string
   event_type: string
   agent_id: string
   trace_id: string
-  status?: string
   message: string
-  created_at?: number
+  contract_version?: string
+  correlation_id?: string
+}
+
+export interface BioRuntimeOutput extends Omit<RuntimeOutputContract, 'output_type' | 'content'> {
+  output_type: 'report' | 'final'
+  content: string
 }
 
 export interface BioStreamStatus {

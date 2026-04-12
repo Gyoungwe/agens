@@ -7,6 +7,8 @@ from enum import Enum
 from typing import Any, Dict, Optional
 import uuid
 
+from core.runtime_contract import RUNTIME_CONTRACT_VERSION
+
 
 class AgentEventType(str, Enum):
     AGENT_START = "agent_start"
@@ -28,6 +30,7 @@ class EventEnvelope:
     提供 to_sse() 方法直接输出 SSE 格式
     """
 
+    contract_version: str = RUNTIME_CONTRACT_VERSION
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     task_id: str = ""
     session_id: Optional[str] = None
@@ -56,6 +59,7 @@ class EventEnvelope:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "event_id": self.event_id,
+            "contract_version": self.contract_version,
             "task_id": self.task_id,
             "session_id": self.session_id,
             "namespace": self.namespace,
@@ -335,6 +339,7 @@ class AgentEvent:
     data: Dict[str, Any] = field(default_factory=dict)
     session_id: Optional[str] = None
     namespace: str = ""
+    contract_version: str = RUNTIME_CONTRACT_VERSION
 
     def to_envelope(self, correlation_id: str = "") -> EventEnvelope:
         """转换为统一事件封装"""
@@ -353,6 +358,7 @@ class AgentEvent:
 
         return EventEnvelope(
             event_id=str(uuid.uuid4()),
+            contract_version=self.contract_version,
             task_id=self.trace_id,
             session_id=self.session_id,
             namespace=self.namespace,
@@ -368,6 +374,7 @@ class AgentEvent:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "event": self.event_type.value,
+            "contract_version": self.contract_version,
             "agent_id": self.agent_id,
             "trace_id": self.trace_id,
             "timestamp": self.timestamp,

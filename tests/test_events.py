@@ -1,7 +1,9 @@
 # tests/test_events.py
 
 import pytest
+import json
 from core.events import EventEnvelope, AgentEvent, AgentEventType
+from core.runtime_contract import RUNTIME_CONTRACT_VERSION
 
 
 class TestEventEnvelope:
@@ -19,6 +21,7 @@ class TestEventEnvelope:
         )
         d = env.to_dict()
         assert d["event_id"] == "evt-1"
+        assert d["contract_version"] == RUNTIME_CONTRACT_VERSION
         assert d["task_id"] == "task-1"
         assert d["namespace"] == "chat_runtime"
         assert d["type"] == "agent_start"
@@ -38,6 +41,7 @@ class TestEventEnvelope:
         assert "evt-1" in sse
         assert "task-1" in sse
         assert "data:" in sse
+        assert f"contract_version: {RUNTIME_CONTRACT_VERSION}" in sse
 
     def test_factory_agent_start(self):
         env = EventEnvelope.agent_start(
@@ -52,6 +56,7 @@ class TestEventEnvelope:
         assert env.task_id == "trace-123"
         assert env.session_id == "sess-456"
         assert env.namespace == "chat_runtime"
+        assert env.contract_version == RUNTIME_CONTRACT_VERSION
         assert env.status == "started"
 
     def test_factory_agent_thinking(self):
@@ -93,6 +98,27 @@ class TestEventEnvelope:
         assert env.type == "agent_output"
         assert env.data["output"] == "result output"
         assert env.data["summary"] == "short summary"
+
+    def test_routing_decision_payload_uses_delegation_contract_shape(self):
+        payload = {
+            "event": "routing_decision",
+            "mode": "research",
+            "selected_agents": ["research_agent", "writer_agent"],
+            "reason": "Research intent detected; routing to research mode.",
+            "recommendation": "",
+            "clarification_question": None,
+            "metadata": {},
+        }
+        env = EventEnvelope.agent_output(
+            agent_id="orchestrator",
+            trace_id="trace-123",
+            output=json.dumps(payload, ensure_ascii=False),
+            summary="routing_decision",
+        )
+
+        parsed = json.loads(env.data["output"])
+        assert parsed["mode"] == "research"
+        assert parsed["selected_agents"] == ["research_agent", "writer_agent"]
 
     def test_factory_agent_done(self):
         env = EventEnvelope.agent_done(
@@ -162,6 +188,7 @@ class TestAgentEvent:
         assert env.correlation_id == "corr-789"
         assert env.session_id == "sess-456"
         assert env.namespace == "workflow_runtime"
+        assert env.contract_version == RUNTIME_CONTRACT_VERSION
 
     def test_to_dict(self):
         event = AgentEvent(
@@ -177,6 +204,7 @@ class TestAgentEvent:
         assert d["agent_id"] == "test_agent"
         assert d["trace_id"] == "trace-123"
         assert d["namespace"] == "research_runtime"
+        assert d["contract_version"] == RUNTIME_CONTRACT_VERSION
         assert d["instruction"] == "test"
 
     def test_to_envelope_status_mapping(self):
