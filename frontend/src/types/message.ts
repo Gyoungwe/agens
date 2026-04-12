@@ -1,3 +1,5 @@
+import type { RuntimeOutputContract, RuntimeSessionContract } from './runtime'
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -18,13 +20,9 @@ export interface ToolCall {
   result?: string
 }
 
-export interface Session {
-  session_id: string
-  title: string
+export interface Session extends RuntimeSessionContract {
   status: 'active' | 'completed'
   message_count: number
-  created_at: string
-  updated_at: string
 }
 
 export interface ChatRequest {
@@ -37,4 +35,9 @@ export interface ChatResponse {
   session_id: string
   message: Message
   done: boolean
+}
+
+export interface ChatRuntimeOutput extends Omit<RuntimeOutputContract, 'namespace' | 'output_type'> {
+  namespace: 'chat_runtime'
+  output_type: 'final' | 'partial'
 }

@@ -1,12 +1,17 @@
 import client from './client'
+import type { RuntimeOutputContract } from '@/types'
 
-export interface ResearchRunResponse {
+export interface ResearchRunResponse extends Omit<RuntimeOutputContract, 'namespace' | 'output_type' | 'content' | 'content_format'> {
   success: boolean
   session_id?: string
   query: string
   research: string
   summary: string
   summary_format?: 'text' | 'json'
+  namespace?: 'research_runtime'
+  output_type?: 'report' | 'final'
+  content?: string
+  content_format?: 'text' | 'markdown'
 }
 
 export interface ResearchStreamEvent {
