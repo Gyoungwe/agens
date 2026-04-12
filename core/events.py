@@ -186,7 +186,11 @@ class EventEnvelope:
         summary: str = "",
         session_id: str = None,
         namespace: str = "",
+        extra_data: Dict[str, Any] | None = None,
     ):
+        payload = {"output": output[:500], "summary": summary or output[:100]}
+        if extra_data:
+            payload.update(extra_data)
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
@@ -198,7 +202,7 @@ class EventEnvelope:
             agent=agent_id,
             status="running",
             meta={"trace_id": trace_id},
-            data={"output": output[:500], "summary": summary or output[:100]},
+            data=payload,
         )
 
     @classmethod

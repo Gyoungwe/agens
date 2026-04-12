@@ -1,4 +1,8 @@
-from core.delegation_policy import decide_delegation, looks_like_research_query
+from core.delegation_policy import (
+    decide_delegation,
+    looks_like_research_query,
+    strip_force_research_prefix,
+)
 
 
 def test_research_marker_detection_matches_expected_queries():
@@ -9,12 +13,33 @@ def test_research_marker_detection_matches_expected_queries():
         is True
     )
     assert looks_like_research_query("hello there") is False
+    assert (
+        looks_like_research_query("[research] 如何处理着丝粒和端粒相似度过高的问题")
+        is True
+    )
+
+
+def test_strip_force_research_prefix_removes_explicit_prefix():
+    assert (
+        strip_force_research_prefix("[research] 如何处理着丝粒和端粒相似度过高的问题")
+        == "如何处理着丝粒和端粒相似度过高的问题"
+    )
 
 
 def test_decide_delegation_returns_research_mode_when_research_agent_available():
     decision = decide_delegation(
         user_input="research literature about CRISPR off-target effects",
         available_agents=["research_agent", "writer_agent", "bio_planner_agent"],
+    )
+
+    assert decision.mode == "research"
+    assert decision.selected_agents == ["research_agent", "writer_agent"]
+
+
+def test_decide_delegation_routes_methods_query_to_research_mode():
+    decision = decide_delegation(
+        user_input="如何处理着丝粒和端粒相似度过高的问题",
+        available_agents=["research_agent", "writer_agent", "executor_agent"],
     )
 
     assert decision.mode == "research"

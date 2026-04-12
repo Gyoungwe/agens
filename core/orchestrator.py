@@ -10,7 +10,7 @@ from pathlib import Path
 from copy import deepcopy
 from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
-from core.delegation_policy import decide_delegation
+from core.delegation_policy import decide_delegation, strip_force_research_prefix
 from core.message import Message, TaskPayload, ResultPayload
 from core.base_agent import BaseAgent
 from core.events import EventEnvelope, AgentEvent, AgentEventType
@@ -700,6 +700,7 @@ class Orchestrator(BaseAgent):
         session_id: Optional[str],
         trace_id: str,
     ) -> str:
+        user_input = strip_force_research_prefix(user_input)
         runtime_context = {
             "scope_id": f"research::{(user_input or '').strip()[:80]}",
             "knowledge_topic": "research",
