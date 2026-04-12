@@ -10,6 +10,7 @@ class TestEventEnvelope:
             event_id="evt-1",
             task_id="task-1",
             session_id="sess-1",
+            namespace="chat_runtime",
             correlation_id="corr-1",
             type="agent_start",
             agent="test_agent",
@@ -19,6 +20,7 @@ class TestEventEnvelope:
         d = env.to_dict()
         assert d["event_id"] == "evt-1"
         assert d["task_id"] == "task-1"
+        assert d["namespace"] == "chat_runtime"
         assert d["type"] == "agent_start"
         assert d["data"] == {"key": "value"}
 
@@ -43,11 +45,13 @@ class TestEventEnvelope:
             trace_id="trace-123",
             instruction="do something",
             session_id="sess-456",
+            namespace="chat_runtime",
         )
         assert env.type == "agent_start"
         assert env.agent == "test_agent"
         assert env.task_id == "trace-123"
         assert env.session_id == "sess-456"
+        assert env.namespace == "chat_runtime"
         assert env.status == "started"
 
     def test_factory_agent_thinking(self):
@@ -149,6 +153,7 @@ class TestAgentEvent:
             trace_id="trace-123",
             data={"instruction": "test"},
             session_id="sess-456",
+            namespace="workflow_runtime",
         )
         env = event.to_envelope(correlation_id="corr-789")
         assert env.type == "agent_start"
@@ -156,6 +161,7 @@ class TestAgentEvent:
         assert env.task_id == "trace-123"
         assert env.correlation_id == "corr-789"
         assert env.session_id == "sess-456"
+        assert env.namespace == "workflow_runtime"
 
     def test_to_dict(self):
         event = AgentEvent(
@@ -164,11 +170,13 @@ class TestAgentEvent:
             trace_id="trace-123",
             data={"instruction": "test"},
             session_id="sess-456",
+            namespace="research_runtime",
         )
         d = event.to_dict()
         assert d["event"] == "agent_start"
         assert d["agent_id"] == "test_agent"
         assert d["trace_id"] == "trace-123"
+        assert d["namespace"] == "research_runtime"
         assert d["instruction"] == "test"
 
     def test_to_envelope_status_mapping(self):

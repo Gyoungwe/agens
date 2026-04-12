@@ -31,6 +31,7 @@ class EventEnvelope:
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     task_id: str = ""
     session_id: Optional[str] = None
+    namespace: str = ""
     correlation_id: str = ""
     created_at: float = field(default_factory=lambda: datetime.now().timestamp())
     type: str = ""
@@ -57,6 +58,7 @@ class EventEnvelope:
             "event_id": self.event_id,
             "task_id": self.task_id,
             "session_id": self.session_id,
+            "namespace": self.namespace,
             "correlation_id": self.correlation_id,
             "created_at": self.created_at,
             "type": self.type,
@@ -80,12 +82,18 @@ class EventEnvelope:
 
     @classmethod
     def agent_start(
-        cls, agent_id: str, trace_id: str, instruction: str, session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        instruction: str,
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_START.value,
@@ -97,12 +105,18 @@ class EventEnvelope:
 
     @classmethod
     def agent_thinking(
-        cls, agent_id: str, trace_id: str, message: str = "", session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        message: str = "",
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_THINKING.value,
@@ -120,11 +134,13 @@ class EventEnvelope:
         skill_id: str,
         instruction: str,
         session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_TOOL_CALL.value,
@@ -136,12 +152,18 @@ class EventEnvelope:
 
     @classmethod
     def agent_file_read(
-        cls, agent_id: str, trace_id: str, file_path: str, session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        file_path: str,
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_FILE_READ.value,
@@ -159,11 +181,13 @@ class EventEnvelope:
         output: str,
         summary: str = "",
         session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_OUTPUT.value,
@@ -175,12 +199,18 @@ class EventEnvelope:
 
     @classmethod
     def agent_done(
-        cls, agent_id: str, trace_id: str, result: str, session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        result: str,
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.AGENT_DONE.value,
@@ -192,12 +222,18 @@ class EventEnvelope:
 
     @classmethod
     def final_response(
-        cls, agent_id: str, trace_id: str, response: str, session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        response: str,
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.FINAL_RESPONSE.value,
@@ -215,11 +251,13 @@ class EventEnvelope:
         error_message: str,
         session_id: str = None,
         error_code: str = "UNKNOWN",
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.TASK_FAILED.value,
@@ -240,11 +278,13 @@ class EventEnvelope:
         trace_id: str,
         timeout_seconds: float,
         session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.TASK_TIMEOUT.value,
@@ -259,12 +299,18 @@ class EventEnvelope:
 
     @classmethod
     def error(
-        cls, agent_id: str, trace_id: str, error_message: str, session_id: str = None
+        cls,
+        agent_id: str,
+        trace_id: str,
+        error_message: str,
+        session_id: str = None,
+        namespace: str = "",
     ):
         return cls(
             event_id=str(uuid.uuid4()),
             task_id=trace_id,
             session_id=session_id,
+            namespace=namespace,
             correlation_id=trace_id,
             created_at=datetime.now().timestamp(),
             type=AgentEventType.ERROR.value,
@@ -288,6 +334,7 @@ class AgentEvent:
     timestamp: float = field(default_factory=lambda: datetime.now().timestamp())
     data: Dict[str, Any] = field(default_factory=dict)
     session_id: Optional[str] = None
+    namespace: str = ""
 
     def to_envelope(self, correlation_id: str = "") -> EventEnvelope:
         """转换为统一事件封装"""
@@ -308,6 +355,7 @@ class AgentEvent:
             event_id=str(uuid.uuid4()),
             task_id=self.trace_id,
             session_id=self.session_id,
+            namespace=self.namespace,
             correlation_id=correlation_id or self.trace_id,
             created_at=self.timestamp,
             type=self.event_type.value,
@@ -324,5 +372,6 @@ class AgentEvent:
             "trace_id": self.trace_id,
             "timestamp": self.timestamp,
             "session_id": self.session_id,
+            "namespace": self.namespace,
             **self.data,
         }
