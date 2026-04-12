@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search, FlaskConical, Sparkles } from 'lucide-react'
 import { researchApi } from '@/api/research'
 import { parseSSEStream } from '@/utils/sse'
+import { MarkdownBlock } from '@/components/shared'
+import { researchHistoryApi } from '@/api/researchHistory'
+import type { Message, Session } from '@/types'
 
 type SourceItem = {
   text: string
@@ -66,6 +69,47 @@ export function ResearchPage() {
   const [timeline, setTimeline] = useState<string[]>([])
   const [sources, setSources] = useState<SourceItem[]>([])
   const [knowledge, setKnowledge] = useState<string[]>([])
+  const [historySessions, setHistorySessions] = useState<Session[]>([])
+  const [selectedHistorySession, setSelectedHistorySession] = useState<string>('')
+  const [historyMessages, setHistoryMessages] = useState<Message[]>([])
+  const [historyResults, setHistoryResults] = useState<Array<{ agent_id: string; result: string; created_at: string }>>([])
+
+  const loadHistorySessions = async () => {
+    try {
+      const { data } = await researchHistoryApi.listSessions()
+      const sessions = Array.isArray(data) ? data : []
+      setHistorySessions(sessions)
+      if (!selectedHistorySession && sessions.length > 0) {
+        setSelectedHistorySession(sessions[0].session_id)
+      }
+    } catch {
+      setHistorySessions([])
+    }
+  }
+
+  const loadHistoryDetail = async (sessionId: string) => {
+    if (!sessionId) return
+    try {
+      const [historyRes, resultsRes] = await Promise.all([
+        researchHistoryApi.getChatHistory(sessionId),
+        researchHistoryApi.getSessionResults(sessionId),
+      ])
+      setHistoryMessages(Array.isArray(historyRes.data.messages) ? historyRes.data.messages : [])
+
+      const rows = Array.isArray(resultsRes.data.results) ? resultsRes.data.results : []
+      const mapped = rows
+        .map((r) => ({
+          agent_id: r.agent_id,
+          result: String(r.result || ''),
+          created_at: r.created_at,
+        }))
+        .filter((x) => x.result)
+      setHistoryResults(mapped)
+    } catch {
+      setHistoryMessages([])
+      setHistoryResults([])
+    }
+  }
 
   const runResearch = async () => {
     if (!query.trim()) return
@@ -74,6 +118,7 @@ export function ResearchPage() {
     try {
       const { data } = await researchApi.run({ query: query.trim() })
       setResult({ research: data.research, summary: data.summary, session_id: data.session_id })
+      await loadHistorySessions()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Research failed')
     } finally {
@@ -123,6 +168,7 @@ export function ResearchPage() {
           setSources(sourceItems)
           setKnowledge((sseEvent.data.knowledge as string[] | undefined) || [])
           setTimeline((prev) => [...prev, 'Research completed.'])
+          await loadHistorySessions()
         } else if (sseEvent.eventType === 'error') {
           throw new Error(String(sseEvent.data.message || 'Research stream failed'))
         }
@@ -136,6 +182,18 @@ export function ResearchPage() {
 
   const evidenceChips = result ? parseBullets(result.research).slice(0, 12) : []
   const sections = result ? parseStructuredSummary(result.summary) : []
+
+  useEffect(() => {
+    loadHistorySessions()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (selectedHistorySession) {
+      loadHistoryDetail(selectedHistorySession)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedHistorySession])
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-4">
@@ -174,6 +232,70 @@ export function ResearchPage() {
           </button>
         </div>
         {error && <div className="text-sm text-destructive">{error}</div>}
+      </div>
+
+      <div className="glass-card rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-medium">Research History</div>
+          <button
+            onClick={loadHistorySessions}
+            className="px-3 py-1 text-xs rounded-lg border border-border hover:bg-muted/40"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Session</label>
+            <select
+              value={selectedHistorySession}
+              onChange={(e) => {
+                const sid = e.target.value
+                setSelectedHistorySession(sid)
+                loadHistoryDetail(sid)
+              }}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            >
+              {historySessions.map((s) => (
+                <option key={s.session_id} value={s.session_id}>
+                  {(s.title && s.title.trim()) || s.session_id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-xs text-muted-foreground rounded-lg bg-muted/20 p-3">
+            Messages: {historyMessages.length} · Results: {historyResults.length}
+          </div>
+        </div>
+
+        {(historyMessages.length > 0 || historyResults.length > 0) && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <div className="rounded-lg border border-border p-3 bg-muted/10">
+              <div className="text-xs font-medium mb-2">Session Messages</div>
+              <div className="max-h-[260px] overflow-y-auto space-y-2">
+                {historyMessages.map((m, idx) => (
+                  <div key={`${m.id || idx}`} className="rounded-md bg-background p-2 border border-border/60">
+                    <div className="text-[10px] text-muted-foreground mb-1">{m.role}</div>
+                    <MarkdownBlock content={m.content} className="prose-p:my-1 prose-li:my-0.5" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-3 bg-muted/10">
+              <div className="text-xs font-medium mb-2">Task Results</div>
+              <div className="max-h-[260px] overflow-y-auto space-y-2">
+                {historyResults.map((r, idx) => (
+                  <div key={`${r.agent_id}-${idx}`} className="rounded-md bg-background p-2 border border-border/60">
+                    <div className="text-[10px] text-muted-foreground mb-1">{r.agent_id}</div>
+                    <MarkdownBlock content={r.result} className="prose-p:my-1 prose-li:my-0.5" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {(timeline.length > 0 || sources.length > 0 || knowledge.length > 0) && (
@@ -296,17 +418,17 @@ export function ResearchPage() {
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               <Search className="w-4 h-4" /> Raw Findings
             </div>
-            <pre className="text-xs whitespace-pre-wrap bg-muted/30 rounded-lg p-3 max-h-[420px] overflow-y-auto">
-              {result.research}
-            </pre>
+            <div className="bg-muted/30 rounded-lg p-3 max-h-[420px] overflow-y-auto">
+              <MarkdownBlock content={result.research} className="prose-p:my-1 prose-li:my-1" />
+            </div>
           </div>
           <div className="glass-card rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               <Sparkles className="w-4 h-4" /> Structured Summary
             </div>
-            <pre className="text-xs whitespace-pre-wrap bg-muted/30 rounded-lg p-3 max-h-[420px] overflow-y-auto">
-              {result.summary}
-            </pre>
+            <div className="bg-muted/30 rounded-lg p-3 max-h-[420px] overflow-y-auto">
+              <MarkdownBlock content={result.summary} className="prose-p:my-1 prose-li:my-1" />
+            </div>
           </div>
         </div>
         </div>

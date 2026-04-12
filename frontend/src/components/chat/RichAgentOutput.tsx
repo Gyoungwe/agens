@@ -1,5 +1,4 @@
-import ReactMarkdown from 'react-markdown'
-import rehypeHighlight from 'rehype-highlight'
+import { MarkdownBlock } from '@/components/shared/MarkdownBlock'
 
 interface RichAgentOutputProps {
   content: string
@@ -22,7 +21,7 @@ function classifyLine(line: string): 'heading' | 'bullet' | 'stage' | 'summary' 
 
 export function RichAgentOutput({ content, isUser }: RichAgentOutputProps) {
   if (isUser) {
-    return <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
+    return <MarkdownBlock content={content} className="prose-p:my-1" />
   }
 
   const lines = content.split('\n')
@@ -32,11 +31,7 @@ export function RichAgentOutput({ content, isUser }: RichAgentOutputProps) {
   })
 
   if (!hasStructured) {
-    return (
-      <div className="prose prose-sm max-w-none dark:prose-invert prose-pre:bg-slate-900/80 prose-pre:text-slate-100 prose-pre:rounded-lg prose-pre:p-3 prose-code:text-emerald-600 dark:prose-code:text-emerald-400">
-        <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
-      </div>
-    )
+    return <MarkdownBlock content={content} />
   }
 
   return (
