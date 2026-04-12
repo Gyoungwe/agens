@@ -138,6 +138,63 @@ code, pre, .font-mono {
   animation: float 3s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-typing,
+  .animate-pulse-glow,
+  .animate-streaming,
+  .animate-slide-up,
+  .animate-float,
+  .rainbow-text {
+    animation: none !important;
+  }
+}
+
+@layer base {
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+.markdown-glow {
+  position: relative;
+}
+
+.markdown-glow::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.75rem;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, transparent),
+    0 0 20px color-mix(in oklab, var(--color-ai-glow) 18%, transparent);
+}
+
+.rainbow-text {
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981, #06b6d4, #6366f1, #a855f7, #ef4444);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rainbow-flow 8s linear infinite;
+}
+
+@keyframes rainbow-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
 .glass-card {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);

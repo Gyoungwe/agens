@@ -4,14 +4,14 @@ import { skillsApi } from '@/api'
 import { Header } from '@/components/layout'
 import { SkillCard } from '@/components/skills/SkillCard'
 import { InstallDialog } from '@/components/skills/InstallDialog'
-import { RefreshCw, Wrench, Sparkles } from 'lucide-react'
+import { Wrench, Sparkles } from 'lucide-react'
 import type { Skill } from '@/types'
 
 export function SkillsPage() {
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: skillsData, isLoading, refetch } = useQuery({
+  const { data: skillsData, isLoading } = useQuery({
     queryKey: ['skills'],
     queryFn: async () => {
       const response = await skillsApi.getSkills()
@@ -48,13 +48,6 @@ export function SkillsPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => refetch()}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border border-border/50 bg-card hover:bg-secondary transition-all duration-200 cursor-pointer"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-              <button
                 onClick={() => setInstallDialogOpen(true)}
                 className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/25 hover:scale-105 transition-all duration-200 cursor-pointer"
               >
@@ -77,13 +70,6 @@ export function SkillsPage() {
               <p className="text-sm text-muted-foreground mb-6">
                 Install a skill to enhance your agents capabilities
               </p>
-              <button
-                onClick={() => setInstallDialogOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/25 transition-all duration-200 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4" />
-                Install Your First Skill
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

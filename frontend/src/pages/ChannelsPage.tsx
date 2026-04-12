@@ -6,6 +6,7 @@ export function ChannelsPage() {
   const [wecomToken, setWecomToken] = useState('')
   const [feishuAppId, setFeishuAppId] = useState('')
   const [status, setStatus] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
   const [runtime, setRuntime] = useState<{
     runtime_ready: boolean
     active_channel_sessions: number
@@ -16,11 +17,17 @@ export function ChannelsPage() {
   } | null>(null)
 
   const load = async () => {
-    const [cfg, st] = await Promise.all([channelsApi.getConfig(), channelsApi.getStatus()])
-    setStatus(
-      `WeCom: ${cfg.data.wecom.configured ? cfg.data.wecom.token_masked : 'Not configured'} | Feishu: ${cfg.data.feishu.configured ? cfg.data.feishu.app_id_masked : 'Not configured'}`
-    )
-    setRuntime(st.data)
+    try {
+      setError(null)
+      const [cfg, st] = await Promise.all([channelsApi.getConfig(), channelsApi.getStatus()])
+      setStatus(
+        `WeCom: ${cfg.data.wecom.configured ? cfg.data.wecom.token_masked : 'Not configured'} | Feishu: ${cfg.data.feishu.configured ? cfg.data.feishu.app_id_masked : 'Not configured'}`
+      )
+      setRuntime(st.data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      throw e
+    }
   }
 
   useEffect(() => {
@@ -29,6 +36,7 @@ export function ChannelsPage() {
 
   const save = async () => {
     try {
+      setError(null)
       await channelsApi.saveConfig({
         wecom: { bot_token: wecomToken || undefined },
         feishu: { bot_app_id: feishuAppId || undefined },
@@ -38,6 +46,7 @@ export function ChannelsPage() {
       await load()
       setStatus((prev) => `${prev}\nSaved successfully.`)
     } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
       setStatus(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
@@ -46,6 +55,14 @@ export function ChannelsPage() {
     <div className="flex flex-col h-full">
       <Header title="Channels" />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {error && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm flex items-center justify-between gap-3">
+            <span>Channels error: {error}</span>
+            <button onClick={() => load()} className="px-3 py-1.5 text-xs rounded border border-destructive/40 hover:bg-destructive/20">
+              Retry
+            </button>
+          </div>
+        )}
         <div className="glass-card rounded-xl p-4 space-y-3">
           <h3 className="text-base font-semibold">Channel Pairing</h3>
           <p className="text-xs text-muted-foreground">

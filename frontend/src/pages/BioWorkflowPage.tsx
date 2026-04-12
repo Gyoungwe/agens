@@ -446,15 +446,6 @@ export function BioWorkflowPage() {
     setFinalResult(null)
   }
 
-  const startNewPlan = async () => {
-    cancelStream()
-    clearStream()
-    setFinalResult(null)
-    setUserAnswer('')
-    setPlanInfo(null)
-    await generatePlan()
-  }
-
   return (
     <div className="flex flex-col h-full">
       <Header title="Bio Workflow" />
@@ -726,13 +717,6 @@ export function BioWorkflowPage() {
                         className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                       >
                         <Play className="w-4 h-4" /> Run Planned Workflow
-                      </button>
-                      <button
-                        onClick={startNewPlan}
-                        disabled={isRunning || planGenerating || !goal.trim()}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border hover:bg-muted/50 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-                      >
-                        New Plan (clear previous)
                       </button>
                     </div>
                   )}

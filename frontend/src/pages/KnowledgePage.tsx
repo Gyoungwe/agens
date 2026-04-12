@@ -44,9 +44,12 @@ export function KnowledgePage() {
             <div className="flex gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <label htmlFor="knowledge-search" className="sr-only">Search documents</label>
                 <input
+                  id="knowledge-search"
                   type="text"
                   placeholder="Search documents..."
+                  aria-label="Search documents"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-64 pl-10 pr-4 py-2.5 rounded-xl border border-border/50 bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
@@ -75,13 +78,6 @@ export function KnowledgePage() {
               <p className="text-sm text-muted-foreground mb-6">
                 Import a document to build your knowledge base
               </p>
-              <button
-                onClick={() => setImportDialogOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/25 transition-all duration-200 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Import Your First Document
-              </button>
             </div>
           ) : (
             <div className="space-y-3">

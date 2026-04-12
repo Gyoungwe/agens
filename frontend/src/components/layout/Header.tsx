@@ -59,16 +59,20 @@ export function Header({ title }: HeaderProps) {
         )}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-4">
-        <div className="inline-flex rounded-lg border border-border overflow-hidden" title="Language">
+      <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden" title="Language" role="group" aria-label="Language selection">
           <button
             onClick={() => setLanguage('en')}
+            aria-label="Switch language to English"
+            aria-pressed={language === 'en'}
             className={`px-2 py-1 text-xs sm:text-sm ${language === 'en' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-foreground'}`}
           >
             EN
           </button>
           <button
             onClick={() => setLanguage('zh-CN')}
+            aria-label="切换语言为中文"
+            aria-pressed={language === 'zh-CN'}
             className={`px-2 py-1 text-xs sm:text-sm ${language === 'zh-CN' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-foreground'}`}
           >
             中文
@@ -76,10 +80,13 @@ export function Header({ title }: HeaderProps) {
         </div>
 
         <div className="relative">
+          <label htmlFor="provider-select" className="sr-only">{t('selectModel')}</label>
           <select
+            id="provider-select"
             value={selectedProvider}
             onChange={(e) => handleProviderChange(e.target.value)}
             disabled={switching}
+            aria-label={t('selectModel')}
             className="appearance-none w-[150px] sm:w-[210px] bg-secondary/50 border border-border rounded-lg px-3 py-1.5 pr-8 text-xs sm:text-sm font-medium text-foreground cursor-pointer hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-60"
           >
             <option value="">{t('selectModel')}</option>
@@ -101,6 +108,7 @@ export function Header({ title }: HeaderProps) {
           </div>
           <button
             onClick={logout}
+            aria-label={t('logout')}
             className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
             title={t('logout')}
           >

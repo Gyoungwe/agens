@@ -115,7 +115,7 @@ export function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-semibold">Session Trend (7 days)</h3>
               </div>
-              <div className="h-64">
+              <div className="h-40 sm:h-52 md:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -142,7 +142,7 @@ export function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-semibold">Agent Task Distribution</h3>
               </div>
-              <div className="h-64">
+              <div className="h-40 sm:h-52 md:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPieChart>
                     <Pie
